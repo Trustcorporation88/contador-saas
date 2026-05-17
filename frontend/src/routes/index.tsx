@@ -13,6 +13,9 @@ import EmpresasPage from '../pages/Empresas/EmpresasPage';
 import ContasPage from '../pages/Contas/ContasPage';
 import LancamentosPage from '../pages/Lancamentos/LancamentosPage';
 import LancadorPage from '../pages/Lancamentos/LancadorPage';
+import BalancoPage from '../pages/Relatorios/BalancoPage';
+import DREPage from '../pages/Relatorios/DREPage';
+import OutrosPage from '../pages/Relatorios/OutrosPage';
 
 // ─── Route guard ─────────────────────────────────────────────────────────────
 
@@ -77,15 +80,15 @@ const router = createBrowserRouter([
           },
           {
             path: 'relatorios/balanco',
-            element: <Placeholder title="Balanço Patrimonial" task="Task 3.8" />,
+            element: <BalancoPage />,
           },
           {
             path: 'relatorios/dre',
-            element: <Placeholder title="DRE" task="Task 3.9" />,
+            element: <DREPage />,
           },
           {
             path: 'relatorios/outros',
-            element: <Placeholder title="Outros Relatórios" task="Task 3.10" />,
+            element: <OutrosPage />,
           },
           {
             path: 'impostos',
