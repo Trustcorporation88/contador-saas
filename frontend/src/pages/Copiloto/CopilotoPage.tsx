@@ -1,26 +1,31 @@
 /**
  * CopilotoPage.tsx — Copiloto Contábil em Português Natural
- * Responde perguntas sobre os dados financeiros da empresa em linguagem natural.
- * Motor de NLP local — sem API externa. Zero latência, zero custo.
+ * Modo primário:  DeepSeek V3 via API (quando DEEPSEEK_API_KEY configurada)
+ * Modo fallback:  Motor NLP local — zero latência, zero custo.
  * INÉDITO no mundo da contabilidade.
  */
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Bot, Send, Sparkles, User } from 'lucide-react';
+import { Bot, Send, Sparkles, User, Cpu, Zap, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { DashboardService } from '../../services/dashboardService';
 import { calcHealthScore } from '../../services/healthScoreService';
+import api from '../../config/api';
 import type { BalanceSheet, DRE } from '../../types';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
 interface Message {
-  role:    'user' | 'assistant';
-  text:    string;
-  ts:      number;
+  role:      'user' | 'assistant';
+  text:      string;
+  ts:        number;
+  aiMode?:   'deepseek' | 'local'; // fonte da resposta
+  tokens?:   number;
 }
+
+type AiMode = 'deepseek' | 'local' | 'unknown';
 
 // ─── Motor de perguntas e respostas ──────────────────────────────────────────
 
@@ -122,8 +127,46 @@ function answer(question: string, ctx: Context): string {
   return `Não entendi exatamente sua pergunta. Tente algo como:\n\n• "Qual foi o lucro este mês?"\n• "Vou ter caixa para pagar as contas?"\n• "Como está a saúde financeira?"\n• "Qual a carga tributária?"\n\nOu digite **ajuda** para ver todos os exemplos.`;
 }
 
-// ─── Sugestões iniciais ───────────────────────────────────────────────────────
+// ─── Chamada à API DeepSeek via backend ──────────────────────────────────────
 
+async function callDeepSeekAPI(
+  message: string,
+  ctx: Context,
+  history: Array<{ role: 'user' | 'assistant'; content: string }>,
+): Promise<{ reply: string; tokens?: number } | null> {
+  const b = ctx.balance;
+  const d = ctx.dre;
+
+  const sumItems = (items: { balance?: number }[] | undefined) =>
+    (items ?? []).reduce((a, i) => a + (i.balance ?? 0), 0);
+
+  const context = {
+    companyName: ctx.company,
+    balance: b ? {
+      ativoTotal:        b.ativo?.total ?? 0,
+      passivoTotal:      b.passivo?.total ?? 0,
+      patrimonioLiquido: b.patrimonioLiquido?.total ?? 0,
+      ativoCirculante:   sumItems(b.ativo?.circulante),
+      passivoCirculante: sumItems(b.passivo?.circulante),
+    } : undefined,
+    dre: d ? {
+      receitaLiquida: d.receitaLiquida ?? 0,
+      lucroLiquido:   d.lucroLiquido   ?? 0,
+      custoVendas:    d.custoVendas    ?? 0,
+      impostos:       d.impostos       ?? 0,
+    } : undefined,
+  };
+
+  try {
+    const res = await api.post('/copiloto/chat', { message, context, history });
+    if (res.data.fallback) return null;
+    return { reply: res.data.reply, tokens: res.data.tokens };
+  } catch {
+    return null;
+  }
+}
+
+// ─── Sugestões iniciais ───────────────────────────────────────────────────────
 const SUGGESTIONS = [
   'Como está a saúde financeira da empresa?',
   'Qual foi o lucro este mês?',
@@ -161,9 +204,20 @@ function ChatMessage({ msg }: { msg: Message }) {
           : 'bg-white border border-gray-200 text-gray-800 rounded-tl-sm'
       }`}>
         <p dangerouslySetInnerHTML={{ __html: html }} />
-        <p className={`text-xs mt-1 ${isUser ? 'text-primary-200' : 'text-gray-400'}`}>
-          {format(new Date(msg.ts), 'HH:mm', { locale: ptBR })}
-        </p>
+        <div className={`flex items-center gap-2 text-xs mt-1 ${isUser ? 'text-primary-200 justify-end' : 'text-gray-400'}`}>
+          <span>{format(new Date(msg.ts), 'HH:mm', { locale: ptBR })}</span>
+          {!isUser && msg.aiMode === 'deepseek' && (
+            <span className="inline-flex items-center gap-0.5 text-indigo-400">
+              <Cpu className="h-2.5 w-2.5" /> DeepSeek
+              {msg.tokens ? ` · ${msg.tokens} tokens` : ''}
+            </span>
+          )}
+          {!isUser && msg.aiMode === 'local' && (
+            <span className="inline-flex items-center gap-0.5 text-gray-300">
+              <Zap className="h-2.5 w-2.5" /> local
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -180,7 +234,9 @@ export default function CopilotoPage() {
       ts: Date.now(),
     },
   ]);
-  const [input, setInput] = useState('');
+  const [input,    setInput]    = useState('');
+  const [loading,  setLoading]  = useState(false);
+  const [aiMode,   setAiMode]   = useState<AiMode>('unknown');
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const monthStart = useMemo(() => format(new Date(), 'yyyy-MM-01'), []);
@@ -207,6 +263,23 @@ export default function CopilotoPage() {
     staleTime: 10 * 60 * 1000,
   });
 
+  // Verificar se DeepSeek está configurado ao carregar
+  const qAiStatus = useQuery({
+    queryKey: ['copiloto', 'status'],
+    queryFn:  async () => {
+      const res = await api.get('/copiloto/status');
+      return res.data as { aiEnabled: boolean; model: string | null };
+    },
+    staleTime: 60 * 60 * 1000,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (qAiStatus.data) {
+      setAiMode(qAiStatus.data.aiEnabled ? 'deepseek' : 'local');
+    }
+  }, [qAiStatus.data]);
+
   const ctx: Context = {
     balance: qBalance.data,
     dre:     qDRE.data,
@@ -217,14 +290,51 @@ export default function CopilotoPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  function send(text: string) {
-    if (!text.trim()) return;
+  // Histórico para enviar ao DeepSeek (últimas 10 mensagens)
+  const historyForApi = useMemo(() =>
+    messages
+      .filter((m) => m.role !== 'assistant' || m.ts > 0) // todas
+      .slice(-10)
+      .map((m) => ({ role: m.role, content: m.text })),
+    [messages],
+  );
+
+  const send = useCallback(async (text: string) => {
+    if (!text.trim() || loading) return;
+
     const userMsg: Message = { role: 'user', text, ts: Date.now() };
-    const resp = answer(text, ctx);
-    const botMsg: Message = { role: 'assistant', text: resp, ts: Date.now() + 1 };
-    setMessages((prev) => [...prev, userMsg, botMsg]);
+    setMessages((prev) => [...prev, userMsg]);
     setInput('');
-  }
+    setLoading(true);
+
+    try {
+      // Tenta API DeepSeek primeiro
+      const aiResult = await callDeepSeekAPI(text, ctx, historyForApi);
+
+      if (aiResult) {
+        setAiMode('deepseek');
+        setMessages((prev) => [...prev, {
+          role:    'assistant',
+          text:    aiResult.reply,
+          ts:      Date.now(),
+          aiMode:  'deepseek',
+          tokens:  aiResult.tokens,
+        }]);
+      } else {
+        // Fallback: motor local
+        setAiMode('local');
+        const resp = answer(text, ctx);
+        setMessages((prev) => [...prev, {
+          role:   'assistant',
+          text:   resp,
+          ts:     Date.now(),
+          aiMode: 'local',
+        }]);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [ctx, historyForApi, loading]);
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -232,6 +342,12 @@ export default function CopilotoPage() {
       send(input);
     }
   }
+
+  const modeLabel = aiMode === 'deepseek'
+    ? { icon: <Cpu className="h-3 w-3" />, text: 'DeepSeek V3', cls: 'text-indigo-600 bg-indigo-50 border-indigo-200' }
+    : aiMode === 'local'
+    ? { icon: <Zap className="h-3 w-3" />, text: 'Motor local', cls: 'text-gray-500 bg-gray-50 border-gray-200' }
+    : null;
 
   return (
     <div className="h-[calc(100vh-4rem)] flex flex-col max-w-2xl mx-auto p-4">
@@ -242,11 +358,16 @@ export default function CopilotoPage() {
           <Bot className="h-6 w-6 text-primary-600" />
           Copiloto Contábil
         </h1>
-        <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-2">
+        <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
           Perguntas em linguagem natural sobre seus dados financeiros.
           <span className="inline-flex items-center gap-1 text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full border border-primary-200">
             <Sparkles className="h-3 w-3" /> Exclusivo O Contador
           </span>
+          {modeLabel && (
+            <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${modeLabel.cls}`}>
+              {modeLabel.icon} {modeLabel.text}
+            </span>
+          )}
         </p>
       </div>
 
@@ -255,6 +376,19 @@ export default function CopilotoPage() {
         {messages.map((m) => (
           <ChatMessage key={m.ts} msg={m} />
         ))}
+
+        {/* Indicador de loading */}
+        {loading && (
+          <div className="flex gap-3">
+            <div className="h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-100">
+              <Bot className="h-4 w-4 text-primary-600" />
+            </div>
+            <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3">
+              <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />
+            </div>
+          </div>
+        )}
+
         <div ref={bottomRef} />
       </div>
 
@@ -265,7 +399,8 @@ export default function CopilotoPage() {
             <button
               key={s}
               onClick={() => send(s)}
-              className="text-xs bg-gray-50 border border-gray-200 text-gray-600 px-3 py-1.5 rounded-full hover:border-primary-300 hover:text-primary-700 transition-colors"
+              disabled={loading}
+              className="text-xs bg-gray-50 border border-gray-200 text-gray-600 px-3 py-1.5 rounded-full hover:border-primary-300 hover:text-primary-700 transition-colors disabled:opacity-40"
             >
               {s}
             </button>
@@ -282,14 +417,17 @@ export default function CopilotoPage() {
           onKeyDown={handleKeyDown}
           placeholder="Pergunte sobre sua empresa..."
           className="input-field flex-1"
-          disabled={!companyId}
+          disabled={!companyId || loading}
         />
         <button
           onClick={() => send(input)}
-          disabled={!input.trim() || !companyId}
+          disabled={!input.trim() || !companyId || loading}
           className="btn btn-primary px-4 flex-shrink-0 disabled:opacity-40"
         >
-          <Send className="h-4 w-4" />
+          {loading
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : <Send className="h-4 w-4" />
+          }
         </button>
       </div>
       {!companyId && (

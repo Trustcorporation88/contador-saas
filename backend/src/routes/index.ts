@@ -7,6 +7,7 @@ import taxesRoutes from './taxes';
 import auditRoutes from './audit';
 import cnpjRoutes from './cnpj';
 import backupRoutes from './backup';
+import copilotoRoutes from './copiloto';
 
 /**
  * Main API v1 router
@@ -23,6 +24,7 @@ router.use('/taxes', taxesRoutes);
 router.use('/audit', auditRoutes);
 router.use('/cnpj', cnpjRoutes);
 router.use('/admin/backups', backupRoutes);
+router.use('/copiloto', copilotoRoutes);
 
 // API status
 router.get('/status', (_req, res) => {

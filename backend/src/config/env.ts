@@ -66,6 +66,10 @@ interface EnvConfig {
   enableRateLimiting: boolean;
   rateLimitRequests: number;
   rateLimitWindowMs: number;
+
+  // AI
+  deepseekApiKey: string;
+  deepseekModel: string;
 }
 
 /**
@@ -113,6 +117,10 @@ const envSchema = joi.object({
   ENABLE_RATE_LIMITING: joi.boolean().default(true),
   RATE_LIMIT_REQUESTS: joi.number().default(100),
   RATE_LIMIT_WINDOW_MS: joi.number().default(900000),
+
+  // AI — opcional, sem ela o copiloto usa motor local
+  DEEPSEEK_API_KEY: joi.string().allow('').default(''),
+  DEEPSEEK_MODEL: joi.string().default('deepseek-chat'),
 });
 
 /**
@@ -179,6 +187,9 @@ export const envConfig: EnvConfig = {
   enableRateLimiting: envVars.ENABLE_RATE_LIMITING,
   rateLimitRequests: envVars.RATE_LIMIT_REQUESTS,
   rateLimitWindowMs: envVars.RATE_LIMIT_WINDOW_MS,
+
+  deepseekApiKey: envVars.DEEPSEEK_API_KEY,
+  deepseekModel: envVars.DEEPSEEK_MODEL,
 };
 
 export default envConfig;
