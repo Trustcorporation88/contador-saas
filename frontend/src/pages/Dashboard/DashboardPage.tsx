@@ -296,6 +296,88 @@ export default function DashboardPage() {
         )}
       </div>
 
+      {/* Indicadores Financeiros Avançados */}
+      {!kpisLoading && (balance || dre) && (
+        <div className="card card-body">
+          <div className="card-header mb-4">
+            <h2 className="text-sm font-semibold text-gray-900">Indicadores Financeiros</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Análise de liquidez, endividamento e rentabilidade</p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {/* Liquidez Corrente */}
+            {(() => {
+              const sumItems = (items: { balance?: number }[] | undefined) =>
+                (items ?? []).reduce((acc, i) => acc + (i.balance ?? 0), 0);
+              const ativoCirc  = sumItems(balance?.ativo?.circulante);
+              const passivCirc = sumItems(balance?.passivo?.circulante);
+              const lc = passivCirc > 0 ? ativoCirc / passivCirc : null;
+              const ok = lc !== null && lc >= 1;
+              return (
+                <div className="rounded-lg border border-gray-200 p-4 bg-gray-50">
+                  <p className="text-xs text-gray-500 mb-1">Liquidez Corrente</p>
+                  <p className={`text-2xl font-bold tabular-nums ${ok ? 'text-green-600' : lc !== null ? 'text-red-500' : 'text-gray-400'}`}>
+                    {lc !== null ? lc.toFixed(2) : '—'}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {lc === null ? 'Sem dados' : ok ? 'Solvência adequada' : 'Atenção: < 1,0'}
+                  </p>
+                </div>
+              );
+            })()}
+            {/* Margem Líquida */}
+            {(() => {
+              const margem = receitaLiquida > 0 ? (lucroLiquido / receitaLiquida) * 100 : null;
+              const ok = margem !== null && margem >= 0;
+              return (
+                <div className="rounded-lg border border-gray-200 p-4 bg-gray-50">
+                  <p className="text-xs text-gray-500 mb-1">Margem Líquida</p>
+                  <p className={`text-2xl font-bold tabular-nums ${ok ? 'text-green-600' : margem !== null ? 'text-red-500' : 'text-gray-400'}`}>
+                    {margem !== null ? `${margem.toFixed(1)}%` : '—'}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {margem === null ? 'Sem receita' : ok ? 'Resultado positivo' : 'Prejuízo no período'}
+                  </p>
+                </div>
+              );
+            })()}
+            {/* Endividamento */}
+            {(() => {
+              const passivo    = balance?.passivo?.total ?? 0;
+              const ativo      = totalAtivo;
+              const endiv = ativo > 0 ? (passivo / ativo) * 100 : null;
+              const ok = endiv !== null && endiv <= 60;
+              return (
+                <div className="rounded-lg border border-gray-200 p-4 bg-gray-50">
+                  <p className="text-xs text-gray-500 mb-1">Endividamento</p>
+                  <p className={`text-2xl font-bold tabular-nums ${ok ? 'text-green-600' : endiv !== null ? 'text-amber-500' : 'text-gray-400'}`}>
+                    {endiv !== null ? `${endiv.toFixed(1)}%` : '—'}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {endiv === null ? 'Sem dados' : ok ? 'Nível saudável' : 'Alavancagem elevada'}
+                  </p>
+                </div>
+              );
+            })()}
+            {/* Giro do Ativo */}
+            {(() => {
+              const giro = totalAtivo > 0 ? receitaLiquida / totalAtivo : null;
+              const ok = giro !== null && giro >= 0.5;
+              return (
+                <div className="rounded-lg border border-gray-200 p-4 bg-gray-50">
+                  <p className="text-xs text-gray-500 mb-1">Giro do Ativo</p>
+                  <p className={`text-2xl font-bold tabular-nums ${ok ? 'text-green-600' : giro !== null ? 'text-amber-500' : 'text-gray-400'}`}>
+                    {giro !== null ? giro.toFixed(2) : '—'}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {giro === null ? 'Sem dados' : ok ? 'Eficiência adequada' : 'Baixo aproveitamento'}
+                  </p>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
       {/* Recent journal entries */}
       <div className="card card-body">
         <div className="card-header mb-4 flex items-center justify-between">
