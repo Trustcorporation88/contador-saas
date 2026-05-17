@@ -1,7 +1,8 @@
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { LogOut, User as UserIcon, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useAuthStore } from '../../store/authStore';
+import { AuthService } from '../../services/authService';
 
 // ─── Breadcrumb map ───────────────────────────────────────────────────────────
 
@@ -20,9 +21,17 @@ const PAGE_TITLES: Record<string, string> = {
 
 export default function Header() {
   const location = useLocation();
-  const { user, logout } = useAuthStore();
+  const navigate  = useNavigate();
+  const user      = useAuthStore((s) => s.user);
+  const storeLogout = useAuthStore((s) => s.logout);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const handleLogout = async () => {
+    await AuthService.logout();
+    storeLogout();
+    navigate('/login', { replace: true });
+  };
 
   const pageTitle = PAGE_TITLES[location.pathname] ?? 'Contador SaaS';
 
@@ -73,7 +82,7 @@ export default function Header() {
               Meu Perfil
             </a>
             <button
-              onClick={logout}
+              onClick={handleLogout}
               className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600
                          hover:bg-red-50 transition-colors"
             >
