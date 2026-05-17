@@ -18,6 +18,7 @@ import DREPage from '../pages/Relatorios/DREPage';
 import OutrosPage from '../pages/Relatorios/OutrosPage';
 import ImpostosPage from '../pages/Impostos/ImpostosPage';
 import AuditoriaPage from '../pages/Auditoria/AuditoriaPage';
+import ConfiguracoesPage from '../pages/Configuracoes/ConfiguracoesPage';
 
 // ─── Route guard ─────────────────────────────────────────────────────────────
 
@@ -102,7 +103,7 @@ const router = createBrowserRouter([
           },
           {
             path: 'configuracoes',
-            element: <Placeholder title="Configurações" task="Task 3.13" />,
+            element: <ConfiguracoesPage />,
           },
         ],
       },
