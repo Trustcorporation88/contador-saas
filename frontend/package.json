@@ -10,7 +10,10 @@
     "lint": "eslint src electron --ext ts,tsx",
     "electron:dev": "vite",
     "electron:build": "tsc && vite build && electron-builder",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "build:dist": "bash scripts/build-electron.sh",
+    "build:win": "tsc && vite build && electron-builder --win",
+    "build:linux": "tsc && vite build && electron-builder --linux"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -55,17 +58,42 @@
     "directories": {
       "output": "dist-electron-build"
     },
-    "files": ["dist/**/*", "dist-electron/**/*"],
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "public/icon.ico"
     },
     "mac": {
-      "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
       "icon": "public/icon.icns"
     },
     "linux": {
-      "target": [{ "target": "AppImage", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "public/icon.png"
     }
   }
