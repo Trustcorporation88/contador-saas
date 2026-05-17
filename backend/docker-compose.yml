@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: contador_postgres
+    environment:
+      POSTGRES_DB: contador_db
+      POSTGRES_USER: contador_user
+      POSTGRES_PASSWORD: contador_password
+      POSTGRES_INITDB_ARGS: "--locale=pt_BR.UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../001_create_accounts.sql:/docker-entrypoint-initdb.d/001_create_accounts.sql
+      - ../002_create_journal_tables.sql:/docker-entrypoint-initdb.d/002_create_journal_tables.sql
+      - ../003_create_audit_triggers.sql:/docker-entrypoint-initdb.d/003_create_audit_triggers.sql
+      - ../004_create_companies_users.sql:/docker-entrypoint-initdb.d/004_create_companies_users.sql
+      - ../005_create_documents_attachments.sql:/docker-entrypoint-initdb.d/005_create_documents_attachments.sql
+      - ../006_create_tax_tables.sql:/docker-entrypoint-initdb.d/006_create_tax_tables.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U contador_user -d contador_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - contador_network
+    restart: unless-stopped
+
+  # Redis (opcional, para cache distribuído)
+  redis:
+    image: redis:7-alpine
+    container_name: contador_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - contador_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  contador_network:
+    driver: bridge

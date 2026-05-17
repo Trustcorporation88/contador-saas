@@ -1,0 +1,60 @@
+import app from './app';
+import { envConfig } from './config/env';
+import { initializeDatabase } from './config/database';
+import { logger } from './middleware/requestLogger';
+
+/**
+ * Server entry point
+ * Initializes database and starts HTTP server
+ */
+
+const PORT = envConfig.port;
+const HOST = envConfig.host;
+
+async function startServer(): Promise<void> {
+  try {
+    // Initialize database connection pool
+    console.log('Initializing database connection pool...');
+    await initializeDatabase();
+    console.log('✓ Database connected successfully');
+
+    // Start HTTP server
+    const server = app.listen(PORT, HOST, () => {
+      logger.info(`Server started`, {
+        host: HOST,
+        port: PORT,
+        env: envConfig.nodeEnv,
+        apiVersion: 'v1',
+      });
+      console.log(`\n✓ Server running at http://${HOST}:${PORT}`);
+      console.log(`✓ API Documentation: http://${HOST}:${PORT}/api/v1`);
+      console.log(`✓ Health check: http://${HOST}:${PORT}/health\n`);
+    });
+
+    // Graceful shutdown
+    process.on('SIGTERM', () => {
+      logger.info('SIGTERM received, shutting down gracefully...');
+      server.close(() => {
+        logger.info('Server closed');
+        process.exit(0);
+      });
+    });
+
+    process.on('SIGINT', () => {
+      logger.info('SIGINT received, shutting down gracefully...');
+      server.close(() => {
+        logger.info('Server closed');
+        process.exit(0);
+      });
+    });
+  } catch (error) {
+    logger.error('Failed to start server', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    process.exit(1);
+  }
+}
+
+// Start the server
+startServer();

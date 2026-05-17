@@ -1,0 +1,77 @@
+# ============================================================
+# .gitignore — Projeto Contador SaaS
+# ============================================================
+
+# ── Node.js ─────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ── Build outputs ────────────────────────────────────────────
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# ── Variáveis de ambiente (NUNCA commitar) ───────────────────
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.staging
+# .env.example é INCLUÍDO (template sem segredos)
+
+# ── Banco de dados / Docker ──────────────────────────────────
+postgres-data/
+redis-data/
+*.dump
+*.sql.bak
+
+# ── Logs ─────────────────────────────────────────────────────
+logs/
+*.log
+*.log.*
+
+# ── Cobertura de testes ──────────────────────────────────────
+coverage/
+.nyc_output/
+jest.results.json
+
+# ── Editores / IDEs ──────────────────────────────────────────
+.vscode/settings.json
+.vscode/launch.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Python (scripts auxiliares) ──────────────────────────────
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# ── Arquivos temporários / gerados ───────────────────────────
+*.tmp
+*.temp
+*.bak
+nul
+*.xlsx.bak
+
+# ── Uploads / arquivos binários grandes ──────────────────────
+uploads/
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.pdf
+*.xlsx
+*.xls
+*.csv
+
+# Exceção: manter arquivos de exemplo
+!plano-contas-padrao.json

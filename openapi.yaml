@@ -1,0 +1,2241 @@
+openapi: 3.0.0
+info:
+  title: Contador App API
+  description: |
+    API REST para aplicação de contabilidade comercial brasileira.
+    Suporta multi-tenant, lançamentos contábeis, cálculo de impostos,
+    geração de relatórios e auditoria.
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@contador.com
+  license:
+    name: Proprietary
+    url: https://contador.com/license
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Development server
+  - url: https://api.contador.com/api/v1
+    description: Production server
+
+tags:
+  - name: auth
+    description: Autenticação e MFA
+  - name: companies
+    description: Gestão de empresas (multi-tenant)
+  - name: accounts
+    description: Plano de contas e centros de custo
+  - name: costcenters
+    description: Centros de custo
+  - name: journals
+    description: Lançamentos contábeis
+  - name: reports
+    description: Relatórios contábeis e financeiros
+  - name: taxes
+    description: Cálculos e apuração de impostos
+  - name: documents
+    description: Documentos origem e anexos
+  - name: audit
+    description: Logs de auditoria
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token obtido via POST /auth/login.
+        Use: Authorization: Bearer {token}
+
+  schemas:
+    # ===== SCHEMAS REUTILIZÁVEIS =====
+    
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Código de erro único
+          example: "INVALID_CREDENTIALS"
+        message:
+          type: string
+          description: Mensagem de erro em português
+          example: "Email ou senha inválidos"
+        details:
+          type: object
+          description: Detalhes adicionais do erro
+          example:
+            field: "email"
+            reason: "invalid_format"
+
+    Pagination:
+      type: object
+      required:
+        - page
+        - limit
+        - total
+        - pages
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          example: 1
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 20
+        total:
+          type: integer
+          example: 150
+        pages:
+          type: integer
+          example: 8
+
+    Timestamp:
+      type: object
+      required:
+        - created_at
+        - updated_at
+      properties:
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-05-17T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-05-17T10:30:00Z"
+
+    User:
+      type: object
+      required:
+        - id
+        - email
+        - name
+        - role
+        - mfa_enabled
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        email:
+          type: string
+          format: email
+          example: "contador@empresa.com.br"
+        name:
+          type: string
+          minLength: 3
+          maxLength: 255
+          example: "João da Silva"
+        role:
+          type: string
+          enum: [admin, contador, gerente, usuario]
+          example: "contador"
+        mfa_enabled:
+          type: boolean
+          example: true
+        last_login:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-05-17T10:30:00Z"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-05-17T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-05-17T10:30:00Z"
+
+    Company:
+      type: object
+      required:
+        - id
+        - cnpj
+        - name
+        - tax_regime
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        cnpj:
+          type: string
+          pattern: '^\d{14}$'
+          example: "11222333000181"
+        name:
+          type: string
+          minLength: 3
+          maxLength: 255
+          example: "Empresa Exemplo LTDA"
+        tax_regime:
+          type: string
+          enum: [simples, lucro_presumido, lucro_real]
+          example: "lucro_real"
+        fiscal_year_start:
+          type: integer
+          minimum: 1
+          maximum: 12
+          example: 1
+        address:
+          type: object
+          properties:
+            street:
+              type: string
+              example: "Rua das Flores"
+            number:
+              type: string
+              example: "123"
+            city:
+              type: string
+              example: "São Paulo"
+            state:
+              type: string
+              pattern: '^[A-Z]{2}$'
+              example: "SP"
+            postal_code:
+              type: string
+              pattern: '^\d{8}$'
+              example: "01310100"
+        phone:
+          type: string
+          pattern: '^\d{10,11}$'
+          nullable: true
+          example: "1133334444"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-05-17T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-05-17T10:30:00Z"
+
+    Account:
+      type: object
+      required:
+        - id
+        - code
+        - name
+        - type
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440002"
+        company_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        code:
+          type: string
+          pattern: '^\d{1,6}$'
+          example: "1.1.01"
+        name:
+          type: string
+          minLength: 3
+          maxLength: 255
+          example: "Caixa"
+        type:
+          type: string
+          enum: [ativo, passivo, patrimonio, receita, despesa, custo]
+          example: "ativo"
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+          example: "550e8400-e29b-41d4-a716-446655440003"
+        tax_code:
+          type: string
+          nullable: true
+          example: "01"
+        is_analytical:
+          type: boolean
+          default: false
+          example: true
+        balance:
+          type: number
+          format: double
+          readOnly: true
+          example: 5000.00
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-05-17T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-05-17T10:30:00Z"
+
+    CostCenter:
+      type: object
+      required:
+        - id
+        - code
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440004"
+        company_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        code:
+          type: string
+          minLength: 1
+          maxLength: 20
+          example: "CC001"
+        name:
+          type: string
+          minLength: 3
+          maxLength: 255
+          example: "Centro de Custo Principal"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-05-17T10:30:00Z"
+
+    JournalLine:
+      type: object
+      required:
+        - account_id
+        - debit
+        - credit
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          example: "550e8400-e29b-41d4-a716-446655440005"
+        account_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440002"
+        debit:
+          type: number
+          format: double
+          minimum: 0
+          example: 1000.00
+        credit:
+          type: number
+          format: double
+          minimum: 0
+          example: 0.00
+        cost_center_id:
+          type: string
+          format: uuid
+          nullable: true
+          example: "550e8400-e29b-41d4-a716-446655440004"
+        description:
+          type: string
+          nullable: true
+          maxLength: 255
+          example: "Descrição detalhada da linha"
+
+    JournalEntry:
+      type: object
+      required:
+        - date
+        - description
+        - lines
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          example: "550e8400-e29b-41d4-a716-446655440006"
+        company_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        date:
+          type: string
+          format: date
+          example: "2026-05-17"
+        description:
+          type: string
+          minLength: 3
+          maxLength: 500
+          example: "Lançamento contábil de exemplo"
+        lines:
+          type: array
+          minItems: 2
+          items:
+            $ref: '#/components/schemas/JournalLine'
+        document_id:
+          type: string
+          format: uuid
+          nullable: true
+          example: "550e8400-e29b-41d4-a716-446655440007"
+        created_by:
+          type: string
+          format: uuid
+          readOnly: true
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        hash_signature:
+          type: string
+          readOnly: true
+          example: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        status:
+          type: string
+          enum: [draft, posted, blocked]
+          example: "posted"
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          example: "2026-05-17T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          example: "2026-05-17T10:30:00Z"
+
+    Document:
+      type: object
+      required:
+        - type
+        - number
+        - date
+        - amount
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          example: "550e8400-e29b-41d4-a716-446655440007"
+        company_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        type:
+          type: string
+          enum: [nf, nfse, boleto, cheque, recibo, contrato]
+          example: "nf"
+        number:
+          type: string
+          maxLength: 50
+          example: "123456"
+        issuer:
+          type: string
+          maxLength: 255
+          example: "Fornecedor LTDA"
+        date:
+          type: string
+          format: date
+          example: "2026-05-17"
+        amount:
+          type: number
+          format: double
+          minimum: 0
+          example: 1500.00
+        description:
+          type: string
+          nullable: true
+          maxLength: 500
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          example: "2026-05-17T10:30:00Z"
+
+    Attachment:
+      type: object
+      required:
+        - file_name
+        - file_type
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          example: "550e8400-e29b-41d4-a716-446655440008"
+        document_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440007"
+        file_name:
+          type: string
+          maxLength: 255
+          example: "documento_origem.pdf"
+        file_type:
+          type: string
+          enum: [pdf, jpg, png, xlsx, xml]
+          example: "pdf"
+        file_size:
+          type: integer
+          example: 102400
+        file_url:
+          type: string
+          format: url
+          readOnly: true
+          example: "https://api.contador.com/files/550e8400-e29b-41d4-a716-446655440008"
+        uploaded_by:
+          type: string
+          format: uuid
+          readOnly: true
+        uploaded_at:
+          type: string
+          format: date-time
+          readOnly: true
+          example: "2026-05-17T10:30:00Z"
+
+    TaxCalculation:
+      type: object
+      required:
+        - tax_type
+        - period
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          example: "550e8400-e29b-41d4-a716-446655440009"
+        company_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        tax_type:
+          type: string
+          enum: [irpj, csll, pis, cofins, icms, iss, inss, irrf]
+          example: "irpj"
+        period:
+          type: string
+          pattern: '^\d{4}-\d{2}$'
+          example: "2026-05"
+        base_amount:
+          type: number
+          format: double
+          readOnly: true
+          example: 100000.00
+        calculated_amount:
+          type: number
+          format: double
+          readOnly: true
+          example: 15000.00
+        adjustments:
+          type: array
+          items:
+            type: object
+            properties:
+              account_id:
+                type: string
+                format: uuid
+              adjustment_type:
+                type: string
+                enum: [addition, deduction]
+              amount:
+                type: number
+                format: double
+              justification:
+                type: string
+        status:
+          type: string
+          enum: [draft, calculated, approved, filed]
+          example: "calculated"
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          example: "2026-05-17T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          example: "2026-05-17T10:30:00Z"
+
+    BalanceSheetLine:
+      type: object
+      properties:
+        account_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440002"
+        account_code:
+          type: string
+          example: "1.1.01"
+        account_name:
+          type: string
+          example: "Caixa"
+        amount:
+          type: number
+          format: double
+          example: 5000.00
+
+    IncomeStatementLine:
+      type: object
+      properties:
+        account_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440010"
+        account_code:
+          type: string
+          example: "3.1.01"
+        account_name:
+          type: string
+          example: "Receita de Vendas"
+        amount:
+          type: number
+          format: double
+          example: 50000.00
+
+    TokenResponse:
+      type: object
+      required:
+        - access_token
+        - refresh_token
+        - expires_in
+      properties:
+        access_token:
+          type: string
+          description: JWT access token
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refresh_token:
+          type: string
+          description: Refresh token para obter novo access token
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        expires_in:
+          type: integer
+          description: Tempo de expiração em segundos
+          example: 3600
+        user:
+          $ref: '#/components/schemas/User'
+
+    MFASetupResponse:
+      type: object
+      required:
+        - qr_code
+        - secret
+        - backup_codes
+      properties:
+        qr_code:
+          type: string
+          description: Código QR em base64 para autenticador
+          example: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+        secret:
+          type: string
+          description: Chave secreta para armazenar em local seguro
+          example: "JBSWY3DPEHPK3PXP"
+        backup_codes:
+          type: array
+          items:
+            type: string
+          description: Códigos de backup para recuperação
+          example: ["123456", "234567", "345678"]
+
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        user_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum: [create, read, update, delete, export]
+        entity_type:
+          type: string
+          example: "journal_entry"
+        entity_id:
+          type: string
+          format: uuid
+        old_value:
+          type: object
+          nullable: true
+        new_value:
+          type: object
+          nullable: true
+        ip_address:
+          type: string
+          example: "192.168.1.1"
+        user_agent:
+          type: string
+          example: "Mozilla/5.0..."
+        timestamp:
+          type: string
+          format: date-time
+          readOnly: true
+
+  responses:
+    UnauthorizedError:
+      description: Acesso negado (token inválido ou expirado)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "UNAUTHORIZED"
+            message: "Token inválido ou expirado"
+
+    ForbiddenError:
+      description: Permissão insuficiente
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "FORBIDDEN"
+            message: "Acesso negado para este recurso"
+
+    NotFoundError:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "NOT_FOUND"
+            message: "Recurso não encontrado"
+
+    ValidationError:
+      description: Erro de validação
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "VALIDATION_ERROR"
+            message: "Dados de entrada inválidos"
+            details:
+              field: "email"
+              reason: "invalid_format"
+
+    ConflictError:
+      description: Conflito (ex: recurso duplicado)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "CONFLICT"
+            message: "CNPJ já cadastrado"
+
+    InternalServerError:
+      description: Erro interno do servidor
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "INTERNAL_SERVER_ERROR"
+            message: "Erro interno do servidor"
+
+paths:
+  # ===== AUTH ENDPOINTS =====
+
+  /auth/login:
+    post:
+      tags:
+        - auth
+      summary: Autenticação (Login)
+      description: |
+        Autentica um usuário com email e senha.
+        Retorna access token e refresh token.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "contador@empresa.com.br"
+                password:
+                  type: string
+                  format: password
+                  example: "SenhaSegura123!"
+            examples:
+              valid:
+                summary: Login válido
+                value:
+                  email: "contador@empresa.com.br"
+                  password: "SenhaSegura123!"
+      responses:
+        '200':
+          description: Autenticação bem-sucedida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Credenciais inválidas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: "INVALID_CREDENTIALS"
+                message: "Email ou senha inválidos"
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/refresh-token:
+    post:
+      tags:
+        - auth
+      summary: Refresh Access Token
+      description: Obtém novo access token usando refresh token
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+                  example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      responses:
+        '200':
+          description: Novo token gerado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/enable-mfa:
+    post:
+      tags:
+        - auth
+      summary: Habilitar MFA (Multi-Factor Authentication)
+      description: Inicia processo de habilitação de MFA com TOTP
+      operationId: enableMFA
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: MFA setup iniciado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MFASetupResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/verify-mfa:
+    post:
+      tags:
+        - auth
+      summary: Verificar MFA
+      description: Verifica código TOTP para completar login com MFA
+      operationId: verifyMFA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - code
+              properties:
+                code:
+                  type: string
+                  pattern: '^\d{6}$'
+                  example: "123456"
+      responses:
+        '200':
+          description: MFA verificado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Código MFA inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ===== COMPANIES ENDPOINTS =====
+
+  /companies:
+    post:
+      tags:
+        - companies
+      summary: Criar nova empresa
+      description: Cria uma nova empresa no sistema (apenas admin)
+      operationId: createCompany
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Company'
+            examples:
+              valid:
+                summary: Empresa válida
+                value:
+                  cnpj: "11222333000181"
+                  name: "Empresa Exemplo LTDA"
+                  tax_regime: "lucro_real"
+                  fiscal_year_start: 1
+                  address:
+                    street: "Rua das Flores"
+                    number: "123"
+                    city: "São Paulo"
+                    state: "SP"
+                    postal_code: "01310100"
+                  phone: "1133334444"
+      responses:
+        '201':
+          description: Empresa criada com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Company'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      tags:
+        - companies
+      summary: Listar empresas
+      description: Lista todas as empresas do usuário
+      operationId: listCompanies
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+      responses:
+        '200':
+          description: Lista de empresas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Company'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /companies/{id}:
+    get:
+      tags:
+        - companies
+      summary: Obter detalhes da empresa
+      description: Retorna detalhes de uma empresa específica
+      operationId: getCompany
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+      responses:
+        '200':
+          description: Detalhes da empresa
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Company'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags:
+        - companies
+      summary: Atualizar empresa
+      description: Atualiza dados de uma empresa
+      operationId: updateCompany
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Company'
+      responses:
+        '200':
+          description: Empresa atualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Company'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ===== ACCOUNTS ENDPOINTS =====
+
+  /companies/{id}/accounts:
+    post:
+      tags:
+        - accounts
+      summary: Criar conta contábil
+      description: Cria uma nova conta no plano de contas
+      operationId: createAccount
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID da empresa
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Account'
+            examples:
+              valid:
+                summary: Conta válida
+                value:
+                  code: "1.1.01"
+                  name: "Caixa"
+                  type: "ativo"
+                  tax_code: "01"
+                  is_analytical: true
+      responses:
+        '201':
+          description: Conta criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      tags:
+        - accounts
+      summary: Listar contas da empresa
+      description: Lista todas as contas do plano de contas
+      operationId: listAccounts
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [ativo, passivo, patrimonio, receita, despesa, custo]
+          example: "ativo"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        '200':
+          description: Lista de contas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Account'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /companies/{id}/accounts/{accountId}:
+    put:
+      tags:
+        - accounts
+      summary: Atualizar conta
+      description: Atualiza dados de uma conta contábil
+      operationId: updateAccount
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID da empresa
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID da conta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Account'
+      responses:
+        '200':
+          description: Conta atualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - accounts
+      summary: Deletar conta
+      description: Remove uma conta contábil (apenas se sem movimentação)
+      operationId: deleteAccount
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Conta deletada
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          description: Conta não pode ser deletada (possui movimentação)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ===== JOURNAL ENTRIES ENDPOINTS =====
+
+  /companies/{id}/journal-entries:
+    post:
+      tags:
+        - journals
+      summary: Criar lançamento contábil
+      description: Cria um novo lançamento contábil com múltiplas linhas
+      operationId: createJournalEntry
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID da empresa
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JournalEntry'
+            examples:
+              valid:
+                summary: Lançamento válido
+                value:
+                  date: "2026-05-17"
+                  description: "Recebimento de vendas"
+                  lines:
+                    - account_id: "550e8400-e29b-41d4-a716-446655440002"
+                      debit: 1000.00
+                      credit: 0.00
+                      cost_center_id: "550e8400-e29b-41d4-a716-446655440004"
+                    - account_id: "550e8400-e29b-41d4-a716-446655440010"
+                      debit: 0.00
+                      credit: 1000.00
+      responses:
+        '201':
+          description: Lançamento criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JournalEntry'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          description: Lançamento desbalanceado (débito ≠ crédito)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      tags:
+        - journals
+      summary: Listar lançamentos
+      description: Lista lançamentos contábeis com filtros
+      operationId: listJournalEntries
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2026-05-01"
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2026-05-31"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, posted, blocked]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Lista de lançamentos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/JournalEntry'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /companies/{id}/journal-entries/{entryId}:
+    get:
+      tags:
+        - journals
+      summary: Obter lançamento
+      description: Retorna detalhes de um lançamento específico
+      operationId: getJournalEntry
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID da empresa
+        - name: entryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID do lançamento
+      responses:
+        '200':
+          description: Detalhes do lançamento
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JournalEntry'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags:
+        - journals
+      summary: Atualizar lançamento
+      description: Atualiza um lançamento em status draft
+      operationId: updateJournalEntry
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: entryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JournalEntry'
+      responses:
+        '200':
+          description: Lançamento atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JournalEntry'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ===== REPORTS ENDPOINTS =====
+
+  /companies/{id}/balance-sheet:
+    get:
+      tags:
+        - reports
+      summary: Balanço Patrimonial
+      description: Gera relatório de Balanço Patrimonial (BP)
+      operationId: getBalanceSheet
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID da empresa
+        - name: as_of
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Data de corte (padrão: hoje)
+          example: "2026-05-31"
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, pdf, xlsx]
+            default: json
+      responses:
+        '200':
+          description: Balanço Patrimonial
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  company_name:
+                    type: string
+                  as_of:
+                    type: string
+                    format: date
+                  assets:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BalanceSheetLine'
+                  liabilities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BalanceSheetLine'
+                  equity:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BalanceSheetLine'
+                  total_assets:
+                    type: number
+                    format: double
+                  total_liabilities_and_equity:
+                    type: number
+                    format: double
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /companies/{id}/income-statement:
+    get:
+      tags:
+        - reports
+      summary: Demonstração de Resultado (DRE)
+      description: Gera Demonstração do Resultado do Exercício
+      operationId: getIncomeStatement
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID da empresa
+        - name: period_from
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2026-01-01"
+        - name: period_to
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2026-05-31"
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, pdf, xlsx]
+            default: json
+      responses:
+        '200':
+          description: Demonstração de Resultado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  company_name:
+                    type: string
+                  period:
+                    type: object
+                    properties:
+                      from:
+                        type: string
+                        format: date
+                      to:
+                        type: string
+                        format: date
+                  revenues:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/IncomeStatementLine'
+                  costs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/IncomeStatementLine'
+                  expenses:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/IncomeStatementLine'
+                  net_income:
+                    type: number
+                    format: double
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /companies/{id}/ledger:
+    get:
+      tags:
+        - reports
+      summary: Razão (Ledger)
+      description: Gera relatório de Razão (Ledger) por conta
+      operationId: getLedger
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: account_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Filtrar por conta específica
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Relatório de Razão
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  account:
+                    $ref: '#/components/schemas/Account'
+                  entries:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date:
+                          type: string
+                          format: date
+                        description:
+                          type: string
+                        debit:
+                          type: number
+                          format: double
+                        credit:
+                          type: number
+                          format: double
+                        balance:
+                          type: number
+                          format: double
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /companies/{id}/trial-balance:
+    get:
+      tags:
+        - reports
+      summary: Balancete de Verificação
+      description: Gera Balancete de Verificação (trial balance)
+      operationId: getTrialBalance
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: as_of
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2026-05-31"
+      responses:
+        '200':
+          description: Balancete
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  company_name:
+                    type: string
+                  as_of:
+                    type: string
+                    format: date
+                  accounts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        account_id:
+                          type: string
+                          format: uuid
+                        account_code:
+                          type: string
+                        account_name:
+                          type: string
+                        debit:
+                          type: number
+                          format: double
+                        credit:
+                          type: number
+                          format: double
+                  total_debit:
+                    type: number
+                    format: double
+                  total_credit:
+                    type: number
+                    format: double
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ===== TAX ENDPOINTS =====
+
+  /companies/{id}/tax-calculations:
+    post:
+      tags:
+        - taxes
+      summary: Calcular impostos
+      description: Calcula impostos para período específico
+      operationId: createTaxCalculation
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID da empresa
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaxCalculation'
+            examples:
+              valid:
+                summary: Cálculo válido
+                value:
+                  tax_type: "irpj"
+                  period: "2026-05"
+      responses:
+        '201':
+          description: Cálculo criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxCalculation'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      tags:
+        - taxes
+      summary: Listar cálculos de impostos
+      description: Lista cálculos de impostos realizados
+      operationId: listTaxCalculations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: tax_type
+          in: query
+          schema:
+            type: string
+            enum: [irpj, csll, pis, cofins, icms, iss, inss, irrf]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, calculated, approved, filed]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+      responses:
+        '200':
+          description: Lista de cálculos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TaxCalculation'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ===== DOCUMENTS ENDPOINTS =====
+
+  /companies/{id}/documents:
+    post:
+      tags:
+        - documents
+      summary: Registrar documento origem
+      description: Cria registro de documento origem (NF, boleto, etc)
+      operationId: createDocument
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Document'
+      responses:
+        '201':
+          description: Documento criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      tags:
+        - documents
+      summary: Listar documentos
+      description: Lista documentos origem da empresa
+      operationId: listDocuments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [nf, nfse, boleto, cheque, recibo, contrato]
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+      responses:
+        '200':
+          description: Lista de documentos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Document'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /companies/{id}/documents/{documentId}/attachments:
+    post:
+      tags:
+        - documents
+      summary: Upload anexo
+      description: Upload de arquivo anexo a documento
+      operationId: uploadAttachment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID da empresa
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID do documento
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Arquivo PDF, JPG, PNG, XLSX ou XML
+      responses:
+        '201':
+          description: Arquivo uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Attachment'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '413':
+          description: Arquivo muito grande
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      tags:
+        - documents
+      summary: Listar anexos
+      description: Lista arquivos anexados a documento
+      operationId: listAttachments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lista de anexos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Attachment'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ===== COST CENTERS ENDPOINTS =====
+
+  /companies/{id}/cost-centers:
+    post:
+      tags:
+        - costcenters
+      summary: Criar centro de custo
+      description: Cria um novo centro de custo
+      operationId: createCostCenter
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID da empresa
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CostCenter'
+            examples:
+              valid:
+                summary: Centro de custo válido
+                value:
+                  code: "CC001"
+                  name: "Centro de Custo Principal"
+      responses:
+        '201':
+          description: Centro de custo criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CostCenter'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      tags:
+        - costcenters
+      summary: Listar centros de custo
+      description: Lista todos os centros de custo da empresa
+      operationId: listCostCenters
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID da empresa
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+      responses:
+        '200':
+          description: Lista de centros de custo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CostCenter'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ===== AUDIT LOGS ENDPOINTS =====
+
+  /companies/{id}/audit-logs:
+    get:
+      tags:
+        - audit
+      summary: Listar logs de auditoria
+      description: Lista logs de auditoria com filtros opcionais
+      operationId: listAuditLogs
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID da empresa
+        - name: action
+          in: query
+          schema:
+            type: string
+            enum: [create, read, update, delete, export]
+          description: Filtrar por tipo de ação
+        - name: entity_type
+          in: query
+          schema:
+            type: string
+          description: Filtrar por tipo de entidade
+          example: "journal_entry"
+        - name: user_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Filtrar por usuário
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Data inicial
+          example: "2026-05-01"
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Data final
+          example: "2026-05-31"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+          example: 50
+      responses:
+        '200':
+          description: Lista de logs de auditoria
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditLog'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+security:
+  - bearerAuth: []
+
+# ===== OPCIONAL: Webhooks =====
+# webhooks:
+#   journal_entry_posted:
+#     post:
+#       summary: Lançamento postado
+#       description: Webhook disparado quando lançamento é postado
+#       requestBody:
+#         required: true
+#         content:
+#           application/json:
+#             schema:
+#               $ref: '#/components/schemas/JournalEntry'
