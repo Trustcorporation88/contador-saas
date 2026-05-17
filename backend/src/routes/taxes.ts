@@ -1,29 +1,29 @@
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
+import { TaxController } from '../controllers/taxController';
+import { authenticateToken } from '../middleware/auth';
 
 /**
- * Taxes routes
- * GET    /appraisal
- * POST   /appraisal
- * GET    /register
+ * Tax Routes — company-scoped via /companies/:companyId/taxes
+ *
+ * POST /calculate              - Simula cálculo sem salvar
+ * POST /appraisal              - Calcula e salva apuração (tax_calculations)
+ * GET  /appraisal              - Lista apurações salvas
+ * PATCH /appraisal/:id/status  - Atualiza status (PENDING→APPROVED→FILED)
  */
-const router = Router();
+const router = Router({ mergeParams: true });
 
-// TODO: Implement tax endpoints
-// - Tax appraisal (apuração de impostos)
-// - ICMS calculation
-// - COFINS calculation
-// - PIS calculation
-// - ISS calculation
-// - IRPJ calculation
-// - CSLL calculation
-// - Tax registers and declarations
+router.use(authenticateToken);
 
-router.get('/appraisal', (_req: Request, res: Response) => {
-  res.status(501).json({ message: 'Not implemented' });
-});
+/** Simular cálculo (sem persistir) */
+router.post('/calculate', TaxController.calculate);
 
-router.post('/appraisal', (_req: Request, res: Response) => {
-  res.status(501).json({ message: 'Not implemented' });
-});
+/** Calcular e persistir apuração */
+router.post('/appraisal', TaxController.appraisal);
+
+/** Listar apurações salvas */
+router.get('/appraisal', TaxController.listAppraisals);
+
+/** Atualizar status de apuração */
+router.patch('/appraisal/:id/status', TaxController.updateStatus);
 
 export default router;

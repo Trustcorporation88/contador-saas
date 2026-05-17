@@ -4,6 +4,7 @@ import { authenticateToken } from '../middleware/auth';
 import accountsRoutes from './accounts';
 import journalsRoutes from './journals';
 import reportsRoutes from './reports';
+import taxesRoutes from './taxes';
 
 /**
  * Companies API Routes
@@ -101,5 +102,6 @@ router.delete('/:id', CompanyController.deleteCompany);
 router.use('/:companyId/accounts', accountsRoutes);
 router.use('/:companyId/journal-entries', journalsRoutes);
 router.use('/:companyId/reports', reportsRoutes);
+router.use('/:companyId/taxes', taxesRoutes);
 
 export default router;
