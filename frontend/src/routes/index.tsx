@@ -11,6 +11,8 @@ import LoginPage from '../pages/Login/LoginPage';
 import DashboardPage from '../pages/Dashboard/DashboardPage';
 import EmpresasPage from '../pages/Empresas/EmpresasPage';
 import ContasPage from '../pages/Contas/ContasPage';
+import LancamentosPage from '../pages/Lancamentos/LancamentosPage';
+import LancadorPage from '../pages/Lancamentos/LancadorPage';
 
 // ─── Route guard ─────────────────────────────────────────────────────────────
 
@@ -63,7 +65,15 @@ const router = createBrowserRouter([
           },
           {
             path: 'lancamentos',
-            element: <Placeholder title="Lançamentos Contábeis" task="Tasks 3.6–3.7" />,
+            element: <LancamentosPage />,
+          },
+          {
+            path: 'lancamentos/novo',
+            element: <LancadorPage />,
+          },
+          {
+            path: 'lancamentos/:id/editar',
+            element: <LancadorPage />,
           },
           {
             path: 'relatorios/balanco',
