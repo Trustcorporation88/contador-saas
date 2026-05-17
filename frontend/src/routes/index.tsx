@@ -10,6 +10,7 @@ import AppLayout from '../components/Layout/AppLayout';
 import LoginPage from '../pages/Login/LoginPage';
 import DashboardPage from '../pages/Dashboard/DashboardPage';
 import EmpresasPage from '../pages/Empresas/EmpresasPage';
+import ContasPage from '../pages/Contas/ContasPage';
 
 // ─── Route guard ─────────────────────────────────────────────────────────────
 
@@ -58,7 +59,7 @@ const router = createBrowserRouter([
           },
           {
             path: 'contas',
-            element: <Placeholder title="Plano de Contas" task="Task 3.5" />,
+            element: <ContasPage />,
           },
           {
             path: 'lancamentos',
