@@ -19,6 +19,14 @@ import OutrosPage from '../pages/Relatorios/OutrosPage';
 import ImpostosPage from '../pages/Impostos/ImpostosPage';
 import AuditoriaPage from '../pages/Auditoria/AuditoriaPage';
 import ConfiguracoesPage from '../pages/Configuracoes/ConfiguracoesPage';
+// Módulos inovadores
+import SaudePage from '../pages/Saude/SaudePage';
+import SimuladorPage from '../pages/Simulador/SimuladorPage';
+import BenchmarkPage from '../pages/Benchmark/BenchmarkPage';
+import RiscoFiscalPage from '../pages/RiscoFiscal/RiscoFiscalPage';
+import OpenFinancePage from '../pages/OpenFinance/OpenFinancePage';
+import CopilotoPage from '../pages/Copiloto/CopilotoPage';
+import ProvaHashPage from '../pages/ProvaHash/ProvaHashPage';
 
 // ─── Route guard ─────────────────────────────────────────────────────────────
 
@@ -104,6 +112,35 @@ const router = createBrowserRouter([
           {
             path: 'configuracoes',
             element: <ConfiguracoesPage />,
+          },
+          // ── Módulos inovadores ────────────────────────────────────────────
+          {
+            path: 'saude',
+            element: <SaudePage />,
+          },
+          {
+            path: 'simulador',
+            element: <SimuladorPage />,
+          },
+          {
+            path: 'benchmark',
+            element: <BenchmarkPage />,
+          },
+          {
+            path: 'risco-fiscal',
+            element: <RiscoFiscalPage />,
+          },
+          {
+            path: 'open-finance',
+            element: <OpenFinancePage />,
+          },
+          {
+            path: 'copiloto',
+            element: <CopilotoPage />,
+          },
+          {
+            path: 'prova-hash',
+            element: <ProvaHashPage />,
           },
         ],
       },
