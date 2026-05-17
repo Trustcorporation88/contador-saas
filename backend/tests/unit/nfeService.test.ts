@@ -7,7 +7,7 @@ jest.mock('../../src/middleware/requestLogger', () => ({
   logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
 
-// Mock DB com transação funcional
+// mockNfeRecord em módulo-scope para uso nos testes (não é usado dentro do factory)
 const mockNfeRecord = {
   id:               'nfe-uuid-1',
   company_id:       'company-uuid-1',
@@ -35,29 +35,69 @@ const mockNfeRecord = {
 };
 
 jest.mock('../../src/config/database', () => {
-  const mockTrx = {
-    insert: jest.fn().mockReturnThis(),
-    returning: jest.fn().mockResolvedValue([mockNfeRecord]),
+  // Todos os dados definidos dentro do factory (evita hoisting)
+  const nfeRecord = {
+    id: 'nfe-uuid-1', company_id: 'company-uuid-1',
+    numero: 1, serie: 1, modelo: 55,
+    chave_acesso: '35250811222333000181550010000000011234567890',
+    emit_cnpj: '11222333000181', emit_razao_social: 'EMPRESA TESTE LTDA',
+    dest_cpf_cnpj: '98765432000121', dest_razao_social: 'CLIENTE TESTE LTDA',
+    valor_produtos: 1000, valor_frete: 0, valor_desconto: 0,
+    valor_icms: 120, valor_pis: 6.5, valor_cofins: 30, valor_total: 1000,
+    status: 'RASCUNHO', natureza_operacao: 'VENDA',
+    data_emissao: new Date().toISOString(),
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    xml_nfe: '<nfeProc versao="4.00">...</nfeProc>',
   };
-  return {
-    db: Object.assign(
-      jest.fn().mockReturnThis(),
-      {
-        where:     jest.fn().mockReturnThis(),
-        first:     jest.fn().mockResolvedValue(mockNfeRecord),
-        update:    jest.fn().mockReturnThis(),
-        returning: jest.fn().mockResolvedValue([{ ...mockNfeRecord, status: 'AUTORIZADA', protocolo: '20251234567890123', data_autorizacao: new Date().toISOString() }]),
-        select:    jest.fn().mockReturnThis(),
-        orderBy:   jest.fn().mockReturnThis(),
-        limit:     jest.fn().mockReturnThis(),
-        offset:    jest.fn().mockReturnThis(),
-        andWhere:  jest.fn().mockReturnThis(),
-        clone:     jest.fn().mockReturnThis(),
-        count:     jest.fn().mockResolvedValue([{ count: '1' }]),
-        transaction: jest.fn().mockImplementation(async (cb: any) => cb(mockTrx)),
-      }
-    ),
+  const nfeAutorizada = { ...nfeRecord, status: 'AUTORIZADA', protocolo: '20251234567890123', data_autorizacao: new Date().toISOString() };
+  const mockCompany = {
+    id: 'company-uuid-1', cnpj: '11222333000181', razao_social: 'EMPRESA TESTE LTDA',
+    inscricao_estadual: '123456789', inscricao_municipal: '987654321', uf: 'SP',
+    cep: '01310100', logradouro: 'Av Paulista', numero_endereco: '1000',
+    municipio: 'São Paulo', codigo_municipio: '3550308',
   };
+  const mockNumeracao = { proximo_numero: 1, serie: 1 };
+
+  const mockTrx: any = jest.fn().mockImplementation(() => mockTrx);
+  Object.assign(mockTrx, {
+    insert:    jest.fn().mockReturnValue(mockTrx),
+    returning: jest.fn().mockResolvedValue([nfeRecord]),
+    where:     jest.fn().mockReturnValue(mockTrx),
+    update:    jest.fn().mockReturnValue(mockTrx),
+    select:    jest.fn().mockReturnValue(mockTrx),
+  });
+
+  // db retorna A SI MESMO para que db.first/returning possam ser sobrescritos nos testes
+  // A tabela corrente é rastreada para defaults de first()
+  let _currentTable = '';
+  const mockDb: any = jest.fn().mockImplementation((table: string) => {
+    _currentTable = table ?? _currentTable;
+    return mockDb;
+  });
+  Object.assign(mockDb, {
+    where:       jest.fn().mockReturnValue(mockDb),
+    andWhere:    jest.fn().mockReturnValue(mockDb),
+    select:      jest.fn().mockReturnValue(mockDb),
+    orderBy:     jest.fn().mockReturnValue(mockDb),
+    limit:       jest.fn().mockReturnValue(mockDb),
+    offset:      jest.fn().mockReturnValue(mockDb),
+    clone:       jest.fn().mockReturnValue(mockDb),
+    update:      jest.fn().mockReturnValue(mockDb),
+    insert:      jest.fn().mockReturnValue(mockDb),
+    returning:   jest.fn().mockImplementation(() => {
+      if (_currentTable === 'nfe') return Promise.resolve([nfeAutorizada]);
+      return Promise.resolve([nfeRecord]);
+    }),
+    count:       jest.fn().mockResolvedValue([{ count: '1' }]),
+    first:       jest.fn().mockImplementation(() => {
+      if (_currentTable === 'nfe_numeracao') return Promise.resolve(mockNumeracao);
+      if (_currentTable === 'companies')     return Promise.resolve(mockCompany);
+      return Promise.resolve(nfeRecord);
+    }),
+    transaction: jest.fn().mockImplementation(async (cb: any) => cb(mockTrx)),
+  });
+
+  return { db: mockDb };
 });
 
 import { NfeService } from '../../src/services/nfeService';
@@ -124,7 +164,7 @@ describe('NfeService', () => {
 
     it('deve lançar 404 se empresa não existir', async () => {
       const { db } = require('../../src/config/database');
-      db.first = jest.fn().mockResolvedValueOnce(null);
+      db.first.mockResolvedValueOnce(null);
 
       await expect(
         NfeService.create('empresa-inexistente', baseCreateDTO)
@@ -144,7 +184,7 @@ describe('NfeService', () => {
 
     it('deve lançar 422 se status não for RASCUNHO', async () => {
       const { db } = require('../../src/config/database');
-      db.first = jest.fn().mockResolvedValueOnce({ ...mockNfeRecord, status: 'AUTORIZADA' });
+      db.first.mockResolvedValueOnce({ ...mockNfeRecord, status: 'AUTORIZADA' });
 
       await expect(
         NfeService.authorize('nfe-uuid-1', 'company-uuid-1')
@@ -153,7 +193,7 @@ describe('NfeService', () => {
 
     it('deve lançar 404 se NF-e não existir', async () => {
       const { db } = require('../../src/config/database');
-      db.first = jest.fn().mockResolvedValueOnce(null);
+      db.first.mockResolvedValueOnce(null);
 
       await expect(
         NfeService.authorize('inexistente', 'company-uuid-1')
@@ -175,7 +215,7 @@ describe('NfeService', () => {
 
     it('deve lançar 422 se NF-e não estiver AUTORIZADA', async () => {
       const { db } = require('../../src/config/database');
-      db.first = jest.fn().mockResolvedValueOnce({ ...mockNfeRecord, status: 'RASCUNHO' });
+      db.first.mockResolvedValueOnce({ ...mockNfeRecord, status: 'RASCUNHO' });
 
       await expect(
         NfeService.cancel('nfe-uuid-1', 'company-uuid-1', justificativa)
@@ -184,8 +224,8 @@ describe('NfeService', () => {
 
     it('deve cancelar NF-e AUTORIZADA com justificativa válida', async () => {
       const { db } = require('../../src/config/database');
-      db.first = jest.fn().mockResolvedValueOnce({ ...mockNfeRecord, status: 'AUTORIZADA' });
-      db.returning = jest.fn().mockResolvedValueOnce([{
+      db.first.mockResolvedValueOnce({ ...mockNfeRecord, status: 'AUTORIZADA' });
+      db.returning.mockResolvedValueOnce([{
         ...mockNfeRecord,
         status: 'CANCELADA',
         data_cancelamento: new Date().toISOString(),
@@ -201,7 +241,7 @@ describe('NfeService', () => {
   describe('getXml()', () => {
     it('deve retornar XML da NF-e', async () => {
       const { db } = require('../../src/config/database');
-      db.first = jest.fn().mockResolvedValueOnce({
+      db.first.mockResolvedValueOnce({
         xml_nfe: '<nfeProc versao="4.00">...</nfeProc>',
         status:  'AUTORIZADA',
       });
@@ -211,7 +251,7 @@ describe('NfeService', () => {
 
     it('deve lançar 404 se NF-e não existir', async () => {
       const { db } = require('../../src/config/database');
-      db.first = jest.fn().mockResolvedValueOnce(null);
+      db.first.mockResolvedValueOnce(null);
       await expect(
         NfeService.getXml('inexistente', 'company-uuid-1')
       ).rejects.toMatchObject({ status: 404 });

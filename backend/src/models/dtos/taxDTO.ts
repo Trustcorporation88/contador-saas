@@ -89,18 +89,27 @@ export const SIMPLES_ANEXO_III: SimplesAnexoFaixa[] = [
 // ─── DTOs de Request ──────────────────────────────────────────────────────────
 
 export interface CalculateTaxDTO {
-  company_id:   string;
-  tax_regime:   TaxRegime;
-  period_start: string;       // YYYY-MM-DD
-  period_end:   string;       // YYYY-MM-DD
+  // snake_case (API interna, banco de dados)
+  company_id?:   string;
+  tax_regime?:   TaxRegime;
+  period_start?: string;       // YYYY-MM-DD
+  period_end?:   string;       // YYYY-MM-DD
+  // camelCase (testes e API REST)
+  companyId?:    string;
+  regime?:       TaxRegime;
+  periodStart?:  string;
+  periodEnd?:    string;
+  revenues?:     number;
   /** Para Simples Nacional: RBT12 (receita bruta dos últimos 12 meses) */
   rbt12?:       number;
   /** Atividade para cálculo de presunção (Lucro Presumido) */
   atividade?:   keyof typeof TAX_RATES.PRESUNCAO;
-  /** Alíquota de ISS municipal (0.02 a 0.05) */
+  /** Alíquota de ISS municipal (0.02 a 0.05) — também aceita issRate */
   iss_rate?:    number;
-  /** Alíquota de ICMS estadual */
+  issRate?:     number;
+  /** Alíquota de ICMS estadual — também aceita icmsRate */
   icms_rate?:   number;
+  icmsRate?:    number;
 }
 
 export interface TaxAdjustmentDTO {
@@ -114,25 +123,32 @@ export interface TaxAdjustmentDTO {
 // ─── DTOs de Response ─────────────────────────────────────────────────────────
 
 export interface TaxLineResult {
-  tax_type:   TaxType;
-  base:       number;         // Base de cálculo
-  rate:       number;         // Alíquota aplicada
-  amount:     number;         // Valor calculado
-  surcharge?: number;         // Adicional IRPJ se aplicável
-  notes?:     string;
+  tax_type:      TaxType;
+  type?:         TaxType;        // alias camelCase
+  base:          number;         // Base de cálculo
+  taxableBase?:  number;         // alias camelCase para base
+  rate:          number;         // Alíquota aplicada
+  amount:        number;         // Valor calculado (inclui surcharge)
+  surcharge?:    number;         // Adicional IRPJ (incluído no amount)
+  notes?:        string;
 }
 
 export interface TaxCalculationResult {
   company_id:   string;
+  companyId?:   string;         // alias camelCase
   tax_regime:   TaxRegime;
+  regime?:      TaxRegime;      // alias camelCase
   period_start: string;
+  periodStart?: string;         // alias camelCase
   period_end:   string;
+  periodEnd?:   string;         // alias camelCase
   generated_at: string;
   revenues:     number;
   expenses:     number;
   net_income:   number;
   taxes:        TaxLineResult[];
   total_tax:    number;
+  totalAmount?: number;         // alias camelCase para total_tax
   effective_rate: number;     // Carga tributária efetiva sobre receita
 }
 

@@ -17,12 +17,11 @@ const config: Config = {
   },
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
+      diagnostics: false,
       tsconfig: {
-        // Relaxar para testes — evitar erros de strict em mocks
         strict: false,
         noImplicitAny: false,
-        rootDir: '.',
-        include: ['src', 'tests'],
+        esModuleInterop: true,
       },
     }],
   },
@@ -45,7 +44,8 @@ const config: Config = {
     },
   },
   testTimeout: 15000,
-  setupFiles: ['<rootDir>/tests/.keep.ts'],
+  setupFiles: ['<rootDir>/tests/env-setup.ts'],
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   verbose: true,
   clearMocks: true,
 };

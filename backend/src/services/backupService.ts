@@ -79,9 +79,11 @@ export class BackupService {
 
   /** Garantir que o diretório de backups existe */
   static ensureBackupDir(): void {
-    if (!fs.existsSync(BACKUP_DIR)) {
-      fs.mkdirSync(BACKUP_DIR, { recursive: true });
-      logger.info('Diretório de backups criado', { path: BACKUP_DIR });
+    // Lê process.env em tempo de execução (permite override em testes)
+    const dir = process.env.BACKUP_DIR ?? BACKUP_DIR;
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+      logger.info('Diretório de backups criado', { path: dir });
     }
   }
 

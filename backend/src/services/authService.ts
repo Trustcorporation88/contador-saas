@@ -477,6 +477,63 @@ export class AuthService {
     usersStore.set(testUser.id, testUser);
     logger.info('Test user initialized for development');
   }
+
+  // ─── Static utility methods (usados nos testes unitários) ──────────────────
+
+  static async hashPassword(password: string): Promise<string> {
+    return bcrypt.hash(password, envConfig.bcryptRounds);
+  }
+
+  static async verifyPassword(password: string, hash: string): Promise<boolean> {
+    return bcrypt.compare(password, hash);
+  }
+
+  static generateAccessToken(user: { id: string; email: string; role: string; company_id?: string }): string {
+    const secret = process.env.JWT_SECRET ?? envConfig.jwt.secret;
+    return jwt.sign(
+      { userId: user.id, email: user.email, role: user.role, companyId: user.company_id },
+      secret,
+      { expiresIn: envConfig.jwt.expiry as any, algorithm: envConfig.jwt.algorithm },
+    );
+  }
+
+  static generateRefreshToken(userId: string): string {
+    const secret = process.env.JWT_REFRESH_SECRET ?? process.env.JWT_SECRET ?? envConfig.jwt.secret;
+    return jwt.sign(
+      { userId },
+      secret,
+      { expiresIn: envConfig.jwt.refreshExpiry as any },
+    );
+  }
+
+  static verifyAccessToken(token: string): JWTPayload | null {
+    try {
+      const secret = process.env.JWT_SECRET ?? envConfig.jwt.secret;
+      return jwt.verify(token, secret) as JWTPayload;
+    } catch {
+      return null;
+    }
+  }
+
+  static generateMfaSecret(email: string): { secret: string; otpauthUrl: string } {
+    const generated = speakeasy.generateSecret({
+      name: `${envConfig.totpIssuer} (${email})`,
+      length: 20,
+    });
+    return {
+      secret: generated.base32 ?? '',
+      otpauthUrl: generated.otpauth_url ?? '',
+    };
+  }
+
+  static verifyMfaToken(secret: string, code: string): boolean {
+    return speakeasy.totp.verify({
+      secret,
+      encoding: 'base32',
+      token: code,
+      window: envConfig.totpWindow,
+    });
+  }
 }
 
 export default new AuthService();
