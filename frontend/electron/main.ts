@@ -22,7 +22,7 @@ function createWindow() {
     height:    800,
     minWidth:  1024,
     minHeight: 640,
-    title:     'Contador SaaS',
+    title:     'O Contador',
     show:      false,               // prevents flash of unstyled content
     webPreferences: {
       preload:          path.join(__dirname, 'preload.mjs'),

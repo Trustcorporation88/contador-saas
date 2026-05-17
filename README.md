@@ -1,4 +1,4 @@
-# Contador SaaS
+# O Contador
 
 **Sistema de Contabilidade Multi-tenant para o Brasil**
 
@@ -6,9 +6,9 @@
 
 ---
 
-## Por que Contador SaaS supera os concorrentes?
+## Por que O Contador supera os concorrentes?
 
-| Recurso | Omie ERP | Contabilizei | QuickBooks | Xero | **Contador SaaS** |
+| Recurso | Omie ERP | Contabilizei | QuickBooks | Xero | **O Contador** |
 |---|:---:|:---:|:---:|:---:|:---:|
 | Partidas dobradas Lei 6.404/76 | ✅ | ❌ | ❌ | ❌ | ✅ |
 | SPED Contábil (ECD/ECF) | ✅ | ❌ | ❌ | ❌ | ✅ |
@@ -122,7 +122,7 @@ npx playwright show-report    # relatório HTML
 ## Estrutura do Projeto
 
 ```
-contador-saas/
+o-contador/
 ├── backend/
 │   ├── src/
 │   │   ├── controllers/      # auth, companies, accounts, journals, reports, taxes, audit
@@ -167,4 +167,4 @@ contador-saas/
 
 ## Licença
 
-Privado — © 2026 Contador SaaS. Todos os direitos reservados.
+Privado — © 2026 O Contador. Todos os direitos reservados.

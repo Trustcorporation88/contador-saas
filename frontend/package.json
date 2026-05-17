@@ -2,7 +2,7 @@
   "name": "contador-frontend",
   "version": "1.0.0",
   "private": true,
-  "description": "Contador SaaS - Frontend Web/Desktop (React + Electron)",
+  "description": "O Contador - Frontend Web/Desktop (React + Electron)",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -52,9 +52,9 @@
     "vite-plugin-electron-renderer": "^0.14.6"
   },
   "build": {
-    "appId": "com.contador.saas",
-    "productName": "Contador SaaS",
-    "copyright": "Copyright © 2026 Contador SaaS",
+    "appId": "com.ocontador.app",
+    "productName": "O Contador",
+    "copyright": "Copyright © 2026 O Contador",
     "directories": {
       "output": "dist-electron-build"
     },
