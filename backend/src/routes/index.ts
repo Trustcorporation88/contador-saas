@@ -6,6 +6,7 @@ import reportsRoutes from './reports';
 import taxesRoutes from './taxes';
 import auditRoutes from './audit';
 import cnpjRoutes from './cnpj';
+import backupRoutes from './backup';
 
 /**
  * Main API v1 router
@@ -21,6 +22,7 @@ router.use('/reports', reportsRoutes);
 router.use('/taxes', taxesRoutes);
 router.use('/audit', auditRoutes);
 router.use('/cnpj', cnpjRoutes);
+router.use('/admin/backups', backupRoutes);
 
 // API status
 router.get('/status', (_req, res) => {

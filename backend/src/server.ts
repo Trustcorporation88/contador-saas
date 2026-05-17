@@ -2,6 +2,7 @@ import app from './app';
 import { envConfig } from './config/env';
 import { initializeDatabase } from './config/database';
 import { logger } from './middleware/requestLogger';
+import { BackupService } from './services/backupService';
 
 /**
  * Server entry point
@@ -29,11 +30,17 @@ async function startServer(): Promise<void> {
       console.log(`\n✓ Server running at http://${HOST}:${PORT}`);
       console.log(`✓ API Documentation: http://${HOST}:${PORT}/api/v1`);
       console.log(`✓ Health check: http://${HOST}:${PORT}/health\n`);
+
+      // Iniciar backup automático agendado
+      if (envConfig.nodeEnv !== 'test') {
+        BackupService.startScheduler();
+      }
     });
 
     // Graceful shutdown
     process.on('SIGTERM', () => {
       logger.info('SIGTERM received, shutting down gracefully...');
+      BackupService.stopScheduler();
       server.close(() => {
         logger.info('Server closed');
         process.exit(0);
@@ -42,6 +49,7 @@ async function startServer(): Promise<void> {
 
     process.on('SIGINT', () => {
       logger.info('SIGINT received, shutting down gracefully...');
+      BackupService.stopScheduler();
       server.close(() => {
         logger.info('Server closed');
         process.exit(0);
