@@ -16,6 +16,7 @@ import LancadorPage from '../pages/Lancamentos/LancadorPage';
 import BalancoPage from '../pages/Relatorios/BalancoPage';
 import DREPage from '../pages/Relatorios/DREPage';
 import OutrosPage from '../pages/Relatorios/OutrosPage';
+import ImpostosPage from '../pages/Impostos/ImpostosPage';
 
 // ─── Route guard ─────────────────────────────────────────────────────────────
 
@@ -92,7 +93,7 @@ const router = createBrowserRouter([
           },
           {
             path: 'impostos',
-            element: <Placeholder title="Apuração de Impostos" task="Task 3.11" />,
+            element: <ImpostosPage />,
           },
           {
             path: 'auditoria',
