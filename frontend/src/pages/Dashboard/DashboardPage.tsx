@@ -25,7 +25,7 @@ import { useAuthStore } from '../../store/authStore';
 import { DashboardService } from '../../services/dashboardService';
 import { StatCard } from '../../components/ui/Card';
 import { PageLoader } from '../../components/ui/LoadingSpinner';
-import type { TaxRegime } from '../../types';
+import type { TaxRegime } from '../../services/companyService';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -175,16 +175,16 @@ export default function DashboardPage() {
             {company && (
               <span
                 className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium ${
-                  REGIME_COLORS[company.regimeTributario]
+                  REGIME_COLORS[company.tax_regime]
                 }`}
               >
-                {REGIME_LABELS[company.regimeTributario]}
+                {REGIME_LABELS[company.tax_regime]}
               </span>
             )}
           </div>
           {company && (
             <p className="text-sm text-gray-500 mt-0.5">
-              {company.nomeFantasia ?? company.razaoSocial}
+              {company.name}
             </p>
           )}
         </div>

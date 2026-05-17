@@ -1,5 +1,6 @@
 import api from '../config/api';
-import type { BalanceSheet, DRE, JournalEntry, Company } from '../types';
+import type { BalanceSheet, DRE, JournalEntry } from '../types';
+import type { APICompany } from './companyService';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -22,9 +23,9 @@ interface PaginatedEntries {
 // ─── Service ─────────────────────────────────────────────────────────────────
 
 export const DashboardService = {
-  async getCompany(companyId: string): Promise<Company> {
-    const { data } = await api.get<Company>(`/companies/${companyId}`);
-    return data;
+  async getCompany(companyId: string): Promise<APICompany> {
+    const { data } = await api.get<{ success: boolean; data: APICompany }>(`/companies/${companyId}`);
+    return data.data;
   },
 
   async getBalanceSheet(companyId: string): Promise<BalanceSheet> {

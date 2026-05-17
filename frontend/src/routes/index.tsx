@@ -9,6 +9,7 @@ import { useAuthStore } from '../store/authStore';
 import AppLayout from '../components/Layout/AppLayout';
 import LoginPage from '../pages/Login/LoginPage';
 import DashboardPage from '../pages/Dashboard/DashboardPage';
+import EmpresasPage from '../pages/Empresas/EmpresasPage';
 
 // ─── Route guard ─────────────────────────────────────────────────────────────
 
@@ -53,7 +54,7 @@ const router = createBrowserRouter([
           },
           {
             path: 'empresas',
-            element: <Placeholder title="Empresas" task="Task 3.4" />,
+            element: <EmpresasPage />,
           },
           {
             path: 'contas',
