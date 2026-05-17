@@ -17,6 +17,7 @@ import BalancoPage from '../pages/Relatorios/BalancoPage';
 import DREPage from '../pages/Relatorios/DREPage';
 import OutrosPage from '../pages/Relatorios/OutrosPage';
 import ImpostosPage from '../pages/Impostos/ImpostosPage';
+import AuditoriaPage from '../pages/Auditoria/AuditoriaPage';
 
 // ─── Route guard ─────────────────────────────────────────────────────────────
 
@@ -97,7 +98,7 @@ const router = createBrowserRouter([
           },
           {
             path: 'auditoria',
-            element: <Placeholder title="Auditoria & Logs" task="Task 3.12" />,
+            element: <AuditoriaPage />,
           },
           {
             path: 'configuracoes',
