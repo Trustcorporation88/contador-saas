@@ -5,6 +5,7 @@ import accountsRoutes from './accounts';
 import journalsRoutes from './journals';
 import reportsRoutes from './reports';
 import taxesRoutes from './taxes';
+import nfeRoutes from './nfe';
 
 /**
  * Companies API Routes
@@ -103,5 +104,6 @@ router.use('/:companyId/accounts', accountsRoutes);
 router.use('/:companyId/journal-entries', journalsRoutes);
 router.use('/:companyId/reports', reportsRoutes);
 router.use('/:companyId/taxes', taxesRoutes);
+router.use('/:companyId/nfe', nfeRoutes);
 
 export default router;
