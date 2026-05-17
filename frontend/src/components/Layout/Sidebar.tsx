@@ -13,6 +13,13 @@ import {
   ChevronDown,
   ChevronRight,
   TrendingUp,
+  HeartPulse,
+  Sliders,
+  GitCompareArrows,
+  ShieldAlert,
+  Landmark,
+  Bot,
+  Lock,
 } from 'lucide-react';
 
 // ─── Nav structure ────────────────────────────────────────────────────────────
@@ -21,6 +28,7 @@ interface NavItem {
   label: string;
   icon: React.ElementType;
   path?: string;
+  badge?: string;
   children?: { label: string; path: string }[];
 }
 
@@ -38,10 +46,21 @@ const navItems: NavItem[] = [
       { label: 'Outros Relatórios',   path: '/relatorios/outros'  },
     ],
   },
-  { label: 'Apuração Impostos',  icon: Calculator, path: '/impostos'      },
-  { label: 'Auditoria & Logs',   icon: Shield,     path: '/auditoria'     },
-  { label: 'Configurações',      icon: Settings,   path: '/configuracoes' },
+  { label: 'Apuração Impostos',  icon: Calculator,  path: '/impostos'      },
+  { label: 'Auditoria & Logs',   icon: Shield,      path: '/auditoria'     },
+  { label: 'Configurações',      icon: Settings,    path: '/configuracoes' },
+  // ── Módulos inovadores ──────────────────────────────────────────────────
+  { label: 'Saúde Financeira',   icon: HeartPulse,  path: '/saude',        badge: '✦' },
+  { label: 'Simulador Fiscal',   icon: Sliders,     path: '/simulador',    badge: '✦' },
+  { label: 'Benchmark Setorial', icon: GitCompareArrows, path: '/benchmark', badge: '✦' },
+  { label: 'Risco Fiscal SPED',  icon: ShieldAlert, path: '/risco-fiscal', badge: '✦' },
+  { label: 'Open Finance',       icon: Landmark,    path: '/open-finance', badge: '✦' },
+  { label: 'Copiloto IA',        icon: Bot,         path: '/copiloto',     badge: '✦' },
+  { label: 'Prova Criptográfica',icon: Lock,        path: '/prova-hash',   badge: '✦' },
 ];
+
+// ─── Divider between standard and innovative ─────────────────────────────────
+const INNOVATIVE_PATHS = ['/saude', '/simulador', '/benchmark', '/risco-fiscal', '/open-finance', '/copiloto', '/prova-hash'];
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -59,14 +78,18 @@ export default function Sidebar() {
           <TrendingUp className="h-5 w-5 text-white" />
         </div>
         <div>
-          <p className="text-sm font-bold text-gray-900 leading-tight">Contador SaaS</p>
+          <p className="text-sm font-bold text-gray-900 leading-tight">O Contador</p>
           <p className="text-xs text-gray-400">Lei 6.404/76</p>
         </div>
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
-        {navItems.map((item) => {
+        {navItems.map((item, idx) => {
+          // Divider before innovative section
+          const prevPath = navItems[idx - 1]?.path;
+          const showDivider = item.badge === '✦' && (!prevPath || !INNOVATIVE_PATHS.includes(prevPath));
+
           if (item.children) {
             const isGroupActive = item.children.some((c) =>
               location.pathname.startsWith(c.path)
@@ -109,16 +132,24 @@ export default function Sidebar() {
           }
 
           return (
-            <NavLink
-              key={item.path}
-              to={item.path!}
-              className={({ isActive }) =>
-                clsx('nav-item', isActive && 'nav-item-active')
-              }
-            >
-              <item.icon className="h-4 w-4 shrink-0" />
-              {item.label}
-            </NavLink>
+            <div key={item.path}>
+              {showDivider && (
+                <div className="pt-3 pb-1 px-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-primary-500">
+                    ✦ Exclusivo
+                  </p>
+                </div>
+              )}
+              <NavLink
+                to={item.path!}
+                className={({ isActive }) =>
+                  clsx('nav-item', isActive && 'nav-item-active')
+                }
+              >
+                <item.icon className="h-4 w-4 shrink-0" />
+                {item.label}
+              </NavLink>
+            </div>
           );
         })}
       </nav>
