@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { ReportController } from '../controllers/reportController';
+import { ExportController } from '../controllers/exportController';
 import { authenticateToken } from '../middleware/auth';
 
 /**
@@ -42,5 +43,32 @@ router.get('/trial-balance', ReportController.trialBalance);
  * Query: date_from, date_to (opcionais)
  */
 router.get('/ledger/:accountId', ReportController.ledger);
+
+// ─── EXPORTAÇÃO ──────────────────────────────────────────────────────────────
+// GET /companies/:companyId/reports/*/export?format=xlsx|pdf
+
+/**
+ * GET /companies/:companyId/reports/balance-sheet/export
+ * Query: date_to (opcional), format=xlsx|pdf
+ */
+router.get('/balance-sheet/export', ExportController.balanceSheet);
+
+/**
+ * GET /companies/:companyId/reports/income-statement/export
+ * Query: date_from, date_to (obrigatórios), format=xlsx|pdf
+ */
+router.get('/income-statement/export', ExportController.incomeStatement);
+
+/**
+ * GET /companies/:companyId/reports/trial-balance/export
+ * Query: date_from, date_to (opcionais), format=xlsx|pdf
+ */
+router.get('/trial-balance/export', ExportController.trialBalance);
+
+/**
+ * GET /companies/:companyId/reports/ledger/:accountId/export
+ * Query: date_from, date_to (opcionais), format=xlsx|pdf
+ */
+router.get('/ledger/:accountId/export', ExportController.ledger);
 
 export default router;
