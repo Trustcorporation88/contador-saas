@@ -8,6 +8,7 @@ import {
 import { useAuthStore } from '../store/authStore';
 import AppLayout from '../components/Layout/AppLayout';
 import LoginPage from '../pages/Login/LoginPage';
+import DashboardPage from '../pages/Dashboard/DashboardPage';
 
 // ─── Route guard ─────────────────────────────────────────────────────────────
 
@@ -48,7 +49,7 @@ const router = createBrowserRouter([
           { index: true, element: <Navigate to="/dashboard" replace /> },
           {
             path: 'dashboard',
-            element: <Placeholder title="Dashboard Executivo" task="Task 3.3" />,
+            element: <DashboardPage />,
           },
           {
             path: 'empresas',
