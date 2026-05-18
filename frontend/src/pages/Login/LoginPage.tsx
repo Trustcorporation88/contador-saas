@@ -77,25 +77,64 @@ export default function LoginPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-50 to-indigo-100 p-4">
-      <div className="w-full max-w-md">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-8">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute left-[-8%] top-[-10%] h-72 w-72 rounded-full bg-primary-200/40 blur-3xl" />
+        <div className="absolute bottom-[-12%] right-[-8%] h-80 w-80 rounded-full bg-primary-400/20 blur-3xl" />
+      </div>
 
-        {/* Brand */}
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-600 shadow-lg shadow-primary-200">
-            <TrendingUp className="h-8 w-8 text-white" />
+      <div className="relative z-10 grid w-full max-w-5xl gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+        <div className="hidden rounded-[32px] border border-white/70 bg-[linear-gradient(145deg,rgba(16,101,79,0.95),rgba(7,39,32,0.96))] p-8 text-white shadow-[0_30px_90px_rgba(7,39,32,0.32)] lg:block">
+          <div className="flex h-full flex-col justify-between">
+            <div>
+              <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-[24px] bg-white/10 backdrop-blur-sm">
+                <TrendingUp className="h-9 w-9 text-white" />
+              </div>
+              <p className="text-xs font-bold uppercase tracking-[0.28em] text-primary-100/80">Plataforma contábil</p>
+              <h1 className="mt-3 text-4xl font-extrabold leading-tight tracking-tight text-white">
+                Contabilidade operacional com cara de produto premium.
+              </h1>
+              <p className="mt-5 max-w-md text-sm leading-7 text-white/72">
+                Navegue por empresas, lançamentos, relatórios, risco fiscal e inteligência operacional em uma interface mais clara, segura e executiva.
+              </p>
+            </div>
+
+            <div className="space-y-3 rounded-[28px] border border-white/10 bg-white/5 p-5 backdrop-blur-sm">
+              <div className="flex items-start gap-3">
+                <div className="mt-1 h-2.5 w-2.5 rounded-full bg-primary-300" />
+                <p className="text-sm text-white/80">Operação multiempresa com contexto visual mais legível.</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="mt-1 h-2.5 w-2.5 rounded-full bg-primary-300" />
+                <p className="text-sm text-white/80">Fluxos financeiros, fiscais e de auditoria em um shell unificado.</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="mt-1 h-2.5 w-2.5 rounded-full bg-primary-300" />
+                <p className="text-sm text-white/80">Base preparada para IA, Open Finance e prova criptográfica.</p>
+              </div>
+            </div>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Contador SaaS</h1>
-          <p className="mt-1 text-sm text-gray-500">Sistema Contábil · Lei 6.404/76</p>
         </div>
 
-        <div className="card card-body">
+        <div className="w-full max-w-md justify-self-center lg:max-w-none lg:self-center">
+          <div className="mb-8 text-center lg:hidden">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-600 shadow-lg shadow-primary-200">
+              <TrendingUp className="h-8 w-8 text-white" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900">Contador SaaS</h1>
+            <p className="mt-1 text-sm text-gray-500">Sistema Contábil · Lei 6.404/76</p>
+          </div>
+
+          <div className="card card-body rounded-[32px] border-white/80 bg-white/82 shadow-[0_28px_80px_rgba(12,18,16,0.12)] backdrop-blur-2xl">
           {step === 'credentials' ? (
             /* ── Etapa 1: e-mail + senha ──────────────────────────── */
             <>
-              <h2 className="mb-6 text-center text-base font-semibold text-gray-700">
-                Acesso ao Sistema
-              </h2>
+              <div className="mb-6 text-center">
+                <p className="shell-title">Acesso seguro</p>
+                <h2 className="mt-2 text-base font-semibold text-gray-700">
+                  Acesso ao Sistema
+                </h2>
+              </div>
               <form
                 onSubmit={loginForm.handleSubmit(onLoginSubmit)}
                 noValidate
@@ -202,11 +241,12 @@ export default function LoginPage() {
               </form>
             </>
           )}
-        </div>
+          </div>
 
-        <p className="mt-6 text-center text-xs text-gray-400">
-          © {new Date().getFullYear()} Contador SaaS · LGPD compliant
-        </p>
+          <p className="mt-6 text-center text-xs text-gray-400">
+            © {new Date().getFullYear()} Contador SaaS · LGPD compliant
+          </p>
+        </div>
       </div>
     </div>
   );

@@ -20,6 +20,7 @@ import {
   Landmark,
   Bot,
   Lock,
+  X,
 } from 'lucide-react';
 
 // ─── Nav structure ────────────────────────────────────────────────────────────
@@ -64,27 +65,56 @@ const INNOVATIVE_PATHS = ['/saude', '/simulador', '/benchmark', '/risco-fiscal',
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function Sidebar() {
+interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();
   const [reportsOpen, setReportsOpen] = useState(
     location.pathname.startsWith('/relatorios')
   );
 
   return (
-    <aside className="flex w-64 flex-col bg-white border-r border-gray-200 shrink-0">
+    <>
+      <div
+        className={clsx(
+          'fixed inset-0 z-30 bg-ink-950/35 backdrop-blur-sm transition-opacity lg:hidden',
+          isOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+        )}
+        onClick={onClose}
+      />
+
+      <aside
+        className={clsx(
+          'fixed inset-y-0 left-0 z-40 flex w-[18rem] max-w-[88vw] flex-col border-r border-white/70 bg-[rgba(11,28,23,0.9)] text-white shadow-2xl backdrop-blur-2xl transition-transform duration-300 lg:static lg:z-auto lg:w-72 lg:translate-x-0',
+          isOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+      >
       {/* Brand */}
-      <div className="flex h-16 items-center gap-3 px-6 border-b border-gray-100">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-600">
-          <TrendingUp className="h-5 w-5 text-white" />
+      <div className="flex items-center justify-between border-b border-white/10 px-5 py-5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-400 via-primary-500 to-primary-700 shadow-glow">
+            <TrendingUp className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <p className="text-sm font-extrabold leading-tight tracking-tight text-white">O Contador</p>
+            <p className="text-[11px] uppercase tracking-[0.22em] text-white/50">Lei 6.404/76</p>
+          </div>
         </div>
-        <div>
-          <p className="text-sm font-bold text-gray-900 leading-tight">O Contador</p>
-          <p className="text-xs text-gray-400">Lei 6.404/76</p>
-        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-xl border border-white/10 p-2 text-white/70 transition hover:bg-white/10 hover:text-white lg:hidden"
+          aria-label="Fechar menu"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
         {navItems.map((item, idx) => {
           // Divider before innovative section
           const prevPath = navItems[idx - 1]?.path;
@@ -113,13 +143,14 @@ export default function Sidebar() {
                 </button>
 
                 {reportsOpen && (
-                  <div className="ml-7 mt-0.5 space-y-0.5 border-l border-gray-100 pl-3">
+                  <div className="ml-7 mt-1 space-y-1 border-l border-white/10 pl-3 animate-slide-in-left">
                     {item.children.map((child) => (
                       <NavLink
                         key={child.path}
                         to={child.path}
+                        onClick={onClose}
                         className={({ isActive }) =>
-                          clsx('nav-item text-xs', isActive && 'nav-item-active')
+                          clsx('nav-item text-xs text-white/70', isActive && 'nav-item-active')
                         }
                       >
                         {child.label}
@@ -134,20 +165,26 @@ export default function Sidebar() {
           return (
             <div key={item.path}>
               {showDivider && (
-                <div className="pt-3 pb-1 px-2">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-primary-500">
-                    ✦ Exclusivo
+                <div className="px-2 pb-2 pt-4">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-primary-300/85">
+                    Camada Inteligente
                   </p>
                 </div>
               )}
               <NavLink
                 to={item.path!}
+                onClick={onClose}
                 className={({ isActive }) =>
-                  clsx('nav-item', isActive && 'nav-item-active')
+                  clsx('nav-item', !isActive && 'text-white/72 hover:text-white', isActive && 'nav-item-active')
                 }
               >
                 <item.icon className="h-4 w-4 shrink-0" />
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {item.badge && (
+                  <span className="rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-primary-100">
+                    IA
+                  </span>
+                )}
               </NavLink>
             </div>
           );
@@ -155,9 +192,14 @@ export default function Sidebar() {
       </nav>
 
       {/* Version footer */}
-      <div className="px-6 py-3 border-t border-gray-100">
-        <p className="text-xs text-gray-400">v1.0.0 · {new Date().getFullYear()}</p>
+      <div className="border-t border-white/10 px-5 py-4">
+        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/45">Workspace</p>
+          <p className="mt-1 text-sm font-semibold text-white">Console Contábil</p>
+          <p className="mt-2 text-xs text-white/50">v1.0.0 · {new Date().getFullYear()}</p>
+        </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
