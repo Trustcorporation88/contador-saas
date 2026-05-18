@@ -4,7 +4,7 @@
  */
 
 import { Request, Response } from 'express';
-import { authService } from '../services/authService';
+import authService from '../services/authService';
 import { logger } from '../middleware/requestLogger';
 import { HTTP_STATUS, ERROR_CODES } from '../config/constants';
 import {
