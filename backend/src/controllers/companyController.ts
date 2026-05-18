@@ -10,27 +10,6 @@ import { logger } from '../middleware/requestLogger';
 import { ERROR_CODES, HTTP_STATUS } from '../config/constants';
 
 /**
- * Estender Express Request para incluir usuário autenticado
- */
-declare global {
-  namespace Express {
-    interface Request {
-      user?: {
-        id: string;
-        role: string;
-        companyId?: string;
-      };
-      tenant?: {
-        companyId: string;
-        userId: string;
-        role: string;
-        permissions: string[];
-      };
-    }
-  }
-}
-
-/**
  * Company Controller
  */
 export class CompanyController {
