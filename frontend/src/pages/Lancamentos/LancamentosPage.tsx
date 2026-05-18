@@ -119,6 +119,8 @@ export default function LancamentosPage() {
   const hasActiveFilters = Boolean(search || dateFrom || dateTo || statusFilter !== 'all');
   const postedOnPage = entries.filter((e) => e.is_posted).length;
   const draftsOnPage = entries.filter((e) => !e.is_posted).length;
+  const volumeOnPage = entries.reduce((sum, entry) => sum + Number(entry.total_debit || 0), 0);
+  const latestPostedDate = entries.find((entry) => entry.is_posted)?.entry_date;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['journals', currentCompanyId] });
 
@@ -159,7 +161,7 @@ export default function LancamentosPage() {
       <div className="glass-strip flex flex-wrap items-center justify-between gap-3 px-5 py-5 sm:px-6">
         <div>
           <p className="shell-title">Movimentos contábeis</p>
-          <h1 className="text-xl font-bold text-gray-900">Lançamentos Contábeis</h1>
+          <h1 className="text-xl font-bold text-gray-900">Diário Contábil</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {total} lançamento{total !== 1 ? 's' : ''} encontrado{total !== 1 ? 's' : ''}
           </p>
@@ -174,6 +176,35 @@ export default function LancamentosPage() {
             <Plus className="h-4 w-4" />
             Novo Lançamento
           </Link>
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.3fr_0.85fr_0.85fr_0.85fr]">
+        <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Leitura rápida</p>
+          <h2 className="mt-2 text-lg font-semibold text-gray-900">O que este módulo controla</h2>
+          <p className="mt-2 text-sm leading-6 text-gray-600">
+            O Diário Contábil registra cada movimento em partidas dobradas. Todo lançamento precisa manter
+            débito e crédito equilibrados antes de ser postado.
+          </p>
+        </div>
+
+        <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Volume na página</p>
+          <p className="mt-3 text-3xl font-bold text-gray-900">R$ {brl(volumeOnPage)}</p>
+          <p className="mt-2 text-xs text-gray-500">Soma dos débitos dos itens exibidos na listagem atual.</p>
+        </div>
+
+        <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Prontos para fechamento</p>
+          <p className="mt-3 text-3xl font-bold text-gray-900">{postedOnPage}</p>
+          <p className="mt-2 text-xs text-gray-500">Lançamentos já postados e travados para edição.</p>
+        </div>
+
+        <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Último fechamento</p>
+          <p className="mt-3 text-2xl font-bold text-gray-900">{latestPostedDate ? fmtDate(latestPostedDate) : '—'}</p>
+          <p className="mt-2 text-xs text-gray-500">Data do lançamento postado mais recente nesta visualização.</p>
         </div>
       </div>
 
