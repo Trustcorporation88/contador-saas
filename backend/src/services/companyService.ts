@@ -128,8 +128,8 @@ export class CompanyService {
     const page = Math.max(filters?.page || 1, 1);
     const offset = (page - 1) * limit;
 
-    // Construir query base com filtros comuns
-    const buildQuery = () => {
+    // Construir query base com WHERE e JOIN - SEM select ainda
+    const buildBaseQuery = () => {
       let q = db('companies').where('is_active', true);
 
       // Se não é admin, filtrar apenas empresas do usuário
@@ -137,13 +137,12 @@ export class CompanyService {
         q = q
           .join('company_users', 'companies.id', '=', 'company_users.company_id')
           .where('company_users.user_id', userId)
-          .where('company_users.is_active', true)
-          .select('companies.*');
+          .where('company_users.is_active', true);
       }
 
       // Aplicar filtros de busca
       if (filters?.search) {
-        q = q.whereRaw('LOWER(name) LIKE LOWER(?)', [`%${filters.search}%`]);
+        q = q.whereRaw('LOWER(companies.name) LIKE LOWER(?)', [`%${filters.search}%`]);
       }
 
       if (filters?.tax_regime) {
@@ -161,12 +160,16 @@ export class CompanyService {
       return q;
     };
 
-    // Contar total de registros com query separada
-    const countResult = (await buildQuery().count('id as total').first()) as any;
+    // Contar total de registros com query separada (SEM select)
+    const countResult = (await buildBaseQuery().count('companies.id as total').first()) as any;
     const total = parseInt(countResult?.total || 0, 10);
 
-    // Paginar e ordenar com query separada
-    const companies = (await buildQuery().orderBy('created_at', 'desc').limit(limit).offset(offset)) as any[];
+    // Paginar e ordenar com query separada (COM select se tiver join)
+    let listQuery = buildBaseQuery();
+    if (!adminMode && userId) {
+      listQuery = listQuery.select('companies.*');
+    }
+    const companies = (await listQuery.orderBy('companies.created_at', 'desc').limit(limit).offset(offset)) as any[];
 
     // Formatar resposta
     return {
