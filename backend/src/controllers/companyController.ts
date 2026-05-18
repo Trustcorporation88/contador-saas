@@ -236,14 +236,14 @@ export class CompanyController {
         userId: req.user?.id,
       });
 
-      // Send error response with details if not in production
-      const isDev = process.env.NODE_ENV !== 'production';
+      // ALWAYS send details in staging (not production)
+      const isProduction = process.env.NODE_ENV === 'production' && process.env.RENDER_GIT_BRANCH !== 'main';
       res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         error: 'Internal Server Error',
         code: ERROR_CODES.INTERNAL_ERROR,
-        ...(isDev && {
+        ...(! isProduction && {
           details: error instanceof Error ? error.message : String(error),
-          stack: isDev && error instanceof Error ? error.stack : undefined,
+          stack: error instanceof Error ? error.stack?.split('\n') : undefined,
         }),
       });
     }
