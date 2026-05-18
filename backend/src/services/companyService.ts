@@ -121,21 +121,57 @@ export class CompanyService {
     userId?: string,
     filters?: CompanyFilters,
   ): Promise<PaginatedCompanyResponse> {
-    try {
-      console.log(`[COMPANIES_LIST_DEBUG] called with adminMode=${adminMode}, userId=${userId}`);
-      // Return minimal response for debugging
-      return {
-        data: [],
-        total: 0,
-        page: 1,
-        limit: 10,
-        totalPages: 0,
-      };
-    } catch (error) {
-      console.error(`[COMPANIES_LIST_ERROR] ${error}`);
-      logger.error('Error listing companies', { error });
-      throw error;
+    const db = await getDatabase();
+
+    // Validar e aplicar paginação
+    const limit = Math.min(filters?.limit || 10, 100); // Max 100
+    const page = Math.max(filters?.page || 1, 1);
+    const offset = (page - 1) * limit;
+
+    let query = db('companies').where('is_active', true);
+
+    // Se não é admin, filtrar apenas empresas do usuário
+    if (!adminMode && userId) {
+      query = query
+        .join('company_users', 'companies.id', '=', 'company_users.company_id')
+        .where('company_users.user_id', userId)
+        .where('company_users.is_active', true)
+        .select('companies.*');
     }
+
+    // Aplicar filtros de busca
+    if (filters?.search) {
+      query = query.whereRaw('LOWER(name) LIKE LOWER(?)', [`%${filters.search}%`]);
+    }
+
+    if (filters?.tax_regime) {
+      query = query.where('tax_regime', filters.tax_regime);
+    }
+
+    if (filters?.created_from) {
+      query = query.where('created_at', '>=', filters.created_from);
+    }
+
+    if (filters?.created_to) {
+      query = query.where('created_at', '<=', filters.created_to);
+    }
+
+    // Contar total de registros
+    const countQuery = query.clone().count('id as total').first();
+    const countResult = (await countQuery) as any;
+    const total = parseInt(countResult?.total || 0, 10);
+
+    // Paginar e ordenar
+    const companies = (await query.orderBy('created_at', 'desc').limit(limit).offset(offset)) as any[];
+
+    // Formatar resposta
+    return {
+      data: companies.map((c) => this.formatCompanyResponse(c)),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   /**
@@ -400,4 +436,3 @@ export class CompanyService {
     };
   }
 }
-// Force rebuild
