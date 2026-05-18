@@ -6,6 +6,7 @@ import path from 'path';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger, getRequestMetricsSnapshot } from './middleware/requestLogger';
 import { auditMiddleware } from './middleware/auditMiddleware';
+import { debugLoggerMiddleware } from './middleware/debugLogger';
 import routes from './routes';
 import { envConfig } from './config/env';
 
@@ -124,6 +125,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 // Request logging
 app.use(requestLogger);
+app.use(debugLoggerMiddleware);
 
 // DEBUG: Log all requests to /api/v1/companies
 app.use((req: Request, _res: Response, next: NextFunction) => {
