@@ -1,0 +1,80 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: contador_postgres
+    environment:
+      POSTGRES_DB: contador_db
+      POSTGRES_USER: contador_user
+      POSTGRES_PASSWORD: contador_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./001_create_accounts.sql:/docker-entrypoint-initdb.d/001_create_accounts.sql
+      - ./002_create_journal_tables.sql:/docker-entrypoint-initdb.d/002_create_journal_tables.sql
+      - ./003_create_audit_triggers.sql:/docker-entrypoint-initdb.d/003_create_audit_triggers.sql
+      - ./004_create_companies_users.sql:/docker-entrypoint-initdb.d/004_create_companies_users.sql
+      - ./005_create_documents_attachments.sql:/docker-entrypoint-initdb.d/005_create_documents_attachments.sql
+      - ./006_create_tax_tables.sql:/docker-entrypoint-initdb.d/006_create_tax_tables.sql
+      - ./007_create_access_audit.sql:/docker-entrypoint-initdb.d/007_create_access_audit.sql
+      - ./008_create_nfe_tables.sql:/docker-entrypoint-initdb.d/008_create_nfe_tables.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U contador_user -d contador_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: contador_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: contador_backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      DATABASE_URL: postgresql://contador_user:contador_password@postgres:5432/contador_db
+      JWT_SECRET: change-me-in-prod
+      REFRESH_TOKEN_SECRET: change-me-in-prod-refresh
+      DEEPSEEK_API_KEY: ''
+      DEEPSEEK_MODEL: deepseek-chat
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:3000/api/v1
+    container_name: contador_frontend
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "5173:80"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

@@ -1,0 +1,221 @@
+name: CI/CD Pipeline - O Contador
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+    branches: [master, develop]
+  workflow_dispatch:
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    name: Backend Tests (Jest)
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: contador_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run Jest tests
+        working-directory: backend
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://test:test@localhost:5432/contador_test
+          JWT_SECRET: test-jwt-secret-key-for-unit-tests-only
+          JWT_EXPIRES_IN: 24h
+          REFRESH_TOKEN_SECRET: test-refresh-token-secret
+          REFRESH_TOKEN_EXPIRES_IN: 7d
+          DEEPSEEK_API_KEY: test-key-ci
+          DEEPSEEK_MODEL: deepseek-chat
+        run: npm test
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    name: Frontend Lint & Build
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: TypeScript type check
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Lint (ESLint)
+        working-directory: frontend
+        run: npm run lint || true
+
+      - name: Build Vite
+        working-directory: frontend
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: https://staging-api.ocontador.com/api/v1
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/dist/
+          retention-days: 5
+
+  e2e-tests:
+    runs-on: ubuntu-latest
+    name: E2E Tests (Playwright)
+    needs: [test-backend, test-frontend]
+    if: success()
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: contador_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd backend && npm ci
+          cd ../frontend && npm ci
+          npx playwright install --with-deps
+
+      - name: Build backend
+        working-directory: backend
+        run: npm run build
+
+      - name: Start backend server
+        working-directory: backend
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://test:test@localhost:5432/contador_test
+          JWT_SECRET: test-jwt-secret-key-for-unit-tests-only
+          PORT: 3000
+        run: nohup npm start >/tmp/backend.log 2>&1 &
+
+      - name: Wait for backend
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://localhost:3000/health >/dev/null; then
+              echo "Backend pronto";
+              exit 0;
+            fi
+            sleep 2
+          done
+          echo "Backend nao subiu";
+          cat /tmp/backend.log || true
+          exit 1
+
+      - name: Run Playwright tests
+        working-directory: frontend
+        run: npx playwright test
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
+
+  docker-build:
+    runs-on: ubuntu-latest
+    name: Docker Build Validation
+    needs: [test-backend, test-frontend]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t ocontador-backend:ci ./backend
+
+      - name: Build frontend image
+        run: docker build -t ocontador-frontend:ci ./frontend
+
+  security-scan:
+    runs-on: ubuntu-latest
+    name: Security Checks (non-blocking)
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run npm audit
+        run: |
+          cd backend && npm audit --audit-level=moderate || true
+          cd ../frontend && npm audit --audit-level=moderate || true
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    name: Deploy to Staging
+    needs: [test-backend, test-frontend, e2e-tests, docker-build]
+    if: github.ref == 'refs/heads/master' && success()
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy backend (Railway via hook)
+        if: ${{ secrets.RAILWAY_DEPLOY_HOOK_URL != '' }}
+        run: curl -fsSL -X POST "${{ secrets.RAILWAY_DEPLOY_HOOK_URL }}"
+
+      - name: Deploy frontend (Vercel)
+        if: ${{ secrets.VERCEL_TOKEN != '' && secrets.VERCEL_ORG_ID != '' && secrets.VERCEL_PROJECT_ID != '' }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          npm i -g vercel@latest
+          cd frontend
+          vercel pull --yes --environment=preview --token "$VERCEL_TOKEN"
+          vercel build --token "$VERCEL_TOKEN"
+          vercel deploy --prebuilt --token "$VERCEL_TOKEN"
