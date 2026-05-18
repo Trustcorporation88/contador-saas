@@ -15,6 +15,9 @@ export function errorHandler(
 ): void {
   const status = err.statusCode || err.status || HTTP_STATUS.INTERNAL_SERVER_ERROR;
   const message = err.message || 'An unexpected error occurred';
+  const requestId = req.requestId || req.header('x-request-id') || 'unknown';
+
+  res.setHeader('X-Request-Id', requestId);
 
   logger.error('Request error', {
     status,
@@ -22,6 +25,7 @@ export function errorHandler(
     stack: err.stack,
     path: req.path,
     method: req.method,
+    requestId,
   });
 
   // Handle validation errors (Joi)
@@ -31,6 +35,7 @@ export function errorHandler(
       code: ERROR_CODES.VALIDATION_ERROR,
       message: err.message,
       details: err.details,
+      requestId,
     });
     return;
   }
@@ -41,6 +46,7 @@ export function errorHandler(
       error: 'Invalid Token',
       code: ERROR_CODES.TOKEN_INVALID,
       message: 'Invalid authentication token',
+      requestId,
     });
     return;
   }
@@ -50,6 +56,7 @@ export function errorHandler(
       error: 'Token Expired',
       code: ERROR_CODES.TOKEN_EXPIRED,
       message: 'Your session has expired',
+      requestId,
     });
     return;
   }
@@ -60,6 +67,7 @@ export function errorHandler(
       error: 'Service Unavailable',
       code: ERROR_CODES.DATABASE_ERROR,
       message: 'Database connection failed',
+      requestId,
     });
     return;
   }
@@ -69,6 +77,7 @@ export function errorHandler(
     error: err.name || 'Error',
     code: err.code || ERROR_CODES.INTERNAL_ERROR,
     message,
+    requestId,
   };
 
   if (envConfig.nodeEnv !== 'production' && err?.stack) {

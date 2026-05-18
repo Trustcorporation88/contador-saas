@@ -1,6 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import winston from 'winston';
+import crypto from 'crypto';
 import { envConfig } from '../config/env';
+
+declare global {
+  namespace Express {
+    interface Request {
+      requestId?: string;
+    }
+  }
+}
 
 /**
  * Winston logger configuration
@@ -42,27 +51,34 @@ export function requestLogger(
   next: NextFunction,
 ): void {
   const startTime = Date.now();
-  const originalJson = res.json;
+  const incomingRequestId = req.header('x-request-id');
+  const requestId = incomingRequestId && incomingRequestId.trim().length > 0
+    ? incomingRequestId.trim().slice(0, 128)
+    : crypto.randomUUID();
 
-  // Override res.json to log response status
-  res.json = function (body: any) {
+  req.requestId = requestId;
+  res.setHeader('X-Request-Id', requestId);
+
+  res.on('finish', () => {
     const duration = Date.now() - startTime;
     const statusCode = res.statusCode;
-    const level = statusCode >= 400 ? 'warn' : 'info';
+    const level = statusCode >= 500 ? 'error' : statusCode >= 400 ? 'warn' : 'info';
+    const contentLength = res.getHeader('content-length');
 
-    logger[level as 'info' | 'warn'](`${req.method} ${req.path}`, {
+    logger.log({
+      level,
+      message: `${req.method} ${req.path}`,
       statusCode,
       duration: `${duration}ms`,
       method: req.method,
       path: req.path,
+      requestId,
       ip: req.ip,
       userAgent: req.get('user-agent'),
       userId: req.user?.id || 'anonymous',
-      responseSize: JSON.stringify(body).length,
+      responseSize: typeof contentLength === 'string' ? contentLength : undefined,
     });
-
-    return originalJson.call(this, body);
-  };
+  });
 
   next();
 }
