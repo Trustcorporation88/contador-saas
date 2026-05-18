@@ -28,9 +28,12 @@ router.use('/copiloto', copilotoRoutes);
 
 // API status
 router.get('/status', (_req, res) => {
+  const deployCommit = process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || 'unknown';
+
   res.json({
     status: 'operational',
     version: '1.0.0',
+    deployCommit,
     timestamp: new Date().toISOString(),
   });
 });
