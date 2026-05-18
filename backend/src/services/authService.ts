@@ -62,6 +62,14 @@ const loginAttemptsStore: Map<string, { attempts: number; resetTime: Date }> = n
 export class AuthService {
   private bootstrapFinished = false;
 
+  private extractPasswordHashFromRow(dbUser: any): string | undefined {
+    const candidate = dbUser?.password_hash ?? dbUser?.passwordHash ?? dbUser?.password;
+    if (!candidate || typeof candidate !== 'string') {
+      return undefined;
+    }
+    return candidate;
+  }
+
   async bootstrapAdminUser(): Promise<void> {
     if (this.bootstrapFinished) {
       return;
@@ -109,6 +117,10 @@ export class AuthService {
     const adminPassword = envConfig.adminBootstrapPassword;
 
     const existingAdmin = await db('users').whereRaw('LOWER(email) = ?', [adminEmail]).first();
+    const usersColumns = await db('users').columnInfo();
+    const hasPasswordHashColumn = Boolean((usersColumns as any).password_hash);
+    const hasPasswordColumn = Boolean((usersColumns as any).password);
+
     if (!existingAdmin) {
       if (!adminPassword) {
         logger.warn('Admin bootstrap skipped: ADMIN_BOOTSTRAP_PASSWORD is empty', {
@@ -119,10 +131,9 @@ export class AuthService {
       }
 
       const passwordHash = await bcrypt.hash(adminPassword, envConfig.bcryptRounds);
-      await db('users').insert({
+      const payload: Record<string, unknown> = {
         id: crypto.randomUUID(),
         email: adminEmail,
-        password_hash: passwordHash,
         name: 'Administrador',
         role: 'admin',
         company_id: 'bootstrap-company',
@@ -130,17 +141,26 @@ export class AuthService {
         mfa_enabled: false,
         created_at: new Date(),
         updated_at: new Date(),
-      });
+      };
+
+      if (hasPasswordHashColumn) payload.password_hash = passwordHash;
+      if (hasPasswordColumn) payload.password = passwordHash;
+
+      await db('users').insert(payload);
 
       logger.info('Admin user bootstrapped successfully', {
         adminEmail,
       });
     } else if (envConfig.adminBootstrapForceReset && adminPassword) {
       const passwordHash = await bcrypt.hash(adminPassword, envConfig.bcryptRounds);
-      await db('users').where('id', existingAdmin.id).update({
-        password_hash: passwordHash,
+      const payload: Record<string, unknown> = {
         updated_at: new Date(),
-      });
+      };
+
+      if (hasPasswordHashColumn) payload.password_hash = passwordHash;
+      if (hasPasswordColumn) payload.password = passwordHash;
+
+      await db('users').where('id', existingAdmin.id).update(payload);
 
       logger.warn('Admin password force-reset via bootstrap flag', {
         adminEmail,
@@ -491,10 +511,17 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(newPassword, envConfig.bcryptRounds);
-    await db('users').where('id', record.userId).update({
-      password_hash: passwordHash,
+    const usersColumns = await db('users').columnInfo();
+    const hasPasswordHashColumn = Boolean((usersColumns as any).password_hash);
+    const hasPasswordColumn = Boolean((usersColumns as any).password);
+
+    const payload: Record<string, unknown> = {
       updated_at: new Date(),
-    });
+    };
+    if (hasPasswordHashColumn) payload.password_hash = passwordHash;
+    if (hasPasswordColumn) payload.password = passwordHash;
+
+    await db('users').where('id', record.userId).update(payload);
 
     await db('password_reset_tokens').where('id', record.id).update({
       used_at: new Date(),
@@ -615,10 +642,19 @@ export class AuthService {
       .first();
 
     if (dbUser) {
+      const passwordHash = this.extractPasswordHashFromRow(dbUser);
+      if (!passwordHash) {
+        logger.warn('User row found without password hash field', {
+          email,
+          userId: dbUser.id,
+        });
+        return undefined;
+      }
+
       const hydratedUser: UserStore = {
         id: String(dbUser.id),
         email: String(dbUser.email),
-        passwordHash: String(dbUser.password_hash),
+        passwordHash,
         role: String(dbUser.role || 'viewer'),
         companyId: String(dbUser.company_id || ''),
         mfaEnabled: Boolean(dbUser.mfa_enabled),
@@ -652,10 +688,18 @@ export class AuthService {
       return undefined;
     }
 
+    const passwordHash = this.extractPasswordHashFromRow(dbUser);
+    if (!passwordHash) {
+      logger.warn('User row found without password hash field', {
+        userId,
+      });
+      return undefined;
+    }
+
     const hydratedUser: UserStore = {
       id: String(dbUser.id),
       email: String(dbUser.email),
-      passwordHash: String(dbUser.password_hash),
+      passwordHash,
       role: String(dbUser.role || 'viewer'),
       companyId: String(dbUser.company_id || ''),
       mfaEnabled: Boolean(dbUser.mfa_enabled),
