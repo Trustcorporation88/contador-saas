@@ -225,15 +225,26 @@ export class CompanyController {
         },
       });
     } catch (error) {
-      console.error('[COMPANIES_CONTROLLER_ERROR]', error);
+      console.error('[COMPANIES_CONTROLLER_ERROR] Exception caught:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        errorObject: error,
+      });
       logger.error('Error listing companies', {
         error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
         userId: req.user?.id,
       });
 
+      // Send error response with details if not in production
+      const isDev = process.env.NODE_ENV !== 'production';
       res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         error: 'Internal Server Error',
         code: ERROR_CODES.INTERNAL_ERROR,
+        ...(isDev && {
+          details: error instanceof Error ? error.message : String(error),
+          stack: isDev && error instanceof Error ? error.stack : undefined,
+        }),
       });
     }
   }
