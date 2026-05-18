@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { HTTP_STATUS, ERROR_CODES } from '../config/constants';
 import { logger } from './requestLogger';
+import { envConfig } from '../config/env';
 
 /**
  * Global error handler middleware
@@ -8,7 +9,7 @@ import { logger } from './requestLogger';
  */
 export function errorHandler(
   err: Error | any,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction,
 ): void {
@@ -19,8 +20,8 @@ export function errorHandler(
     status,
     message,
     stack: err.stack,
-    path: _req.path,
-    method: _req.method,
+    path: req.path,
+    method: req.method,
   });
 
   // Handle validation errors (Joi)
@@ -64,11 +65,17 @@ export function errorHandler(
   }
 
   // Default error response
-  res.status(status).json({
+  const response: Record<string, unknown> = {
     error: err.name || 'Error',
     code: err.code || ERROR_CODES.INTERNAL_ERROR,
     message,
-  });
+  };
+
+  if (envConfig.nodeEnv !== 'production' && err?.stack) {
+    response.stack = err.stack;
+  }
+
+  res.status(status).json(response);
 }
 
 /**
