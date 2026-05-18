@@ -125,6 +125,21 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 // Request logging
 app.use(requestLogger);
 
+// DEBUG: Log all requests to /api/v1/companies
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  if (req.path === '/companies' && req.method === 'GET') {
+    console.log('[COMPANIES_ENDPOINT_DEBUG]', {
+      method: req.method,
+      path: req.path,
+      fullPath: req.originalUrl,
+      headers: req.headers,
+      user: (req as any).user,
+      timestamp: new Date().toISOString(),
+    });
+  }
+  next();
+});
+
 // Audit middleware (auto-log POST/PUT/DELETE para audit_logs)
 app.use('/api/v1', auditMiddleware());
 
