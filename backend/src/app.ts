@@ -4,7 +4,7 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import { errorHandler } from './middleware/errorHandler';
-import { requestLogger } from './middleware/requestLogger';
+import { requestLogger, getRequestMetricsSnapshot } from './middleware/requestLogger';
 import { auditMiddleware } from './middleware/auditMiddleware';
 import routes from './routes';
 import { envConfig } from './config/env';
@@ -136,6 +136,25 @@ app.get('/health', (_req: Request, res: Response) => {
     uptime: process.uptime(),
   });
 });
+
+if (envConfig.enableObservabilityDashboard) {
+  app.get('/api/v1/observability/dashboard', (req: Request, res: Response) => {
+    if (envConfig.observabilityApiKey) {
+      const provided = String(req.headers['x-observability-key'] || '').trim();
+      if (!provided || provided !== envConfig.observabilityApiKey) {
+        return res.status(401).json({
+          error: 'Unauthorized',
+          code: 'OBSERVABILITY_UNAUTHORIZED',
+          message: 'Invalid observability key',
+        });
+      }
+    }
+
+    return res.status(200).json({
+      data: getRequestMetricsSnapshot(),
+    });
+  });
+}
 
 // OpenAPI docs (Task 5.7)
 if (envConfig.enableApiDocs) {

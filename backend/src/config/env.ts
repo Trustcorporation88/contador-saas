@@ -69,6 +69,8 @@ interface EnvConfig {
   enable2FA: boolean;
   enableAuditLog: boolean;
   enableApiDocs: boolean;
+  enableObservabilityDashboard: boolean;
+  observabilityApiKey: string;
   enableRateLimiting: boolean;
   rateLimitRequests: number;
   rateLimitWindowMs: number;
@@ -125,6 +127,8 @@ const envSchema = joi.object({
   ENABLE_2FA: joi.boolean().default(true),
   ENABLE_AUDIT_LOG: joi.boolean().default(true),
   ENABLE_API_DOCS: joi.boolean().default(false),
+  ENABLE_OBSERVABILITY_DASHBOARD: joi.boolean().default(false),
+  OBSERVABILITY_API_KEY: joi.string().allow('').default(''),
   ENABLE_RATE_LIMITING: joi.boolean().default(true),
   RATE_LIMIT_REQUESTS: joi.number().default(100),
   RATE_LIMIT_WINDOW_MS: joi.number().default(900000),
@@ -200,6 +204,8 @@ export const envConfig: EnvConfig = {
   enable2FA: envVars.ENABLE_2FA,
   enableAuditLog: envVars.ENABLE_AUDIT_LOG,
   enableApiDocs: envVars.ENABLE_API_DOCS,
+  enableObservabilityDashboard: envVars.ENABLE_OBSERVABILITY_DASHBOARD,
+  observabilityApiKey: envVars.OBSERVABILITY_API_KEY,
   enableRateLimiting: envVars.ENABLE_RATE_LIMITING,
   rateLimitRequests: envVars.RATE_LIMIT_REQUESTS,
   rateLimitWindowMs: envVars.RATE_LIMIT_WINDOW_MS,
