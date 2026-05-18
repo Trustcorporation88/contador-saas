@@ -121,22 +121,30 @@ export class CompanyService {
     userId?: string,
     filters?: CompanyFilters,
   ): Promise<PaginatedCompanyResponse> {
+    console.log('[COMPANY_SERVICE_LIST] Starting list', { adminMode, userId, filters });
+    
     const db = await getDatabase();
+    console.log('[COMPANY_SERVICE_LIST] Database connection obtained');
 
     // Validar e aplicar paginação
     const limit = Math.min(filters?.limit || 10, 100); // Max 100
     const page = Math.max(filters?.page || 1, 1);
     const offset = (page - 1) * limit;
 
+    console.log('[COMPANY_SERVICE_LIST] Pagination:', { limit, page, offset });
+
     let query = db('companies').where('is_active', true);
+    console.log('[COMPANY_SERVICE_LIST] Initial query created');
 
     // Se não é admin, filtrar apenas empresas do usuário
     if (!adminMode && userId) {
+      console.log('[COMPANY_SERVICE_LIST] User mode - applying join with company_users');
       query = query
         .join('company_users', 'companies.id', '=', 'company_users.company_id')
         .where('company_users.user_id', userId)
         .where('company_users.is_active', true)
         .select('companies.*');
+      console.log('[COMPANY_SERVICE_LIST] Join applied successfully');
     }
 
     // Aplicar filtros de busca
@@ -156,22 +164,29 @@ export class CompanyService {
       query = query.where('created_at', '<=', filters.created_to);
     }
 
+    console.log('[COMPANY_SERVICE_LIST] About to count records');
     // Contar total de registros
     const countQuery = query.clone().count('id as total').first();
+    console.log('[COMPANY_SERVICE_LIST] Executing count query...');
     const countResult = (await countQuery) as any;
+    console.log('[COMPANY_SERVICE_LIST] Count result:', { countResult, total: countResult?.total });
     const total = parseInt(countResult?.total || 0, 10);
 
+    console.log('[COMPANY_SERVICE_LIST] About to fetch companies...');
     // Paginar e ordenar
     const companies = (await query.orderBy('created_at', 'desc').limit(limit).offset(offset)) as any[];
+    console.log('[COMPANY_SERVICE_LIST] Companies fetched:', { count: companies.length });
 
     // Formatar resposta
-    return {
+    const response = {
       data: companies.map((c) => this.formatCompanyResponse(c)),
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
     };
+    console.log('[COMPANY_SERVICE_LIST] Returning response:', { total: response.total, dataLength: response.data.length });
+    return response;
   }
 
   /**
