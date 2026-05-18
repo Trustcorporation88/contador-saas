@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import * as joi from 'joi';
-import { logger } from '../middleware/requestLogger';
 
 /**
  * Environment variables validation and configuration
@@ -31,6 +30,7 @@ interface EnvConfig {
   // JWT
   jwt: {
     secret: string;
+    refreshSecret: string;
     expiry: string;
     refreshExpiry: string;
     algorithm: 'HS256' | 'HS512';
@@ -63,6 +63,7 @@ interface EnvConfig {
   // Feature flags
   enable2FA: boolean;
   enableAuditLog: boolean;
+  enableApiDocs: boolean;
   enableRateLimiting: boolean;
   rateLimitRequests: number;
   rateLimitWindowMs: number;
@@ -93,6 +94,7 @@ const envSchema = joi.object({
   DATABASE_IDLE_TIMEOUT_MILLIS: joi.number().default(30000),
   DATABASE_CONNECTION_TIMEOUT_MILLIS: joi.number().default(2000),
   JWT_SECRET: joi.string().required(),
+  JWT_REFRESH_SECRET: joi.string().default(joi.ref('JWT_SECRET')),
   JWT_EXPIRY: joi.string().default('1h'),
   JWT_REFRESH_EXPIRY: joi.string().default('7d'),
   JWT_ALGORITHM: joi.string().valid('HS256', 'HS512').default('HS256'),
@@ -114,6 +116,7 @@ const envSchema = joi.object({
   TOTP_ISSUER: joi.string().default('Contador App'),
   ENABLE_2FA: joi.boolean().default(true),
   ENABLE_AUDIT_LOG: joi.boolean().default(true),
+  ENABLE_API_DOCS: joi.boolean().default(false),
   ENABLE_RATE_LIMITING: joi.boolean().default(true),
   RATE_LIMIT_REQUESTS: joi.number().default(100),
   RATE_LIMIT_WINDOW_MS: joi.number().default(900000),
@@ -159,6 +162,7 @@ export const envConfig: EnvConfig = {
 
   jwt: {
     secret: envVars.JWT_SECRET,
+    refreshSecret: envVars.JWT_REFRESH_SECRET,
     expiry: envVars.JWT_EXPIRY,
     refreshExpiry: envVars.JWT_REFRESH_EXPIRY,
     algorithm: envVars.JWT_ALGORITHM,
@@ -184,6 +188,7 @@ export const envConfig: EnvConfig = {
 
   enable2FA: envVars.ENABLE_2FA,
   enableAuditLog: envVars.ENABLE_AUDIT_LOG,
+  enableApiDocs: envVars.ENABLE_API_DOCS,
   enableRateLimiting: envVars.ENABLE_RATE_LIMITING,
   rateLimitRequests: envVars.RATE_LIMIT_REQUESTS,
   rateLimitWindowMs: envVars.RATE_LIMIT_WINDOW_MS,

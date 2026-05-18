@@ -146,7 +146,7 @@ export class AuthService {
 
     try {
       // Verificar JWT
-      const decoded = jwt.verify(refreshToken, envConfig.jwt.secret) as JWTPayload;
+      const decoded = jwt.verify(refreshToken, envConfig.jwt.refreshSecret) as JWTPayload;
 
       // Verificar se token foi revogado no BD
       const storedToken = this.findRefreshTokenByUserAndHash(decoded.sub, refreshToken);
@@ -290,7 +290,7 @@ export class AuthService {
    */
   async logout(userId: string, refreshToken: string): Promise<void> {
     try {
-      const decoded = jwt.verify(refreshToken, envConfig.jwt.secret) as JWTPayload;
+      const decoded = jwt.verify(refreshToken, envConfig.jwt.refreshSecret) as JWTPayload;
 
       if (decoded.sub !== userId) {
         throw new InvalidTokenError('Token does not belong to user');
@@ -353,7 +353,7 @@ export class AuthService {
     });
 
     // Refresh token: 7 dias
-    const refreshToken = jwt.sign(payload, envConfig.jwt.secret, {
+    const refreshToken = jwt.sign(payload, envConfig.jwt.refreshSecret, {
       expiresIn: '7d',
       algorithm: envConfig.jwt.algorithm as any,
     });
@@ -498,7 +498,7 @@ export class AuthService {
   }
 
   static generateRefreshToken(userId: string): string {
-    const secret = process.env.JWT_REFRESH_SECRET ?? process.env.JWT_SECRET ?? envConfig.jwt.secret;
+    const secret = process.env.JWT_REFRESH_SECRET ?? envConfig.jwt.refreshSecret;
     return jwt.sign(
       { userId },
       secret,

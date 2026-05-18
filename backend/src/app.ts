@@ -22,6 +22,10 @@ const mutatingMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const requestWindowMs = envConfig.rateLimitWindowMs;
 const requestLimit = envConfig.rateLimitRequests;
 const requestCounters = new Map<string, { count: number; resetAt: number }>();
+const allowedOrigins = envConfig.corsOrigin
+  .split(',')
+  .map((item) => item.trim())
+  .filter(Boolean);
 
 const sanitizeString = (value: string): string => value.replace(/<[^>]*>/g, '').trim();
 
@@ -53,7 +57,7 @@ app.use(helmet());
 // CORS configuration
 app.use(
   cors({
-    origin: envConfig.corsOrigin.split(','),
+    origin: allowedOrigins,
     credentials: envConfig.corsCredentials,
     optionsSuccessStatus: 200,
   }),
@@ -70,7 +74,6 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   const origin = req.headers.origin;
   if (!origin) return next();
 
-  const allowedOrigins = envConfig.corsOrigin.split(',').map((item) => item.trim());
   if (allowedOrigins.includes(origin)) return next();
 
   return res.status(403).json({
@@ -135,18 +138,19 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 // OpenAPI docs (Task 5.7)
-app.get('/api/docs/openapi.yaml', (_req: Request, res: Response) => {
-  const openapiPath = path.resolve(__dirname, '../../openapi.yaml');
-  if (!fs.existsSync(openapiPath)) {
-    return res.status(404).send('openapi.yaml not found');
-  }
+if (envConfig.enableApiDocs) {
+  app.get('/api/docs/openapi.yaml', (_req: Request, res: Response) => {
+    const openapiPath = path.resolve(__dirname, '../../openapi.yaml');
+    if (!fs.existsSync(openapiPath)) {
+      return res.status(404).send('openapi.yaml not found');
+    }
 
-  res.setHeader('Content-Type', 'application/yaml; charset=utf-8');
-  return res.send(fs.readFileSync(openapiPath, 'utf-8'));
-});
+    res.setHeader('Content-Type', 'application/yaml; charset=utf-8');
+    return res.send(fs.readFileSync(openapiPath, 'utf-8'));
+  });
 
-app.get('/api/docs', (_req: Request, res: Response) => {
-  res.type('html').send(`<!doctype html>
+  app.get('/api/docs', (_req: Request, res: Response) => {
+    res.type('html').send(`<!doctype html>
 <html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
@@ -167,7 +171,8 @@ app.get('/api/docs', (_req: Request, res: Response) => {
     </script>
   </body>
 </html>`);
-});
+  });
+}
 
 // API v1 routes
 app.use('/api/v1', routes);

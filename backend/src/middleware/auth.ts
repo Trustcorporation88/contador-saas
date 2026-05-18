@@ -200,7 +200,7 @@ export function generateToken(payload: Record<string, unknown>): string {
  * Generate refresh token
  */
 export function generateRefreshToken(payload: Record<string, unknown>): string {
-  return jwt.sign(payload, envConfig.jwt.secret, {
+  return jwt.sign(payload, envConfig.jwt.refreshSecret, {
     expiresIn: envConfig.jwt.refreshExpiry,
     algorithm: envConfig.jwt.algorithm as any,
   });
