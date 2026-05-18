@@ -39,6 +39,7 @@ const navItems: NavItem[] = [
   { label: 'Plano de Contas',    icon: BookOpen,        path: '/contas'                 },
   { label: 'Lançamentos',        icon: FileText,        path: '/lancamentos'            },
   { label: 'Documentos Fiscais', icon: FileText,        path: '/documentos'             },
+  { label: 'Contas a Receber',   icon: FileText,        path: '/contas-receber'         },
   {
     label: 'Relatórios',
     icon: BarChart3,

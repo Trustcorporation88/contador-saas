@@ -14,6 +14,7 @@ import ContasPage from '../pages/Contas/ContasPage';
 import LancamentosPage from '../pages/Lancamentos/LancamentosPage';
 import LancadorPage from '../pages/Lancamentos/LancadorPage';
 import DocumentosPage from '../pages/Documentos/DocumentosPage';
+import ContasReceberPage from '../pages/ContasReceber/ContasReceberPage';
 import BalancoPage from '../pages/Relatorios/BalancoPage';
 import DREPage from '../pages/Relatorios/DREPage';
 import OutrosPage from '../pages/Relatorios/OutrosPage';
@@ -85,6 +86,10 @@ const router = createBrowserRouter([
           {
             path: 'documentos',
             element: <DocumentosPage />,
+          },
+          {
+            path: 'contas-receber',
+            element: <ContasReceberPage />,
           },
           {
             path: 'lancamentos/novo',

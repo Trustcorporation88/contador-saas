@@ -9,6 +9,7 @@ import cnpjRoutes from './cnpj';
 import backupRoutes from './backup';
 import copilotoRoutes from './copiloto';
 import documentosFiscaisRoutes from './documentosFiscais';
+import contasReceberRoutes from './contasReceber';
 
 /**
  * Main API v1 router
@@ -27,6 +28,7 @@ router.use('/cnpj', cnpjRoutes);
 router.use('/admin/backups', backupRoutes);
 router.use('/copiloto', copilotoRoutes);
 router.use('/documentos', documentosFiscaisRoutes);
+router.use('/contas-receber', contasReceberRoutes);
 
 // API status
 router.get('/status', (_req, res) => {
