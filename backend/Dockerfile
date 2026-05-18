@@ -9,8 +9,8 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies (fallback to npm install if lockfile is not present)
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 # Copy source
 COPY src ./src
@@ -29,8 +29,8 @@ RUN apk add --no-cache dumb-init
 # Copy package files
 COPY package*.json ./
 
-# Install only production dependencies
-RUN npm ci --omit=dev
+# Install only production dependencies (fallback when lockfile is absent)
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi
 
 # Copy compiled code from builder
 COPY --from=builder /app/dist ./dist
