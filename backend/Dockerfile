@@ -9,8 +9,8 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 
-# Install dependencies (fallback to npm install if lockfile is not present)
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+# Install dependencies (avoid lifecycle scripts before source code is copied)
+RUN if [ -f package-lock.json ]; then npm ci --ignore-scripts; else npm install --ignore-scripts; fi
 
 # Copy source
 COPY src ./src
