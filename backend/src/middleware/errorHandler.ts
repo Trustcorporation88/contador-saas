@@ -80,8 +80,10 @@ export function errorHandler(
     requestId,
   };
 
-  if (envConfig.nodeEnv !== 'production' && err?.stack) {
-    response.stack = err.stack;
+  // Always include stack in staging (not production)
+  const isProduction = envConfig.nodeEnv === 'production' && process.env.RENDER_GIT_BRANCH !== 'main';
+  if (!isProduction && err?.stack) {
+    response.stack = err.stack.split('\n');
   }
 
   res.status(status).json(response);
