@@ -33,5 +33,5 @@ services:
     staticPublishPath: dist
     autoDeploy: true
     envVars:
-      - key: VITE_API_BASE_URL
+      - key: VITE_API_URL
         sync: false

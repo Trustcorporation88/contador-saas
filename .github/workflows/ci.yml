@@ -84,7 +84,7 @@ jobs:
         working-directory: frontend
         run: npm run build
         env:
-          VITE_API_BASE_URL: https://staging-api.ocontador.com/api/v1
+          VITE_API_URL: https://staging-api.ocontador.com
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
