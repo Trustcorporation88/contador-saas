@@ -128,57 +128,73 @@ export class CompanyService {
     const page = Math.max(filters?.page || 1, 1);
     const offset = (page - 1) * limit;
 
-    // Construir query base com WHERE e JOIN - SEM select ainda
-    const buildBaseQuery = () => {
-      let q = db('companies').where('is_active', true);
+    try {
+      // Query base simples - sem factory
+      let countQuery = db('companies').where('is_active', true);
+      let listQuery = db('companies').where('is_active', true);
 
-      // Se não é admin, filtrar apenas empresas do usuário
+      // Aplicar joins e filtros em ambas as queries
       if (!adminMode && userId) {
-        q = q
+        countQuery = countQuery
           .join('company_users', 'companies.id', '=', 'company_users.company_id')
           .where('company_users.user_id', userId)
           .where('company_users.is_active', true);
+        
+        listQuery = listQuery
+          .join('company_users', 'companies.id', '=', 'company_users.company_id')
+          .where('company_users.user_id', userId)
+          .where('company_users.is_active', true)
+          .select('companies.*');
       }
 
       // Aplicar filtros de busca
       if (filters?.search) {
-        q = q.whereRaw('LOWER(companies.name) LIKE LOWER(?)', [`%${filters.search}%`]);
+        const searchPattern = `%${filters.search}%`;
+        countQuery = countQuery.whereRaw('LOWER(companies.name) LIKE LOWER(?)', [searchPattern]);
+        listQuery = listQuery.whereRaw('LOWER(companies.name) LIKE LOWER(?)', [searchPattern]);
       }
 
       if (filters?.tax_regime) {
-        q = q.where('tax_regime', filters.tax_regime);
+        countQuery = countQuery.where('companies.tax_regime', filters.tax_regime);
+        listQuery = listQuery.where('companies.tax_regime', filters.tax_regime);
       }
 
       if (filters?.created_from) {
-        q = q.where('created_at', '>=', filters.created_from);
+        countQuery = countQuery.where('companies.created_at', '>=', filters.created_from);
+        listQuery = listQuery.where('companies.created_at', '>=', filters.created_from);
       }
 
       if (filters?.created_to) {
-        q = q.where('created_at', '<=', filters.created_to);
+        countQuery = countQuery.where('companies.created_at', '<=', filters.created_to);
+        listQuery = listQuery.where('companies.created_at', '<=', filters.created_to);
       }
 
-      return q;
-    };
+      // Executar count
+      const countResult = await countQuery.count('* as total').first();
+      const total = parseInt((countResult as any)?.total || 0, 10);
 
-    // Contar total de registros com query separada (SEM select)
-    const countResult = (await buildBaseQuery().count('* as total').first()) as any;
-    const total = parseInt(countResult?.total || 0, 10);
+      // Executar list
+      const companies = await listQuery
+        .orderBy('created_at', 'desc')
+        .limit(limit)
+        .offset(offset);
 
-    // Paginar e ordenar com query separada (COM select se tiver join)
-    let listQuery = buildBaseQuery();
-    if (!adminMode && userId) {
-      listQuery = listQuery.select('companies.*');
+      // Formatar resposta
+      return {
+        data: companies.map((c: any) => this.formatCompanyResponse(c)),
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      };
+    } catch (error) {
+      logger.error('Error listing companies', {
+        adminMode,
+        userId,
+        error: (error as Error).message,
+      });
+      throw error;
     }
-    const companies = (await listQuery.orderBy('created_at', 'desc').limit(limit).offset(offset)) as any[];
-
-    // Formatar resposta
-    return {
-      data: companies.map((c) => this.formatCompanyResponse(c)),
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
   }
 
   /**
