@@ -217,6 +217,7 @@ export default function LancadorPage() {
   const totalDebit  = lines.reduce((s, l) => s + (l.debit  || 0), 0);
   const totalCredit = lines.reduce((s, l) => s + (l.credit || 0), 0);
   const balanced    = Math.abs(totalDebit - totalCredit) < 0.01;
+  const hasReferenceInfo = Boolean(watch('reference_type') || watch('reference_number') || watch('reference_issuer'));
 
   // Mutation
   const createMut = useMutation({
@@ -254,16 +255,24 @@ export default function LancadorPage() {
       <div className="p-8 text-center">
         <BookOpen className="mx-auto h-12 w-12 text-gray-300 mb-3" />
         <p className="text-gray-500">Selecione uma empresa para registrar lançamentos.</p>
+        <button
+          type="button"
+          onClick={() => navigate('/empresas')}
+          className="mt-3 text-sm text-primary-600 hover:underline"
+        >
+          Ir para Empresas
+        </button>
       </div>
     );
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6 lg:p-8">
 
       {/* Header */}
-      <div className="flex items-center gap-3">
+      <div className="glass-strip flex flex-wrap items-center justify-between gap-3 px-5 py-5 sm:px-6">
+        <div className="flex items-center gap-3">
         <button
           onClick={() => navigate('/lancamentos')}
           className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
@@ -271,8 +280,16 @@ export default function LancadorPage() {
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div>
+          <p className="shell-title">Editor de partidas dobradas</p>
           <h1 className="text-xl font-bold text-gray-900">Novo Lançamento Contábil</h1>
           <p className="text-sm text-gray-500 mt-0.5">Partidas dobradas — débitos = créditos (Lei 6.404/76)</p>
+        </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={clsx('badge', balanced ? 'badge-green' : 'badge-red')}>
+            {balanced ? 'Balanceado' : 'Desbalanceado'}
+          </span>
+          <span className="badge badge-gray">{fields.length} linhas</span>
         </div>
       </div>
 
@@ -315,23 +332,46 @@ export default function LancadorPage() {
               {...register('reference_issuer')}
             />
           </div>
+
+          {hasReferenceInfo && (
+            <p className="mt-3 text-xs text-ink-500">
+              Referência preenchida: melhora rastreabilidade para auditoria e conciliação.
+            </p>
+          )}
         </div>
 
         {/* Lines */}
         <div className="card overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-700">Partidas Contábeis</h2>
-            <button
-              type="button"
-              onClick={addLine}
-              className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors"
-            >
-              <Plus className="h-4 w-4" /> Adicionar linha
-            </button>
+            <div>
+              <h2 className="text-sm font-semibold text-gray-700">Partidas Contábeis</h2>
+              <p className="mt-0.5 text-xs text-ink-500">Use uma linha para cada conta envolvida no lançamento.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (fields.length > 2) {
+                    const firstTwo = lines.slice(0, 2);
+                    setValue('lines', firstTwo);
+                  }
+                }}
+                className="btn btn-ghost text-xs"
+              >
+                Resetar linhas
+              </button>
+              <button
+                type="button"
+                onClick={addLine}
+                className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors"
+              >
+                <Plus className="h-4 w-4" /> Adicionar linha
+              </button>
+            </div>
           </div>
 
           {/* Column headers */}
-          <div className="grid grid-cols-[1fr_160px_160px_200px_40px] gap-2 px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs text-gray-500 uppercase tracking-wide font-medium">
+          <div className="grid grid-cols-[1fr_160px_160px_200px_40px] gap-2 px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs text-gray-500 uppercase tracking-wide font-medium sticky top-0 z-10">
             <span>Conta</span>
             <span className="text-right">Débito (R$)</span>
             <span className="text-right">Crédito (R$)</span>

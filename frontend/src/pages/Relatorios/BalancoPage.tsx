@@ -111,6 +111,7 @@ export default function BalancoPage() {
       <div className="p-8 text-center">
         <Scale className="mx-auto h-12 w-12 text-gray-300 mb-3" />
         <p className="text-gray-500">Selecione uma empresa para gerar o Balanço Patrimonial.</p>
+        <p className="mt-2 text-xs text-gray-400">Sem empresa ativa, o relatório não pode ser consolidado.</p>
       </div>
     );
   }
@@ -118,11 +119,12 @@ export default function BalancoPage() {
   const r = data;
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-5">
+    <div className="mx-auto max-w-6xl space-y-5 p-4 sm:p-6 lg:p-8">
 
       {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
+      <div className="glass-strip flex items-start justify-between flex-wrap gap-3 px-5 py-5 sm:px-6">
         <div>
+          <p className="shell-title">Relatório patrimonial</p>
           <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
             <Scale className="h-5 w-5 text-primary-600" />
             Balanço Patrimonial
@@ -146,7 +148,7 @@ export default function BalancoPage() {
       </div>
 
       {/* Export buttons */}
-      <div className="flex gap-2">
+      <div className="glass-strip flex flex-wrap items-center gap-2 px-4 py-3 sm:px-5">
         <button
           onClick={() => handleExport('xlsx')}
           disabled={!!exportLoading || isLoading}
@@ -162,6 +164,14 @@ export default function BalancoPage() {
         >
           <Download className="h-4 w-4" />
           {exportLoading === 'pdf' ? 'Gerando...' : 'Exportar PDF'}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setDateTo(format(new Date(), 'yyyy-MM-dd'))}
+          className="btn btn-ghost text-xs"
+        >
+          Voltar para hoje
         </button>
       </div>
 
@@ -247,9 +257,14 @@ export default function BalancoPage() {
       )}
 
       {r && (
-        <p className="text-xs text-gray-400 text-right">
-          Gerado em {format(new Date(r.generated_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-400">
+          <p>
+            Gerado em {format(new Date(r.generated_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+          </p>
+          <p>
+            Data base: {format(new Date(dateTo + 'T00:00:00'), "dd/MM/yyyy", { locale: ptBR })}
+          </p>
+        </div>
       )}
     </div>
   );
