@@ -149,15 +149,19 @@ export class CompanyController {
    * @param res - Express Response
    */
   static async listCompanies(req: Request, res: Response): Promise<void> {
+    console.log('[COMPANIES_CONTROLLER_ENTER] listCompanies called');
     try {
       // Validar autenticação
       if (!req.user) {
+        console.log('[COMPANIES_CONTROLLER] No user in request');
         res.status(HTTP_STATUS.UNAUTHORIZED).json({
           error: 'Unauthorized',
           code: ERROR_CODES.UNAUTHORIZED,
         });
         return;
       }
+
+      console.log('[COMPANIES_CONTROLLER] User authenticated:', { userId: req.user.id, role: req.user.role });
 
       // Extrair query params
       const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
@@ -188,6 +192,7 @@ export class CompanyController {
 
       // Determinar se é admin
       const isAdmin = req.user.role === 'admin';
+      console.log('[COMPANIES_CONTROLLER] Calling service.list with isAdmin=' + isAdmin);
 
       // Listar empresas
       const result = await CompanyService.list(isAdmin, isAdmin ? undefined : req.user.id, {
@@ -198,6 +203,8 @@ export class CompanyController {
         created_from,
         created_to,
       });
+
+      console.log('[COMPANIES_CONTROLLER] Service.list returned, total=' + result.total);
 
       logger.info('Companies listed', {
         userId: req.user.id,
@@ -218,6 +225,7 @@ export class CompanyController {
         },
       });
     } catch (error) {
+      console.error('[COMPANIES_CONTROLLER_ERROR]', error);
       logger.error('Error listing companies', {
         error: error instanceof Error ? error.message : String(error),
         userId: req.user?.id,
