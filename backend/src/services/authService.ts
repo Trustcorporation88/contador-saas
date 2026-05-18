@@ -639,13 +639,11 @@ export class AuthService {
     role: string,
     companyId: string,
   ): { accessToken: string; refreshToken: string } {
-    const payload: JWTPayload = {
+    const payload: Omit<JWTPayload, 'iat' | 'exp'> = {
       sub: userId,
       email,
       role,
       companyId,
-      iat: Math.floor(Date.now() / 1000),
-      exp: 0, // Será preenchido pelo jwt.sign
     };
 
     // Access token: 1 hora
