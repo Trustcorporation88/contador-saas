@@ -62,6 +62,8 @@ const loginAttemptsStore: Map<string, { attempts: number; resetTime: Date }> = n
 export class AuthService {
   private bootstrapFinished = false;
 
+  private static readonly BCRYPT_HASH_REGEX = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/;
+
   private extractPasswordHashFromRow(dbUser: any): string | undefined {
     const candidate = dbUser?.password_hash ?? dbUser?.passwordHash ?? dbUser?.password;
     if (!candidate || typeof candidate !== 'string') {
@@ -194,8 +196,8 @@ export class AuthService {
       throw new InvalidCredentialsError('Invalid email or password');
     }
 
-    // Comparar senha
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    // Comparar senha com suporte a schema legado (senha em texto puro)
+    const isPasswordValid = await this.verifyPasswordForUser(user, password);
     if (!isPasswordValid) {
       this.recordLoginAttempt(email);
       throw new InvalidCredentialsError('Invalid email or password');
@@ -268,6 +270,75 @@ export class AuthService {
         mfaEnabled: false,
       },
     };
+  }
+
+  private isBcryptHash(value: string): boolean {
+    return AuthService.BCRYPT_HASH_REGEX.test(value);
+  }
+
+  private async verifyPasswordForUser(user: UserStore, plainPassword: string): Promise<boolean> {
+    const storedValue = String(user.passwordHash || '');
+    if (!storedValue) {
+      return false;
+    }
+
+    if (this.isBcryptHash(storedValue)) {
+      try {
+        return await bcrypt.compare(plainPassword, storedValue);
+      } catch (error) {
+        logger.warn('Password hash compare failed; treating as invalid credentials', {
+          userId: user.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return false;
+      }
+    }
+
+    // Compatibilidade temporária: senha legada em texto puro.
+    if (plainPassword !== storedValue) {
+      return false;
+    }
+
+    try {
+      const secureHash = await bcrypt.hash(plainPassword, envConfig.bcryptRounds);
+      await this.updateUserPasswordColumns(user.id, secureHash);
+      user.passwordHash = secureHash;
+      usersStore.set(user.id, user);
+
+      logger.warn('Legacy plaintext password migrated to bcrypt hash', {
+        userId: user.id,
+      });
+    } catch (error) {
+      logger.error('Failed to migrate legacy plaintext password', {
+        userId: user.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    return true;
+  }
+
+  private async updateUserPasswordColumns(userId: string, passwordHash: string): Promise<void> {
+    const db = await getDatabase();
+    const usersColumns = await db('users').columnInfo();
+    const hasPasswordHashColumn = Boolean((usersColumns as any).password_hash);
+    const hasPasswordColumn = Boolean((usersColumns as any).password);
+
+    const payload: Record<string, unknown> = {
+      updated_at: new Date(),
+    };
+
+    if (hasPasswordHashColumn) payload.password_hash = passwordHash;
+    if (hasPasswordColumn) payload.password = passwordHash;
+
+    if (!hasPasswordHashColumn && !hasPasswordColumn) {
+      logger.warn('No password column found to persist migrated hash', {
+        userId,
+      });
+      return;
+    }
+
+    await db('users').where('id', userId).update(payload);
   }
 
   /**
