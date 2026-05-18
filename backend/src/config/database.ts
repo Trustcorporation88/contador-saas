@@ -20,16 +20,20 @@ export async function getDatabase(): Promise<Knex> {
     return db;
   }
 
+  const connectionConfig = envConfig.database.url
+    ? envConfig.database.url
+    : {
+        host: envConfig.database.host,
+        port: envConfig.database.port,
+        user: envConfig.database.user,
+        password: envConfig.database.password,
+        database: envConfig.database.name,
+        connectionTimeoutMillis: envConfig.database.connectionTimeoutMillis,
+      };
+
   db = knex({
     client: 'pg',
-    connection: {
-      host: envConfig.database.host,
-      port: envConfig.database.port,
-      user: envConfig.database.user,
-      password: envConfig.database.password,
-      database: envConfig.database.name,
-      connectionTimeoutMillis: envConfig.database.connectionTimeoutMillis,
-    },
+    connection: connectionConfig,
     pool: {
       min: envConfig.database.poolMin,
       max: envConfig.database.poolMax,
