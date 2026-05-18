@@ -1,7 +1,7 @@
 # Dockerfile para Backend Node.js
 
 ## Build stage
-FROM node:18-alpine as builder
+FROM node:18-alpine AS builder
 
 WORKDIR /app
 
@@ -23,14 +23,19 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
+# Install dumb-init and temporary build dependencies for native modules (e.g., bcrypt)
+RUN apk add --no-cache dumb-init \
+    && apk add --no-cache --virtual .build-deps python3 make g++
 
 # Copy package files
 COPY package*.json ./
 
-# Install only production dependencies (avoid running lifecycle scripts like prepare)
-RUN if [ -f package-lock.json ]; then npm ci --omit=dev --ignore-scripts; else npm install --omit=dev --ignore-scripts; fi
+# Install only production dependencies.
+# Remove local prepare script to avoid running project build hooks in runtime stage,
+# while still allowing dependency install scripts required by native modules.
+RUN node -e "const fs=require('fs'); const p=require('./package.json'); if (p.scripts && p.scripts.prepare) delete p.scripts.prepare; fs.writeFileSync('package.json', JSON.stringify(p, null, 2));" \
+    && if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi \
+    && apk del .build-deps
 
 # Copy compiled code from builder
 COPY --from=builder /app/dist ./dist
