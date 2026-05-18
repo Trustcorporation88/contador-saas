@@ -95,22 +95,25 @@ export class DocumentoFiscalService {
 
       // Inserir itens
       if (data.itens && data.itens.length > 0) {
-        const itensComId = data.itens.map((item, idx) => ({
-          documento_fiscal_id: documentoId,
-          descricao: item.descricao,
-          codigo_produto: item.codigo_produto || null,
-          quantidade: item.quantidade,
-          valor_unitario: item.valor_unitario,
-          valor_total: item.quantidade * item.valor_unitario,
-          aliquota_icms: item.aliquota_icms || null,
-          valor_icms: 0,
-          aliquota_ipi: item.aliquota_ipi || null,
-          valor_ipi: 0,
-          aliquota_pis: item.aliquota_pis || null,
-          aliquota_cofins: item.aliquota_cofins || null,
-          ordem: item.ordem || idx,
-          created_at: new Date(),
-        }));
+        const itensComId: any[] = data.itens.map((item, idx: number) => {
+          const ordem = item.ordem !== undefined ? item.ordem : idx;
+          return {
+            documento_fiscal_id: documentoId,
+            descricao: item.descricao,
+            codigo_produto: item.codigo_produto || null,
+            quantidade: item.quantidade,
+            valor_unitario: item.valor_unitario,
+            valor_total: item.quantidade * item.valor_unitario,
+            aliquota_icms: item.aliquota_icms || null,
+            valor_icms: 0,
+            aliquota_ipi: item.aliquota_ipi || null,
+            valor_ipi: 0,
+            aliquota_pis: item.aliquota_pis || null,
+            aliquota_cofins: item.aliquota_cofins || null,
+            ordem: ordem,
+            created_at: new Date(),
+          };
+        });
 
         await db('itens_documentos_fiscais').insert(itensComId);
       }

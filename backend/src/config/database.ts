@@ -2,6 +2,7 @@ import knex, { Knex } from 'knex';
 import { envConfig } from './env';
 import { logger } from '../middleware/requestLogger';
 import { extendKnexWithTenant } from '../utils/queryBuilder';
+import { runMigrationsIfNeeded } from '../utils/migrationRunner';
 
 /**
  * PostgreSQL connection pool configuration
@@ -75,7 +76,10 @@ export async function getDatabase(): Promise<Knex> {
  * Initialize database (called on server startup)
  */
 export async function initializeDatabase(): Promise<void> {
-  await getDatabase();
+  const database = await getDatabase();
+  console.log('[DATABASE] Running migrations...');
+  await runMigrationsIfNeeded(database);
+  console.log('[DATABASE] Migrations completed');
 }
 
 /**
