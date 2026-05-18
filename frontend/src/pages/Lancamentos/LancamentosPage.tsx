@@ -116,6 +116,9 @@ export default function LancamentosPage() {
   const entries     = data?.data ?? [];
   const total       = data?.total ?? 0;
   const totalPages  = data?.totalPages ?? 1;
+  const hasActiveFilters = Boolean(search || dateFrom || dateTo || statusFilter !== 'all');
+  const postedOnPage = entries.filter((e) => e.is_posted).length;
+  const draftsOnPage = entries.filter((e) => !e.is_posted).length;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['journals', currentCompanyId] });
 
@@ -141,33 +144,41 @@ export default function LancamentosPage() {
       <div className="p-8 text-center">
         <BookOpen className="mx-auto h-12 w-12 text-gray-300 mb-3" />
         <p className="text-gray-500">Selecione uma empresa para ver os lançamentos.</p>
+        <Link to="/empresas" className="mt-3 inline-block text-sm text-primary-600 hover:underline">
+          Ir para Empresas
+        </Link>
       </div>
     );
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="p-6 space-y-5">
+    <div className="space-y-5 p-4 sm:p-6 lg:p-8">
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="glass-strip flex flex-wrap items-center justify-between gap-3 px-5 py-5 sm:px-6">
         <div>
+          <p className="shell-title">Movimentos contábeis</p>
           <h1 className="text-xl font-bold text-gray-900">Lançamentos Contábeis</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {total} lançamento{total !== 1 ? 's' : ''} encontrado{total !== 1 ? 's' : ''}
           </p>
         </div>
-        <Link
-          to="/lancamentos/novo"
-          className="btn btn-primary flex items-center gap-2"
-        >
-          <Plus className="h-4 w-4" />
-          Novo Lançamento
-        </Link>
+        <div className="flex items-center gap-2">
+          <span className="badge badge-green">{postedOnPage} postados</span>
+          <span className="badge badge-yellow">{draftsOnPage} rascunhos</span>
+          <Link
+            to="/lancamentos/novo"
+            className="btn btn-primary flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            Novo Lançamento
+          </Link>
+        </div>
       </div>
 
       {/* Search + Filter bar */}
-      <div className="flex gap-3 flex-wrap">
+      <div className="glass-strip flex gap-3 flex-wrap px-4 py-3 sm:px-5">
         <div className="relative flex-1 min-w-60">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
           <input
@@ -207,11 +218,36 @@ export default function LancamentosPage() {
           <Filter className="h-4 w-4" />
           Período
         </button>
+
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={() => {
+              setSearch('');
+              setDateFrom('');
+              setDateTo('');
+              setStatus('all');
+              setPage(1);
+            }}
+            className="btn btn-ghost text-xs"
+          >
+            Limpar filtros
+          </button>
+        )}
       </div>
+
+      {hasActiveFilters && (
+        <div className="flex flex-wrap items-center gap-2">
+          {search && <span className="badge badge-blue">Busca: {search}</span>}
+          {statusFilter !== 'all' && <span className="badge badge-gray">Status: {statusFilter === 'posted' ? 'Postado' : 'Rascunho'}</span>}
+          {dateFrom && <span className="badge badge-gray">De: {fmtDate(dateFrom)}</span>}
+          {dateTo && <span className="badge badge-gray">Até: {fmtDate(dateTo)}</span>}
+        </div>
+      )}
 
       {/* Date range */}
       {showFilters && (
-        <div className="flex gap-4 items-end flex-wrap rounded-xl border border-gray-200 bg-gray-50 p-4">
+        <div className="flex gap-4 items-end flex-wrap rounded-xl border border-gray-200 bg-gray-50/80 p-4">
           <div>
             <label className="input-label">Data inicial</label>
             <input type="date" className="input-field" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} />
@@ -232,7 +268,7 @@ export default function LancamentosPage() {
       {/* Table */}
       <div className="table-container">
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50 sticky top-0 z-10">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Histórico</th>
@@ -367,7 +403,7 @@ export default function LancamentosPage() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between">
+        <div className="glass-strip flex items-center justify-between px-4 py-3">
           <p className="text-sm text-gray-500">
             Página {page} de {totalPages}
           </p>

@@ -290,34 +290,52 @@ export default function EmpresasPage() {
   };
 
   const mutLoading = createMut.isPending || updateMut.isPending;
+  const hasSearch = debouncedSearch.trim().length > 0;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="p-6 space-y-4">
+    <div className="space-y-4 p-4 sm:p-6 lg:p-8">
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="glass-strip flex flex-wrap items-center justify-between gap-3 px-5 py-5 sm:px-6">
         <div>
+          <p className="shell-title">Cadastro e seleção</p>
           <h1 className="text-xl font-bold text-gray-900">Empresas</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Gerencie as empresas do sistema
           </p>
         </div>
-        <Button icon={<Plus className="h-4 w-4" />} onClick={openCreate}>
-          Nova Empresa
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="badge badge-blue">{pagination?.total ?? companies.length} registradas</span>
+          {currentCompanyId && <span className="badge badge-green">1 selecionada</span>}
+          <Button icon={<Plus className="h-4 w-4" />} onClick={openCreate}>
+            Nova Empresa
+          </Button>
+        </div>
       </div>
 
       {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-        <input
-          type="search"
-          className="input-field pl-9"
-          placeholder="Buscar por nome ou CNPJ..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+      <div className="glass-strip flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
+        <div className="relative min-w-[260px] flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            type="search"
+            className="input-field pl-9"
+            placeholder="Buscar por nome ou CNPJ..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        {search && (
+          <button
+            type="button"
+            onClick={() => setSearch('')}
+            className="btn btn-ghost text-xs"
+          >
+            Limpar busca
+          </button>
+        )}
+        <p className="text-xs text-ink-500">Dica: selecione a empresa ativa no icone de check.</p>
       </div>
 
       {/* Table */}
@@ -333,9 +351,9 @@ export default function EmpresasPage() {
           <div className="py-16 text-center">
             <Building2 className="mx-auto h-10 w-10 text-gray-300 mb-3" />
             <p className="text-sm text-gray-500">
-              {debouncedSearch ? 'Nenhuma empresa encontrada' : 'Nenhuma empresa cadastrada'}
+              {hasSearch ? 'Nenhuma empresa encontrada para a busca atual' : 'Nenhuma empresa cadastrada'}
             </p>
-            {!debouncedSearch && (
+            {!hasSearch && (
               <Button variant="ghost" size="sm" className="mt-3" onClick={openCreate}>
                 Cadastrar primeira empresa
               </Button>
@@ -361,7 +379,7 @@ export default function EmpresasPage() {
                     key={c.id}
                     className={clsx(
                       'hover:bg-gray-50 transition-colors',
-                      currentCompanyId === c.id && 'bg-primary-50'
+                      currentCompanyId === c.id && 'bg-primary-50/70'
                     )}
                   >
                     <td className="px-4 py-3 font-mono text-xs text-gray-600">

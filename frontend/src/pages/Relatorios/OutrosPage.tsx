@@ -65,7 +65,7 @@ function BalanceteTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="glass-strip flex flex-wrap items-end gap-3 px-4 py-4 sm:px-5">
         <div>
           <label className="input-label">Período inicial (opcional)</label>
           <input type="date" className="input-field" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
@@ -86,6 +86,19 @@ function BalanceteTab() {
           <Download className="h-4 w-4" />
           {exportLoading === 'pdf' ? 'Gerando...' : 'PDF'}
         </button>
+
+        {(dateFrom || dateTo) && (
+          <button
+            type="button"
+            className="btn btn-ghost text-xs"
+            onClick={() => {
+              setDateFrom('');
+              setDateTo('');
+            }}
+          >
+            Limpar período
+          </button>
+        )}
       </div>
 
       {r && (
@@ -189,7 +202,7 @@ function LivroRazaoTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="glass-strip flex flex-wrap items-end gap-3 px-4 py-4 sm:px-5">
         <div className="flex-1 min-w-48">
           <label className="input-label">Conta contábil</label>
           <select
@@ -221,6 +234,16 @@ function LivroRazaoTab() {
           <RefreshCw className={clsx('h-4 w-4', isLoading && 'animate-spin')} />
           Gerar
         </button>
+
+        {selectedAccountId && (
+          <button
+            type="button"
+            className="btn btn-ghost text-xs"
+            onClick={() => setAccountId('')}
+          >
+            Limpar conta
+          </button>
+        )}
       </div>
 
       {isLoading && (
@@ -331,15 +354,16 @@ export default function OutrosPage() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-5">
+    <div className="mx-auto max-w-6xl space-y-5 p-4 sm:p-6 lg:p-8">
 
-      <div>
+      <div className="glass-strip px-5 py-5 sm:px-6">
+        <p className="shell-title">Módulo de relatórios</p>
         <h1 className="text-xl font-bold text-gray-900">Outros Relatórios</h1>
         <p className="text-sm text-gray-500 mt-0.5">Balancete de verificação e livro razão</p>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="glass-strip px-2 py-2">
         <nav className="flex gap-1">
           {([
             { key: 'balancete', label: 'Balancete de Verificação' },
@@ -349,10 +373,10 @@ export default function OutrosPage() {
               key={key}
               onClick={() => setTab(key)}
               className={clsx(
-                'px-4 py-2.5 text-sm font-medium border-b-2 transition-colors',
+                'rounded-xl px-4 py-2.5 text-sm font-medium transition-colors',
                 tab === key
-                  ? 'border-primary-500 text-primary-700 bg-primary-50'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'text-primary-700 bg-primary-50 border border-primary-200'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50 border border-transparent'
               )}
             >
               {label}
