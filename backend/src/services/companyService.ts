@@ -122,6 +122,7 @@ export class CompanyService {
     filters?: CompanyFilters,
   ): Promise<PaginatedCompanyResponse> {
     try {
+      console.log(`[COMPANIES_LIST_DEBUG] called with adminMode=${adminMode}, userId=${userId}`);
       // Return minimal response for debugging
       return {
         data: [],
@@ -131,6 +132,7 @@ export class CompanyService {
         totalPages: 0,
       };
     } catch (error) {
+      console.error(`[COMPANIES_LIST_ERROR] ${error}`);
       logger.error('Error listing companies', { error });
       throw error;
     }
