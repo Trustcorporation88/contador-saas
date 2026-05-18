@@ -123,7 +123,44 @@ function CompanyForm({
     },
   });
 
-  const { register, control, handleSubmit, formState: { errors } } = form;
+  const { register, control, handleSubmit, watch, setValue, formState: { errors } } = form;
+
+  // CNPJ lookup states
+  const [cnpjLoading, setCnpjLoading] = useState(false);
+  const [cnpjSuccess, setCnpjSuccess] = useState(false);
+  const cnpjValue = watch('cnpj');
+
+  // Consulta CNPJ quando completamente digitado
+  const handleCnpjChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const masked = maskCNPJ(e.target.value);
+    const clean = masked.replace(/\D/g, '');
+
+    if (clean.length === 14 && validateCNPJ(masked)) {
+      setCnpjLoading(true);
+      setCnpjSuccess(false);
+      try {
+        const result = await CompanyService.lookupCNPJ(clean);
+        
+        // Preenche campos automaticamente
+        if (result.razao_social) {
+          setValue('name', result.razao_social);
+        }
+        if (result.contato?.email) {
+          setValue('email', result.contato.email);
+        }
+        if (result.contato?.telefone) {
+          setValue('phone', result.contato.telefone);
+        }
+        
+        setCnpjSuccess(true);
+        setTimeout(() => setCnpjSuccess(false), 3000);
+      } catch (err) {
+        console.error('CNPJ lookup failed:', err);
+      } finally {
+        setCnpjLoading(false);
+      }
+    }
+  };
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
@@ -134,16 +171,28 @@ function CompanyForm({
           name="cnpj"
           control={control}
           render={({ field, fieldState }) => (
-            <Input
-              label="CNPJ"
-              placeholder="00.000.000/0000-00"
-              inputMode="numeric"
-              error={fieldState.error?.message}
-              value={field.value ?? ''}
-              name={field.name}
-              ref={field.ref}
-              onChange={(e) => field.onChange(maskCNPJ(e.target.value))}
-            />
+            <div>
+              <Input
+                label="CNPJ"
+                placeholder="00.000.000/0000-00"
+                inputMode="numeric"
+                error={fieldState.error?.message}
+                value={field.value ?? ''}
+                name={field.name}
+                ref={field.ref}
+                onChange={(e) => {
+                  field.onChange(maskCNPJ(e.target.value));
+                  handleCnpjChange(e);
+                }}
+                disabled={cnpjLoading}
+              />
+              {cnpjSuccess && (
+                <p className="mt-1 text-sm text-green-600">✓ Dados carregados com sucesso!</p>
+              )}
+              {cnpjLoading && (
+                <p className="mt-1 text-sm text-blue-600">Consultando CNPJ...</p>
+              )}
+            </div>
           )}
         />
       )}

@@ -47,9 +47,46 @@ export interface CreatePayload extends CompanyPayload {
   cnpj: string;
 }
 
+export interface CnpjLookupResult {
+  cnpj: string;
+  razao_social: string;
+  nome_fantasia: string;
+  situacao: string;
+  ativa: boolean;
+  endereco: {
+    logradouro: string;
+    numero: string;
+    complemento: string;
+    bairro: string;
+    municipio: string;
+    uf: string;
+    cep: string;
+  };
+  contato: {
+    telefone: string;
+    email: string;
+  };
+  porte: string;
+  natureza_juridica: string;
+  cnae_principal: { codigo: number; descricao: string };
+  cnaes_secundarios: Array<{ codigo: number; descricao: string }>;
+  socios: Array<{ nome: string; qualificacao: string }>;
+  capital_social: number;
+  simples_nacional: boolean;
+  mei: boolean;
+  fonte: string;
+  cached: boolean;
+}
+
 // ─── Service ─────────────────────────────────────────────────────────────────
 
 export const CompanyService = {
+  async lookupCNPJ(cnpj: string): Promise<CnpjLookupResult> {
+    const clean = cnpj.replace(/\D/g, '');
+    const { data } = await api.get<CnpjLookupResult>(`/cnpj/${clean}`);
+    return data;
+  },
+
   async list(params: ListParams = {}): Promise<CompanyListResponse> {
     const { data } = await api.get<CompanyListResponse>('/companies', { params });
     return data;
