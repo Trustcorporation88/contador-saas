@@ -161,7 +161,7 @@ export class CompanyService {
     };
 
     // Contar total de registros com query separada (SEM select)
-    const countResult = (await buildBaseQuery().count('companies.id as total').first()) as any;
+    const countResult = (await buildBaseQuery().count('* as total').first()) as any;
     const total = parseInt(countResult?.total || 0, 10);
 
     // Paginar e ordenar com query separada (COM select se tiver join)
@@ -169,7 +169,7 @@ export class CompanyService {
     if (!adminMode && userId) {
       listQuery = listQuery.select('companies.*');
     }
-    const companies = (await listQuery.orderBy('companies.created_at', 'desc').limit(limit).offset(offset)) as any[];
+    const companies = (await listQuery.orderBy('created_at', 'desc').limit(limit).offset(offset)) as any[];
 
     // Formatar resposta
     return {
