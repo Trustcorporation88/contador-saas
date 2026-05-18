@@ -49,11 +49,12 @@ api.interceptors.response.use(
       }
 
       try {
-        const { data } = await axios.post<{ accessToken: string }>(
+        const { data } = await axios.post<{ data: { accessToken: string; refreshToken: string } }>(
           `${BASE_URL}/api/v1/auth/refresh-token`,
           { refreshToken }
         );
-        useAuthStore.getState().setAccessToken(data.accessToken);
+        useAuthStore.getState().setAccessToken(data.data.accessToken);
+        useAuthStore.getState().setRefreshToken(data.data.refreshToken);
 
         if (originalRequest.headers) {
           originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;

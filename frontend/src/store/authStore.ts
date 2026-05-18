@@ -11,6 +11,7 @@ interface AuthState {
   // Actions
   setAuth: (user: User, accessToken: string, refreshToken: string) => void;
   setAccessToken: (token: string) => void;
+  setRefreshToken: (token: string) => void;
   setCurrentCompany: (companyId: string) => void;
   logout: () => void;
 }
@@ -28,6 +29,8 @@ export const useAuthStore = create<AuthState>()(
         set({ user, accessToken, refreshToken, isAuthenticated: true }),
 
       setAccessToken: (accessToken) => set({ accessToken }),
+
+      setRefreshToken: (refreshToken) => set({ refreshToken }),
 
       setCurrentCompany: (companyId) =>
         set({ currentCompanyId: companyId }),
