@@ -29,8 +29,8 @@ RUN apk add --no-cache dumb-init
 # Copy package files
 COPY package*.json ./
 
-# Install only production dependencies (fallback when lockfile is absent)
-RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi
+# Install only production dependencies (avoid running lifecycle scripts like prepare)
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev --ignore-scripts; else npm install --omit=dev --ignore-scripts; fi
 
 # Copy compiled code from builder
 COPY --from=builder /app/dist ./dist
