@@ -57,7 +57,7 @@ api.interceptors.response.use(
         useAuthStore.getState().setRefreshToken(data.data.refreshToken);
 
         if (originalRequest.headers) {
-          originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
+          originalRequest.headers.Authorization = `Bearer ${data.data.accessToken}`;
         }
         return api(originalRequest);
       } catch {

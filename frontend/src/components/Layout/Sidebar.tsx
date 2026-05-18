@@ -38,6 +38,7 @@ const navItems: NavItem[] = [
   { label: 'Empresas',           icon: Building2,       path: '/empresas'               },
   { label: 'Plano de Contas',    icon: BookOpen,        path: '/contas'                 },
   { label: 'Lançamentos',        icon: FileText,        path: '/lancamentos'            },
+  { label: 'Documentos Fiscais', icon: FileText,        path: '/documentos'             },
   {
     label: 'Relatórios',
     icon: BarChart3,
