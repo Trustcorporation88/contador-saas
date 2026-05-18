@@ -3,6 +3,7 @@ import { envConfig } from './config/env';
 import { initializeDatabase } from './config/database';
 import { logger } from './middleware/requestLogger';
 import { BackupService } from './services/backupService';
+import authService from './services/authService';
 
 /**
  * Server entry point
@@ -18,6 +19,9 @@ async function startServer(): Promise<void> {
     console.log('Initializing database connection pool...');
     await initializeDatabase();
     console.log('✓ Database connected successfully');
+
+    await authService.bootstrapAdminUser();
+    console.log('✓ Authentication bootstrap completed');
 
     // Start HTTP server
     const server = app.listen(PORT, HOST, () => {

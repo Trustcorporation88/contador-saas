@@ -97,10 +97,22 @@ export function useAuth() {
 function extractMessage(err: unknown): string {
   if (err != null && typeof err === 'object') {
     const e = err as {
-      response?: { data?: { message?: string; error?: string } };
+      response?: { status?: number; data?: { message?: string; error?: string; code?: string } };
       message?: string;
     };
-    if (e.response?.data?.message) return e.response.data.message;
+    const status = e.response?.status;
+    const message = e.response?.data?.message;
+    const code = e.response?.data?.code;
+
+    if (status === 401 && (message?.toLowerCase().includes('invalid email or password') || code === 'UNAUTHORIZED')) {
+      return 'E-mail ou senha inválidos. Verifique os dados e tente novamente.';
+    }
+
+    if (status === 429) {
+      return 'Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.';
+    }
+
+    if (message) return message;
     if (e.response?.data?.error)   return e.response.data.error;
     if (e.message)                  return e.message;
   }

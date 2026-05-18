@@ -48,6 +48,11 @@ interface EnvConfig {
   bcryptRounds: number;
   maxLoginAttempts: number;
   lockTimeMinutes: number;
+  passwordResetTtlMinutes: number;
+
+  // Bootstrap admin
+  adminBootstrapEmail: string;
+  adminBootstrapPassword: string;
 
   // Cache
   cacheDefaultTtl: number;
@@ -108,6 +113,9 @@ const envSchema = joi.object({
   BCRYPT_ROUNDS: joi.number().default(12),
   MAX_LOGIN_ATTEMPTS: joi.number().default(5),
   LOCK_TIME_MINUTES: joi.number().default(15),
+  PASSWORD_RESET_TTL_MINUTES: joi.number().default(30),
+  ADMIN_BOOTSTRAP_EMAIL: joi.string().email().default('admin@contador.dev'),
+  ADMIN_BOOTSTRAP_PASSWORD: joi.string().allow('').default(''),
   CACHE_DEFAULT_TTL: joi.number().default(3600),
   CACHE_MAX_KEYS: joi.number().default(1000),
   API_TIMEOUT: joi.number().default(30000),
@@ -177,6 +185,9 @@ export const envConfig: EnvConfig = {
   bcryptRounds: envVars.BCRYPT_ROUNDS,
   maxLoginAttempts: envVars.MAX_LOGIN_ATTEMPTS,
   lockTimeMinutes: envVars.LOCK_TIME_MINUTES,
+  passwordResetTtlMinutes: envVars.PASSWORD_RESET_TTL_MINUTES,
+  adminBootstrapEmail: envVars.ADMIN_BOOTSTRAP_EMAIL,
+  adminBootstrapPassword: envVars.ADMIN_BOOTSTRAP_PASSWORD,
 
   cacheDefaultTtl: envVars.CACHE_DEFAULT_TTL,
   cacheMaxKeys: envVars.CACHE_MAX_KEYS,

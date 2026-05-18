@@ -6,6 +6,8 @@ import { authenticateToken } from '../middleware/auth';
  * Authentication routes
  * POST   /auth/login
  * POST   /auth/refresh-token
+ * POST   /auth/forgot-password
+ * POST   /auth/reset-password
  * POST   /auth/enable-mfa
  * POST   /auth/verify-mfa
  * POST   /auth/logout
@@ -24,6 +26,18 @@ router.post('/login', authController.login);
  * Renovar access token usando refresh token
  */
 router.post('/refresh-token', authController.refreshToken);
+
+/**
+ * POST /auth/forgot-password
+ * Solicitar token de reset de senha
+ */
+router.post('/forgot-password', authController.forgotPassword);
+
+/**
+ * POST /auth/reset-password
+ * Redefinir senha usando token temporário
+ */
+router.post('/reset-password', authController.resetPassword);
 
 /**
  * POST /auth/enable-mfa

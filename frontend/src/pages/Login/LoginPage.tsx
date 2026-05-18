@@ -6,6 +6,7 @@ import { TrendingUp, Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { AuthService } from '../../services/authService';
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
 
@@ -22,6 +23,28 @@ const mfaSchema = z.object({
     .regex(/^\d{6}$/, 'Apenas dígitos numéricos'),
 });
 type MfaForm = z.infer<typeof mfaSchema>;
+
+const forgotSchema = z.object({
+  email: z.string().email('Informe um e-mail válido'),
+});
+type ForgotForm = z.infer<typeof forgotSchema>;
+
+const resetSchema = z
+  .object({
+    token: z.string().min(10, 'Informe o token de recuperação'),
+    newPassword: z
+      .string()
+      .min(8, 'Mínimo 8 caracteres')
+      .regex(/[A-Z]/, 'Inclua pelo menos uma letra maiúscula')
+      .regex(/\d/, 'Inclua pelo menos um número')
+      .regex(/[^A-Za-z0-9]/, 'Inclua pelo menos um caractere especial'),
+    confirmPassword: z.string().min(8, 'Confirme a nova senha'),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: 'As senhas não coincidem',
+    path: ['confirmPassword'],
+  });
+type ResetForm = z.infer<typeof resetSchema>;
 
 // ─── Error alert ──────────────────────────────────────────────────────────────
 
@@ -43,10 +66,14 @@ export default function LoginPage() {
   const [tempToken, setTempToken] = useState('');
   const [showPwd, setShowPwd]     = useState(false);
   const [apiError, setApiError]   = useState('');
+  const [showRecovery, setShowRecovery] = useState(false);
+  const [recoveryHint, setRecoveryHint] = useState('');
 
   const { login, verifyMfa, loading } = useAuth();
 
   const loginForm = useForm<LoginForm>({ resolver: zodResolver(loginSchema) });
+  const forgotForm = useForm<ForgotForm>({ resolver: zodResolver(forgotSchema) });
+  const resetForm = useForm<ResetForm>({ resolver: zodResolver(resetSchema) });
   const mfaForm   = useForm<MfaForm>({
     resolver: zodResolver(mfaSchema),
     defaultValues: { totpToken: '' },
@@ -73,6 +100,37 @@ export default function LoginPage() {
   };
 
   const goBack = () => { setStep('credentials'); setApiError(''); setTempToken(''); };
+
+  const onForgotSubmit = async (data: ForgotForm) => {
+    setApiError('');
+    setRecoveryHint('');
+    try {
+      const response = await AuthService.forgotPassword({ email: data.email });
+      if (response.debugToken) {
+        setRecoveryHint(`Token de recuperação (ambiente não-produtivo): ${response.debugToken}`);
+        resetForm.setValue('token', response.debugToken);
+      } else {
+        setRecoveryHint('Se o e-mail existir, você receberá instruções para redefinir a senha.');
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Não foi possível solicitar recuperação agora.';
+      setApiError(message);
+    }
+  };
+
+  const onResetSubmit = async (data: ResetForm) => {
+    setApiError('');
+    setRecoveryHint('');
+    try {
+      await AuthService.resetPassword({ token: data.token, newPassword: data.newPassword });
+      setRecoveryHint('Senha redefinida com sucesso. Faça login com a nova senha.');
+      setShowRecovery(false);
+      resetForm.reset();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Não foi possível redefinir a senha.';
+      setApiError(message);
+    }
+  };
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -172,6 +230,71 @@ export default function LoginPage() {
                 </div>
 
                 {apiError && <ErrorAlert message={apiError} />}
+
+                {recoveryHint && (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                    {recoveryHint}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRecovery((prev) => !prev);
+                    setApiError('');
+                    setRecoveryHint('');
+                  }}
+                  className="text-sm font-medium text-primary-700 hover:text-primary-800"
+                >
+                  {showRecovery ? 'Fechar recuperação de senha' : 'Esqueci minha senha'}
+                </button>
+
+                {showRecovery && (
+                  <div className="space-y-4 rounded-xl border border-gray-200 bg-gray-50/70 p-4">
+                    <div className="space-y-3">
+                      <Input
+                        label="E-mail para recuperação"
+                        type="email"
+                        autoComplete="email"
+                        placeholder="seu@email.com.br"
+                        error={forgotForm.formState.errors.email?.message}
+                        {...forgotForm.register('email')}
+                      />
+                      <Button type="button" className="w-full justify-center" loading={loading} onClick={forgotForm.handleSubmit(onForgotSubmit)}>
+                        Enviar instruções de recuperação
+                      </Button>
+                    </div>
+
+                    <div className="space-y-3">
+                      <Input
+                        label="Token de recuperação"
+                        type="text"
+                        placeholder="Cole o token recebido"
+                        error={resetForm.formState.errors.token?.message}
+                        {...resetForm.register('token')}
+                      />
+                      <Input
+                        label="Nova senha"
+                        type="password"
+                        autoComplete="new-password"
+                        placeholder="Nova senha"
+                        error={resetForm.formState.errors.newPassword?.message}
+                        {...resetForm.register('newPassword')}
+                      />
+                      <Input
+                        label="Confirmar nova senha"
+                        type="password"
+                        autoComplete="new-password"
+                        placeholder="Confirme a nova senha"
+                        error={resetForm.formState.errors.confirmPassword?.message}
+                        {...resetForm.register('confirmPassword')}
+                      />
+                      <Button type="button" className="w-full justify-center" loading={loading} onClick={resetForm.handleSubmit(onResetSubmit)}>
+                        Redefinir senha
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 <Button type="submit" className="w-full justify-center" loading={loading}>
                   Entrar

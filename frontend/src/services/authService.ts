@@ -23,6 +23,20 @@ interface AuthSuccessResponse {
   refreshToken: string;
 }
 
+interface ForgotPasswordPayload {
+  email: string;
+}
+
+interface ForgotPasswordResponse {
+  message: string;
+  debugToken?: string;
+}
+
+interface ResetPasswordPayload {
+  token: string;
+  newPassword: string;
+}
+
 // ─── Service ─────────────────────────────────────────────────────────────────
 
 export const AuthService = {
@@ -57,5 +71,15 @@ export const AuthService = {
     } catch {
       // Ignora erros — sempre limpar estado local
     }
+  },
+
+  async forgotPassword(payload: ForgotPasswordPayload): Promise<ForgotPasswordResponse> {
+    const { data } = await api.post<{ data: ForgotPasswordResponse }>('/auth/forgot-password', payload);
+    return data.data;
+  },
+
+  async resetPassword(payload: ResetPasswordPayload): Promise<{ message: string }> {
+    const { data } = await api.post<{ data: { message: string } }>('/auth/reset-password', payload);
+    return data.data;
   },
 };

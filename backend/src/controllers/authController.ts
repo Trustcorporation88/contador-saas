@@ -16,6 +16,10 @@ import {
   RateLimitError,
 } from '../types/auth';
 
+const INVALID_REQUEST_CODE = (ERROR_CODES as any).INVALID_REQUEST || ERROR_CODES.VALIDATION_ERROR;
+const INVALID_TOKEN_CODE = (ERROR_CODES as any).INVALID_TOKEN || ERROR_CODES.TOKEN_INVALID;
+const INTERNAL_SERVER_ERROR_CODE = (ERROR_CODES as any).INTERNAL_SERVER_ERROR || ERROR_CODES.INTERNAL_ERROR;
+
 /**
  * POST /auth/login
  * Login com email e senha
@@ -28,7 +32,7 @@ export async function login(req: Request, res: Response): Promise<void> {
     if (!email || !password) {
       res.status(HTTP_STATUS.BAD_REQUEST).json({
         error: 'Bad Request',
-        code: ERROR_CODES.INVALID_REQUEST,
+        code: INVALID_REQUEST_CODE,
         message: 'Email and password are required',
       });
       return;
@@ -39,7 +43,7 @@ export async function login(req: Request, res: Response): Promise<void> {
     if (!emailRegex.test(email)) {
       res.status(HTTP_STATUS.BAD_REQUEST).json({
         error: 'Bad Request',
-        code: ERROR_CODES.INVALID_REQUEST,
+        code: INVALID_REQUEST_CODE,
         message: 'Invalid email format',
       });
       return;
@@ -86,7 +90,7 @@ export async function refreshToken(req: Request, res: Response): Promise<void> {
     if (!refreshToken) {
       res.status(HTTP_STATUS.BAD_REQUEST).json({
         error: 'Bad Request',
-        code: ERROR_CODES.INVALID_REQUEST,
+        code: INVALID_REQUEST_CODE,
         message: 'Refresh token is required',
       });
       return;
@@ -160,7 +164,7 @@ export async function verifyMFA(req: Request, res: Response): Promise<void> {
     if (!code) {
       res.status(HTTP_STATUS.BAD_REQUEST).json({
         error: 'Bad Request',
-        code: ERROR_CODES.INVALID_REQUEST,
+        code: INVALID_REQUEST_CODE,
         message: 'MFA code is required',
       });
       return;
@@ -170,7 +174,7 @@ export async function verifyMFA(req: Request, res: Response): Promise<void> {
     if (!/^\d{6}$/.test(code)) {
       res.status(HTTP_STATUS.BAD_REQUEST).json({
         error: 'Bad Request',
-        code: ERROR_CODES.INVALID_REQUEST,
+        code: INVALID_REQUEST_CODE,
         message: 'MFA code must be 6 digits',
       });
       return;
@@ -213,7 +217,7 @@ export async function logout(req: Request, res: Response): Promise<void> {
     if (!token) {
       res.status(HTTP_STATUS.BAD_REQUEST).json({
         error: 'Bad Request',
-        code: ERROR_CODES.INVALID_REQUEST,
+        code: INVALID_REQUEST_CODE,
         message: 'Invalid token format',
       });
       return;
@@ -234,6 +238,65 @@ export async function logout(req: Request, res: Response): Promise<void> {
 }
 
 /**
+ * POST /auth/forgot-password
+ * Solicita reset de senha com token temporário
+ */
+export async function forgotPassword(req: Request, res: Response): Promise<void> {
+  try {
+    const email = String(req.body?.email || '').trim();
+    if (!email) {
+      res.status(HTTP_STATUS.BAD_REQUEST).json({
+        error: 'Bad Request',
+        code: INVALID_REQUEST_CODE,
+        message: 'Email is required',
+      });
+      return;
+    }
+
+    const result = await authService.requestPasswordReset(email);
+
+    res.status(HTTP_STATUS.OK).json({
+      data: {
+        message: 'Se o e-mail existir, enviaremos instrucoes para redefinir a senha.',
+        ...(result.debugToken ? { debugToken: result.debugToken } : {}),
+      },
+    });
+  } catch (error) {
+    handleAuthError(error, res, 'Forgot password error');
+  }
+}
+
+/**
+ * POST /auth/reset-password
+ * Efetiva reset de senha com token temporário
+ */
+export async function resetPassword(req: Request, res: Response): Promise<void> {
+  try {
+    const token = String(req.body?.token || '').trim();
+    const newPassword = String(req.body?.newPassword || '').trim();
+
+    if (!token || !newPassword) {
+      res.status(HTTP_STATUS.BAD_REQUEST).json({
+        error: 'Bad Request',
+        code: INVALID_REQUEST_CODE,
+        message: 'Token and newPassword are required',
+      });
+      return;
+    }
+
+    await authService.resetPassword(token, newPassword);
+
+    res.status(HTTP_STATUS.OK).json({
+      data: {
+        message: 'Senha redefinida com sucesso. Faça login novamente.',
+      },
+    });
+  } catch (error) {
+    handleAuthError(error, res, 'Reset password error');
+  }
+}
+
+/**
  * Helper para tratamento de erros de autenticação
  */
 function handleAuthError(error: any, res: Response, context: string): void {
@@ -248,7 +311,7 @@ function handleAuthError(error: any, res: Response, context: string): void {
   } else if (error instanceof InvalidTokenError) {
     res.status(HTTP_STATUS.UNAUTHORIZED).json({
       error: 'Invalid Token',
-      code: ERROR_CODES.INVALID_TOKEN,
+      code: INVALID_TOKEN_CODE,
       message: error.message,
     });
   } else if (error instanceof RateLimitError) {
@@ -266,7 +329,7 @@ function handleAuthError(error: any, res: Response, context: string): void {
   } else {
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       error: 'Internal Server Error',
-      code: ERROR_CODES.INTERNAL_SERVER_ERROR,
+      code: INTERNAL_SERVER_ERROR_CODE,
       message: 'An error occurred during authentication',
     });
   }

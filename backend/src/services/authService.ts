@@ -8,6 +8,7 @@ import bcrypt from 'bcrypt';
 import speakeasy from 'speakeasy';
 import crypto from 'crypto';
 import { envConfig } from '../config/env';
+import { getDatabase } from '../config/database';
 import { logger } from '../middleware/requestLogger';
 import {
   JWTPayload,
@@ -45,12 +46,100 @@ interface RefreshTokenStore {
   createdAt: Date;
 }
 
+interface PasswordResetTokenStore {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  expiresAt: Date;
+  usedAt: Date | null;
+}
+
 // Mock database stores
 const usersStore: Map<string, UserStore> = new Map();
 const refreshTokensStore: Map<string, RefreshTokenStore> = new Map();
 const loginAttemptsStore: Map<string, { attempts: number; resetTime: Date }> = new Map();
 
 export class AuthService {
+  private bootstrapFinished = false;
+
+  async bootstrapAdminUser(): Promise<void> {
+    if (this.bootstrapFinished) {
+      return;
+    }
+
+    const db = await getDatabase();
+
+    const usersTableExists = await db.schema.hasTable('users');
+    if (!usersTableExists) {
+      await db.schema.createTable('users', (table) => {
+        table.string('id', 64).primary();
+        table.string('email', 255).unique().notNullable();
+        table.string('password_hash', 255).notNullable();
+        table.string('name', 255).notNullable();
+        table.string('role', 32).notNullable().defaultTo('viewer');
+        table.string('company_id', 64).notNullable();
+        table.boolean('active').defaultTo(true);
+        table.boolean('mfa_enabled').defaultTo(false);
+        table.string('mfa_secret', 128).nullable();
+        table.timestamp('last_login').nullable();
+        table.integer('login_attempts').defaultTo(0);
+        table.timestamp('locked_until').nullable();
+        table.timestamp('created_at').defaultTo(db.fn.now());
+        table.timestamp('updated_at').defaultTo(db.fn.now());
+      });
+      logger.warn('Users table created automatically during bootstrap');
+    }
+
+    const resetTableExists = await db.schema.hasTable('password_reset_tokens');
+    if (!resetTableExists) {
+      await db.schema.createTable('password_reset_tokens', (table) => {
+        table.string('id', 64).primary();
+        table.string('user_id', 64).notNullable();
+        table.string('token_hash', 128).notNullable().unique();
+        table.timestamp('expires_at').notNullable();
+        table.timestamp('used_at').nullable();
+        table.timestamp('created_at').defaultTo(db.fn.now());
+        table.index(['user_id']);
+        table.index(['expires_at']);
+      });
+      logger.info('Table password_reset_tokens created');
+    }
+
+    const adminEmail = envConfig.adminBootstrapEmail.toLowerCase().trim();
+    const adminPassword = envConfig.adminBootstrapPassword;
+
+    const existingAdmin = await db('users').whereRaw('LOWER(email) = ?', [adminEmail]).first();
+    if (!existingAdmin) {
+      if (!adminPassword) {
+        logger.warn('Admin bootstrap skipped: ADMIN_BOOTSTRAP_PASSWORD is empty', {
+          adminEmail,
+        });
+        this.bootstrapFinished = true;
+        return;
+      }
+
+      const passwordHash = await bcrypt.hash(adminPassword, envConfig.bcryptRounds);
+      await db('users').insert({
+        id: crypto.randomUUID(),
+        email: adminEmail,
+        password_hash: passwordHash,
+        name: 'Administrador',
+        role: 'admin',
+        company_id: 'bootstrap-company',
+        active: true,
+        mfa_enabled: false,
+        created_at: new Date(),
+        updated_at: new Date(),
+      });
+
+      logger.info('Admin user bootstrapped successfully', {
+        adminEmail,
+      });
+    }
+
+    this.bootstrapFinished = true;
+  }
+
   /**
    * Login com email e senha
    * Retorna access token, refresh token e user info
@@ -66,8 +155,10 @@ export class AuthService {
     // Check rate limiting (5 attempts / 15 minutes)
     this.checkLoginRateLimit(email);
 
-    // Buscar usuário (em produção, seria banco de dados)
-    const user = this.findUserByEmail(email);
+    await this.bootstrapAdminUser();
+
+    // Buscar usuário
+    const user = await this.findUserByEmail(email);
     if (!user) {
       this.recordLoginAttempt(email);
       throw new InvalidCredentialsError('Invalid email or password');
@@ -122,6 +213,19 @@ export class AuthService {
     user.lastLogin = new Date();
     usersStore.set(user.id, user);
 
+    try {
+      const db = await getDatabase();
+      await db('users').where('id', user.id).update({
+        last_login: new Date(),
+        updated_at: new Date(),
+      });
+    } catch (error) {
+      logger.warn('Could not persist last_login in database', {
+        userId: user.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     logger.info(`Usuário logado com sucesso: ${email}`);
 
     return {
@@ -161,7 +265,7 @@ export class AuthService {
       }
 
       // Buscar usuário
-      const user = usersStore.get(decoded.sub);
+      const user = await this.findUserById(decoded.sub);
       if (!user) {
         throw new InvalidCredentialsError('User not found');
       }
@@ -308,6 +412,96 @@ export class AuthService {
     }
   }
 
+  async requestPasswordReset(email: string): Promise<{ debugToken?: string }> {
+    if (!email) {
+      return {};
+    }
+
+    await this.bootstrapAdminUser();
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await this.findUserByEmail(normalizedEmail);
+    if (!user) {
+      return {};
+    }
+
+    const db = await getDatabase();
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + envConfig.passwordResetTtlMinutes * 60 * 1000);
+
+    await db('password_reset_tokens')
+      .where('user_id', user.id)
+      .whereNull('used_at')
+      .del();
+
+    await db('password_reset_tokens').insert({
+      id: crypto.randomUUID(),
+      user_id: user.id,
+      token_hash: tokenHash,
+      expires_at: expiresAt,
+      used_at: null,
+      created_at: new Date(),
+    });
+
+    logger.info('Password reset token issued', {
+      userId: user.id,
+      email: normalizedEmail,
+      expiresAt: expiresAt.toISOString(),
+    });
+
+    if (envConfig.nodeEnv !== 'production') {
+      return { debugToken: rawToken };
+    }
+
+    return {};
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    if (!token || !newPassword) {
+      throw new InvalidTokenError('Invalid reset request');
+    }
+
+    const passwordValidation = this.validatePasswordStrength(newPassword);
+    if (!passwordValidation.ok) {
+      throw new InvalidCredentialsError(passwordValidation.message);
+    }
+
+    await this.bootstrapAdminUser();
+    const db = await getDatabase();
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    const record = await db<PasswordResetTokenStore>('password_reset_tokens')
+      .where('token_hash', tokenHash)
+      .whereNull('used_at')
+      .andWhere('expires_at', '>', new Date())
+      .first();
+
+    if (!record) {
+      throw new InvalidTokenError('Reset token is invalid or expired');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, envConfig.bcryptRounds);
+    await db('users').where('id', record.userId).update({
+      password_hash: passwordHash,
+      updated_at: new Date(),
+    });
+
+    await db('password_reset_tokens').where('id', record.id).update({
+      used_at: new Date(),
+    });
+
+    // Invalida refresh tokens em memória do usuário.
+    for (const [tokenId, storedToken] of refreshTokensStore.entries()) {
+      if (storedToken.userId === record.userId) {
+        refreshTokensStore.delete(tokenId);
+      }
+    }
+
+    logger.info('Password reset completed', {
+      userId: record.userId,
+    });
+  }
+
   /**
    * Validar JWT token
    */
@@ -404,13 +598,84 @@ export class AuthService {
   /**
    * Buscar usuário por email
    */
-  private findUserByEmail(email: string): UserStore | undefined {
+  private async findUserByEmail(email: string): Promise<UserStore | undefined> {
+    const db = await getDatabase();
+    const dbUser = await db('users')
+      .whereRaw('LOWER(email) = ?', [email.toLowerCase()])
+      .first();
+
+    if (dbUser) {
+      const hydratedUser: UserStore = {
+        id: String(dbUser.id),
+        email: String(dbUser.email),
+        passwordHash: String(dbUser.password_hash),
+        role: String(dbUser.role || 'viewer'),
+        companyId: String(dbUser.company_id || ''),
+        mfaEnabled: Boolean(dbUser.mfa_enabled),
+        mfaSecret: dbUser.mfa_secret ? String(dbUser.mfa_secret) : undefined,
+        loginAttempts: Number(dbUser.login_attempts || 0),
+        lastLogin: dbUser.last_login ? new Date(dbUser.last_login) : undefined,
+        lockedUntil: dbUser.locked_until ? new Date(dbUser.locked_until) : undefined,
+      };
+
+      usersStore.set(hydratedUser.id, hydratedUser);
+      return hydratedUser;
+    }
+
     for (const user of usersStore.values()) {
       if (user.email.toLowerCase() === email.toLowerCase()) {
         return user;
       }
     }
     return undefined;
+  }
+
+  private async findUserById(userId: string): Promise<UserStore | undefined> {
+    const cached = usersStore.get(userId);
+    if (cached) {
+      return cached;
+    }
+
+    const db = await getDatabase();
+    const dbUser = await db('users').where('id', userId).first();
+    if (!dbUser) {
+      return undefined;
+    }
+
+    const hydratedUser: UserStore = {
+      id: String(dbUser.id),
+      email: String(dbUser.email),
+      passwordHash: String(dbUser.password_hash),
+      role: String(dbUser.role || 'viewer'),
+      companyId: String(dbUser.company_id || ''),
+      mfaEnabled: Boolean(dbUser.mfa_enabled),
+      mfaSecret: dbUser.mfa_secret ? String(dbUser.mfa_secret) : undefined,
+      loginAttempts: Number(dbUser.login_attempts || 0),
+      lastLogin: dbUser.last_login ? new Date(dbUser.last_login) : undefined,
+      lockedUntil: dbUser.locked_until ? new Date(dbUser.locked_until) : undefined,
+    };
+
+    usersStore.set(hydratedUser.id, hydratedUser);
+    return hydratedUser;
+  }
+
+  private validatePasswordStrength(password: string): { ok: boolean; message: string } {
+    if (password.length < 8) {
+      return { ok: false, message: 'A senha deve ter no mínimo 8 caracteres' };
+    }
+
+    const hasUppercase = /[A-Z]/.test(password);
+    const hasNumber = /\d/.test(password);
+    const hasSpecial = /[^A-Za-z0-9]/.test(password);
+
+    if (!hasUppercase || !hasNumber || !hasSpecial) {
+      return {
+        ok: false,
+        message: 'A senha deve conter letra maiúscula, número e caractere especial',
+      };
+    }
+
+    return { ok: true, message: 'ok' };
   }
 
   /**
