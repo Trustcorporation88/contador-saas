@@ -23,6 +23,8 @@ interface AuthSuccessResponse {
   refreshToken: string;
 }
 
+type ApiEnvelope<T> = { data: T } | T;
+
 interface ForgotPasswordPayload {
   email: string;
 }
@@ -45,8 +47,9 @@ export const AuthService = {
    * Retorna tokens direto, ou { requiresMfa, tempToken } se MFA estiver ativo.
    */
   async login(payload: LoginPayload): Promise<LoginResponse> {
-    const { data } = await api.post<LoginResponse>('/auth/login', payload);
-    return data;
+    const response = await api.post<ApiEnvelope<LoginResponse>>('/auth/login', payload);
+    const body = response.data as ApiEnvelope<LoginResponse>;
+    return ('data' in body ? body.data : body) as LoginResponse;
   },
 
   /**
@@ -54,11 +57,12 @@ export const AuthService = {
    * Recebe tempToken (emitido no login) + código de 6 dígitos do autenticador.
    */
   async verifyMfa(payload: MfaVerifyPayload): Promise<AuthSuccessResponse> {
-    const { data } = await api.post<AuthSuccessResponse>(
+    const response = await api.post<ApiEnvelope<AuthSuccessResponse>>(
       '/auth/verify-mfa',
       payload
     );
-    return data;
+    const body = response.data as ApiEnvelope<AuthSuccessResponse>;
+    return ('data' in body ? body.data : body) as AuthSuccessResponse;
   },
 
   /**

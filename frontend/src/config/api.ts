@@ -50,7 +50,7 @@ api.interceptors.response.use(
 
       try {
         const { data } = await axios.post<{ accessToken: string }>(
-          `${BASE_URL}/auth/refresh-token`,
+          `${BASE_URL}/api/v1/auth/refresh-token`,
           { refreshToken }
         );
         useAuthStore.getState().setAccessToken(data.accessToken);
