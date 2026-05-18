@@ -4,7 +4,7 @@
  * Implementa row-level security (RLS) eficiente
  */
 
-import { Knex } from 'knex';
+import knexLib, { Knex } from 'knex';
 import { logger } from '../middleware/requestLogger';
 
 /**
@@ -71,7 +71,20 @@ declare module 'knex' {
  * - Permite override para queries especiais (sys_bypass)
  */
 export function extendKnexWithTenant(knexInstance: Knex): void {
-  knexInstance.QueryBuilder.extend('withTenant', function (companyId: string) {
+  const queryBuilder = knexInstance.queryBuilder() as any;
+
+  // Knex v3 expõe o registrador em knex.QueryBuilder, não no objeto de instância.
+  if (typeof queryBuilder.withTenant === 'function') {
+    return;
+  }
+
+  const queryBuilderExtension = (knexLib as any)?.QueryBuilder?.extend;
+  if (typeof queryBuilderExtension !== 'function') {
+    logger.error('withTenant extension API not available in current knex version');
+    return;
+  }
+
+  queryBuilderExtension('withTenant', function (companyId: string) {
     // Validar companyId
     if (!companyId || typeof companyId !== 'string') {
       logger.error('withTenant: Invalid companyId', { companyId });
