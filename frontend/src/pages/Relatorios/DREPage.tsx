@@ -95,6 +95,7 @@ export default function DREPage() {
   const [dateFrom, setDateFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [dateTo, setDateTo]     = useState(format(new Date(), 'yyyy-MM-dd'));
   const [exportLoading, setExportLoading] = useState<'xlsx' | 'pdf' | null>(null);
+  const hasCustomRange = dateFrom !== format(startOfMonth(new Date()), 'yyyy-MM-dd') || dateTo !== format(new Date(), 'yyyy-MM-dd');
 
   const { data, isLoading, refetch } = useQuery({
     queryKey:  ['income-statement', currentCompanyId, dateFrom, dateTo],
@@ -122,6 +123,7 @@ export default function DREPage() {
       <div className="p-8 text-center">
         <TrendingUp className="mx-auto h-12 w-12 text-gray-300 mb-3" />
         <p className="text-gray-500">Selecione uma empresa para gerar a DRE.</p>
+        <p className="mt-2 text-xs text-gray-400">Sem empresa ativa, o relatório de resultado não pode ser consolidado.</p>
       </div>
     );
   }
@@ -130,11 +132,12 @@ export default function DREPage() {
   const isProfit = (r?.net_income ?? 0) >= 0;
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-5">
+    <div className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6 lg:p-8">
 
       {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
+      <div className="glass-strip flex items-start justify-between flex-wrap gap-3 px-5 py-5 sm:px-6">
         <div>
+          <p className="shell-title">Resultado do período</p>
           <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
             {isProfit
               ? <TrendingUp className="h-5 w-5 text-green-600" />
@@ -146,7 +149,7 @@ export default function DREPage() {
       </div>
 
       {/* Date range + actions */}
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="glass-strip flex flex-wrap items-end gap-3 px-4 py-3 sm:px-5">
         <div>
           <label className="input-label">Período inicial</label>
           <input type="date" className="input-field" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
@@ -167,6 +170,24 @@ export default function DREPage() {
           <Download className="h-4 w-4" />
           {exportLoading === 'pdf' ? 'Gerando...' : 'PDF'}
         </button>
+        {hasCustomRange && (
+          <button
+            type="button"
+            className="btn btn-ghost text-xs"
+            onClick={() => {
+              setDateFrom(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+              setDateTo(format(new Date(), 'yyyy-MM-dd'));
+            }}
+          >
+            Voltar período atual
+          </button>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="badge badge-gray">De: {format(new Date(dateFrom + 'T00:00:00'), 'dd/MM/yyyy', { locale: ptBR })}</span>
+        <span className="badge badge-gray">Até: {format(new Date(dateTo + 'T00:00:00'), 'dd/MM/yyyy', { locale: ptBR })}</span>
+        {r && <span className={clsx('badge', isProfit ? 'badge-green' : 'badge-red')}>{isProfit ? 'Lucro no período' : 'Prejuízo no período'}</span>}
       </div>
 
       {isLoading && (

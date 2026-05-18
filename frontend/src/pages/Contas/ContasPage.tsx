@@ -267,6 +267,7 @@ export default function ContasPage() {
 
   const accounts   = listQuery.data?.data ?? [];
   const pagination = listQuery.data;
+  const hasFilters = Boolean(search || typeFilter);
 
   // ── Mutations ────────────────────────────────────────────────────────────
   const invalidate = useCallback(() => {
@@ -327,15 +328,17 @@ export default function ContasPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="p-6 space-y-4">
+    <div className="space-y-4 p-4 sm:p-6 lg:p-8">
 
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="glass-strip flex flex-wrap items-center justify-between gap-3 px-5 py-5 sm:px-6">
         <div>
+          <p className="shell-title">Estrutura contábil</p>
           <h1 className="text-xl font-bold text-gray-900">Plano de Contas</h1>
           <p className="text-sm text-gray-500 mt-0.5">Lei 6.404/76 — Estrutura de contas contábeis</p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          {view === 'list' && <span className="badge badge-blue">{pagination?.total ?? accounts.length} contas</span>}
           {isAdmin && (
             <Button
               variant="secondary"
@@ -365,7 +368,7 @@ export default function ContasPage() {
       )}
 
       {/* View toggle + Filters */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="glass-strip flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
         {/* View toggle */}
         <div className="flex rounded-lg border border-gray-200 overflow-hidden">
           <button
@@ -411,9 +414,30 @@ export default function ContasPage() {
               <option value="">Todos os tipos</option>
               {TYPE_OPTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
+
+            {hasFilters && (
+              <button
+                type="button"
+                className="btn btn-ghost text-xs"
+                onClick={() => {
+                  setSearch('');
+                  setTypeFilter('');
+                  setPage(1);
+                }}
+              >
+                Limpar filtros
+              </button>
+            )}
           </>
         )}
       </div>
+
+      {view === 'list' && hasFilters && (
+        <div className="flex flex-wrap items-center gap-2">
+          {search && <span className="badge badge-gray">Busca: {search}</span>}
+          {typeFilter && <span className="badge badge-gray">Tipo: {TYPE_LABEL[typeFilter]}</span>}
+        </div>
+      )}
 
       {/* ── LIST VIEW ─────────────────────────────────────────────────────── */}
       {view === 'list' && (
@@ -440,7 +464,7 @@ export default function ContasPage() {
             <div className="table-container">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs text-gray-500 uppercase tracking-wide">
+                  <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs text-gray-500 uppercase tracking-wide sticky top-0 z-10">
                     <th className="px-4 py-3 font-medium">Código</th>
                     <th className="px-4 py-3 font-medium">Nome</th>
                     <th className="px-4 py-3 font-medium">Tipo</th>
@@ -522,7 +546,7 @@ export default function ContasPage() {
 
           {/* Pagination */}
           {pagination && pagination.total_pages > 1 && (
-            <div className="flex items-center justify-between border-t border-gray-100 px-4 py-3">
+            <div className="glass-strip m-3 flex items-center justify-between px-4 py-3">
               <p className="text-xs text-gray-500">{pagination.total} contas no total</p>
               <div className="flex items-center gap-2">
                 <button
