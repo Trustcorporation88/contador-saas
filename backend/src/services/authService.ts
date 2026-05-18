@@ -135,6 +135,16 @@ export class AuthService {
       logger.info('Admin user bootstrapped successfully', {
         adminEmail,
       });
+    } else if (envConfig.adminBootstrapForceReset && adminPassword) {
+      const passwordHash = await bcrypt.hash(adminPassword, envConfig.bcryptRounds);
+      await db('users').where('id', existingAdmin.id).update({
+        password_hash: passwordHash,
+        updated_at: new Date(),
+      });
+
+      logger.warn('Admin password force-reset via bootstrap flag', {
+        adminEmail,
+      });
     }
 
     this.bootstrapFinished = true;

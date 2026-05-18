@@ -53,6 +53,7 @@ interface EnvConfig {
   // Bootstrap admin
   adminBootstrapEmail: string;
   adminBootstrapPassword: string;
+  adminBootstrapForceReset: boolean;
 
   // Cache
   cacheDefaultTtl: number;
@@ -118,6 +119,7 @@ const envSchema = joi.object({
   PASSWORD_RESET_TTL_MINUTES: joi.number().default(30),
   ADMIN_BOOTSTRAP_EMAIL: joi.string().email().default('admin@contador.dev'),
   ADMIN_BOOTSTRAP_PASSWORD: joi.string().allow('').default(''),
+  ADMIN_BOOTSTRAP_FORCE_RESET: joi.boolean().default(false),
   CACHE_DEFAULT_TTL: joi.number().default(3600),
   CACHE_MAX_KEYS: joi.number().default(1000),
   API_TIMEOUT: joi.number().default(30000),
@@ -192,6 +194,7 @@ export const envConfig: EnvConfig = {
   passwordResetTtlMinutes: envVars.PASSWORD_RESET_TTL_MINUTES,
   adminBootstrapEmail: envVars.ADMIN_BOOTSTRAP_EMAIL,
   adminBootstrapPassword: envVars.ADMIN_BOOTSTRAP_PASSWORD,
+  adminBootstrapForceReset: envVars.ADMIN_BOOTSTRAP_FORCE_RESET,
 
   cacheDefaultTtl: envVars.CACHE_DEFAULT_TTL,
   cacheMaxKeys: envVars.CACHE_MAX_KEYS,
