@@ -113,6 +113,7 @@ npm run electron:build        # gera instalador na plataforma atual
 ```bash
 cd frontend
 npx playwright test           # executa suíte completa
+npm run build                 # necessario antes do preview usado na config de release
 npx playwright test tests/beta-release.spec.ts --project=chromium --config=playwright.release.config.ts
 npx playwright test --ui      # modo visual interativo
 npx playwright show-report    # relatório HTML

@@ -57,15 +57,25 @@
 Comando validado no frontend:
 
 ```bash
+npm run build
 npx playwright test tests/beta-release.spec.ts --project=chromium --config=playwright.release.config.ts
+```
+
+Comando validado no backend:
+
+```bash
+npm run build
 ```
 
 ### Resultado
 
 - Status final: PASS
+- Backend compilando com sucesso
+- Frontend compilando com sucesso
 - Cobertura funcional validada nas 5 prioridades
 - Estratégia: navegação funcional com API mockada para contornar ausência de credenciais reais e massa autenticada de teste
 - Ambiente: preview Vite controlado pelo Playwright
+- Observação operacional: a suíte de release depende do diretório `dist`, portanto o `npm run build` do frontend é pré-requisito para reexecução local
 
 ## Artefatos da Release
 
@@ -81,6 +91,7 @@ npx playwright test tests/beta-release.spec.ts --project=chromium --config=playw
 ```bash
 cd frontend
 npm install
+npm run build
 npx playwright install chromium
 npx playwright test tests/beta-release.spec.ts --project=chromium --config=playwright.release.config.ts
 ```
