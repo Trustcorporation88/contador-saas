@@ -38,6 +38,24 @@ export interface CompanySwitchResult {
   error?: string;
 }
 
+function parseJwtDurationToSeconds(duration: string): number {
+  const match = /^(\d+)([smhd])?$/.exec(duration);
+  if (!match) return 3600;
+  const value = Number(match[1]);
+  const unit = match[2] || 's';
+
+  switch (unit) {
+    case 'm':
+      return value * 60;
+    case 'h':
+      return value * 3600;
+    case 'd':
+      return value * 86400;
+    default:
+      return value;
+  }
+}
+
 /**
  * Tenant Service Class
  * Métodos para gerenciar acesso multi-tenant de usuários
@@ -199,7 +217,7 @@ export class TenantService {
         role: user.role,
         companyId: newCompanyId,
         iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + envConfig.jwt.expirationSeconds,
+        exp: Math.floor(Date.now() / 1000) + parseJwtDurationToSeconds(envConfig.jwt.expiry),
       };
 
       const newToken = jwt.sign(payload, envConfig.jwt.secret);
@@ -436,7 +454,7 @@ export class TenantService {
         .where('timestamp', '>', fiveMinutesAgo)
         .first();
 
-      if (recentDenials?.count > 10) {
+      if (Number(recentDenials?.count || 0) > 10) {
         logger.warn('SUSPICIOUS ACTIVITY: Multiple access denials', {
           userId,
           denialCount: recentDenials.count,

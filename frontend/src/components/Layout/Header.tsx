@@ -8,6 +8,7 @@ import { AuthService } from '../../services/authService';
 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard':          'Dashboard',
+  '/cliente':            'Cliente',
   '/empresas':           'Empresas',
   '/contas':             'Plano de Contas',
   '/lancamentos':        'Lançamentos Contábeis',

@@ -191,7 +191,7 @@ export function authorize(...allowedRoles: string[]) {
  */
 export function generateToken(payload: Record<string, unknown>): string {
   return jwt.sign(payload, envConfig.jwt.secret, {
-    expiresIn: envConfig.jwt.expiry,
+    expiresIn: envConfig.jwt.expiry as any,
     algorithm: envConfig.jwt.algorithm as any,
   });
 }
@@ -201,7 +201,7 @@ export function generateToken(payload: Record<string, unknown>): string {
  */
 export function generateRefreshToken(payload: Record<string, unknown>): string {
   return jwt.sign(payload, envConfig.jwt.refreshSecret, {
-    expiresIn: envConfig.jwt.refreshExpiry,
+    expiresIn: envConfig.jwt.refreshExpiry as any,
     algorithm: envConfig.jwt.algorithm as any,
   });
 }

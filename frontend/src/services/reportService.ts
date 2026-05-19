@@ -86,6 +86,46 @@ export interface CashFlowSummaryReport {
   };
 }
 
+export interface ClientSummaryAlert {
+  level: 'info' | 'warning' | 'critical';
+  code: string;
+  message: string;
+}
+
+export interface ClientSummaryMetrics {
+  revenue: number;
+  expenses: number;
+  net_income: number;
+  open_receivables: number;
+  open_payables: number;
+  overdue_receivables: number;
+  overdue_payables: number;
+  current_assets: number;
+  current_liabilities: number;
+  cash_position: number;
+  equity_total: number;
+  taxes_due: number;
+  pending_tax_items: number;
+}
+
+export interface ClientPeriodSummaryReport {
+  company_id: string;
+  period_type: 'monthly' | 'annual';
+  label: string;
+  date_from: string;
+  date_to: string;
+  generated_at: string;
+  metrics: ClientSummaryMetrics;
+  comparison: {
+    label: string;
+    revenue: number;
+    expenses: number;
+    net_income: number;
+    cash_position: number;
+  };
+  alerts: ClientSummaryAlert[];
+}
+
 export interface TrialBalanceItem {
   account_id: string;
   code: string;
@@ -160,6 +200,22 @@ export const ReportService = {
     const { data } = await api.get<CashFlowSummaryReport>(
       `/companies/${companyId}/reports/cash-flow-summary`,
       { params: { months } }
+    );
+    return data;
+  },
+
+  async getClientMonthlySummary(companyId: string, period: string): Promise<ClientPeriodSummaryReport> {
+    const { data } = await api.get<ClientPeriodSummaryReport>(
+      `/companies/${companyId}/reports/client-summary/monthly`,
+      { params: { period } }
+    );
+    return data;
+  },
+
+  async getClientAnnualSummary(companyId: string, year: number): Promise<ClientPeriodSummaryReport> {
+    const { data } = await api.get<ClientPeriodSummaryReport>(
+      `/companies/${companyId}/reports/client-summary/annual`,
+      { params: { year } }
     );
     return data;
   },

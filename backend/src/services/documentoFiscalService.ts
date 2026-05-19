@@ -119,7 +119,7 @@ export class DocumentoFiscalService {
       }
 
       // Buscar documento completo
-      const documento = await this.getById(companyId, documentoId);
+      const documento = await this.getById(companyId, String(documentoId));
 
       return {
         success: true,

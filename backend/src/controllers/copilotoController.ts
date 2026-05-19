@@ -5,7 +5,7 @@
  */
 
 import { Request, Response } from 'express';
-import { DeepSeekService, FinancialContext } from '../services/deepseekService';
+import { DeepSeekService, FinancialContext, DeepSeekResponse } from '../services/deepseekService';
 import { logger } from '../middleware/requestLogger';
 
 export class CopilotoController {
@@ -64,10 +64,12 @@ export class CopilotoController {
         return;
       }
 
+      const aiResult = result as DeepSeekResponse;
+
       res.json({
-        reply:    result.reply,
-        model:    result.model,
-        tokens:   result.tokens,
+        reply:    aiResult.reply,
+        model:    aiResult.model,
+        tokens:   aiResult.tokens,
         fallback: false,
       });
     } catch (err) {

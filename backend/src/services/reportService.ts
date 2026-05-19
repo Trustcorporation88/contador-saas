@@ -93,6 +93,46 @@ export interface CashFlowSummaryReport {
   };
 }
 
+export interface ClientSummaryAlert {
+  level: 'info' | 'warning' | 'critical';
+  code: string;
+  message: string;
+}
+
+export interface ClientSummaryMetrics {
+  revenue: number;
+  expenses: number;
+  net_income: number;
+  open_receivables: number;
+  open_payables: number;
+  overdue_receivables: number;
+  overdue_payables: number;
+  current_assets: number;
+  current_liabilities: number;
+  cash_position: number;
+  equity_total: number;
+  taxes_due: number;
+  pending_tax_items: number;
+}
+
+export interface ClientPeriodSummaryReport {
+  company_id: string;
+  period_type: 'monthly' | 'annual';
+  label: string;
+  date_from: string;
+  date_to: string;
+  generated_at: string;
+  metrics: ClientSummaryMetrics;
+  comparison: {
+    label: string;
+    revenue: number;
+    expenses: number;
+    net_income: number;
+    cash_position: number;
+  };
+  alerts: ClientSummaryAlert[];
+}
+
 export interface TrialBalanceItem {
   account_id: string;
   code: string;
@@ -175,6 +215,131 @@ export class ReportService {
       }
       return acc;
     }, { aberto: 0, vencido: 0 });
+  }
+
+  private static async getTaxResumo(companyId: string, dateFrom: string, dateTo: string) {
+    const db = await getDatabase();
+    const tableExists = await db.schema.hasTable('tax_calculations');
+
+    if (!tableExists) {
+      return { taxes_due: 0, pending_tax_items: 0 };
+    }
+
+    const rows = await db('tax_calculations')
+      .where({ company_id: companyId })
+      .where('period', '>=', dateFrom)
+      .where('period', '<=', dateTo)
+      .select('calculated_amount', 'status');
+
+    return rows.reduce((acc, row: Record<string, unknown>) => {
+      const amount = Number(row.calculated_amount || 0);
+      acc.taxes_due += amount;
+      if (String(row.status || '').toLowerCase() !== 'paid') {
+        acc.pending_tax_items += 1;
+      }
+      return acc;
+    }, { taxes_due: 0, pending_tax_items: 0 });
+  }
+
+  private static buildClientAlerts(metrics: ClientSummaryMetrics): ClientSummaryAlert[] {
+    const alerts: ClientSummaryAlert[] = [];
+
+    if (metrics.net_income < 0) {
+      alerts.push({
+        level: 'critical',
+        code: 'negative_result',
+        message: 'O período fechou com prejuízo e exige revisão operacional.',
+      });
+    }
+
+    if (metrics.overdue_payables > 0) {
+      alerts.push({
+        level: 'warning',
+        code: 'overdue_payables',
+        message: 'Existem obrigações vencidas que podem pressionar o caixa.',
+      });
+    }
+
+    if (metrics.overdue_receivables > 0) {
+      alerts.push({
+        level: 'warning',
+        code: 'overdue_receivables',
+        message: 'Há valores vencidos a receber que afetam a previsibilidade de caixa.',
+      });
+    }
+
+    if (metrics.pending_tax_items > 0) {
+      alerts.push({
+        level: 'warning',
+        code: 'pending_taxes',
+        message: 'Existem apurações tributárias pendentes no período.',
+      });
+    }
+
+    if (metrics.cash_position < 0) {
+      alerts.push({
+        level: 'critical',
+        code: 'negative_cash_position',
+        message: 'A posição de caixa estrutural do período está negativa.',
+      });
+    }
+
+    if (alerts.length === 0) {
+      alerts.push({
+        level: 'info',
+        code: 'period_ok',
+        message: 'Resumo sem pendências críticas no período analisado.',
+      });
+    }
+
+    return alerts;
+  }
+
+  private static async buildClientPeriodSummary(
+    companyId: string,
+    periodType: 'monthly' | 'annual',
+    currentPeriod: { label: string; dateFrom: string; dateTo: string },
+    previousPeriod: { label: string; dateFrom: string; dateTo: string },
+  ): Promise<ClientPeriodSummaryReport> {
+    const [currentSummary, previousSummary, currentTaxes] = await Promise.all([
+      this.getExecutiveSummary(companyId, currentPeriod.dateFrom, currentPeriod.dateTo),
+      this.getExecutiveSummary(companyId, previousPeriod.dateFrom, previousPeriod.dateTo),
+      this.getTaxResumo(companyId, currentPeriod.dateFrom, currentPeriod.dateTo),
+    ]);
+
+    const metrics: ClientSummaryMetrics = {
+      revenue: currentSummary.total_revenue,
+      expenses: currentSummary.total_expenses,
+      net_income: currentSummary.net_income,
+      open_receivables: currentSummary.open_receivables,
+      open_payables: currentSummary.open_payables,
+      overdue_receivables: currentSummary.overdue_receivables,
+      overdue_payables: currentSummary.overdue_payables,
+      current_assets: currentSummary.current_assets,
+      current_liabilities: currentSummary.current_liabilities,
+      cash_position: currentSummary.current_assets - currentSummary.current_liabilities,
+      equity_total: currentSummary.equity_total,
+      taxes_due: currentTaxes.taxes_due,
+      pending_tax_items: currentTaxes.pending_tax_items,
+    };
+
+    return {
+      company_id: companyId,
+      period_type: periodType,
+      label: currentPeriod.label,
+      date_from: currentPeriod.dateFrom,
+      date_to: currentPeriod.dateTo,
+      generated_at: new Date().toISOString(),
+      metrics,
+      comparison: {
+        label: previousPeriod.label,
+        revenue: previousSummary.total_revenue,
+        expenses: previousSummary.total_expenses,
+        net_income: previousSummary.net_income,
+        cash_position: previousSummary.current_assets - previousSummary.current_liabilities,
+      },
+      alerts: this.buildClientAlerts(metrics),
+    };
   }
 
   /**
@@ -409,6 +574,61 @@ export class ReportService {
       series: dreSeries,
       totals,
     };
+  }
+
+  static async getClientMonthlySummary(
+    companyId: string,
+    period: string,
+  ): Promise<ClientPeriodSummaryReport> {
+    const [year, month] = period.split('-').map(Number);
+    const safeYear = Number.isFinite(year) ? year : new Date().getFullYear();
+    const safeMonthIndex = Number.isFinite(month) ? Math.min(Math.max(month, 1), 12) - 1 : new Date().getMonth();
+
+    const currentStart = new Date(safeYear, safeMonthIndex, 1);
+    const currentEnd = new Date(safeYear, safeMonthIndex + 1, 0);
+    const previousStart = new Date(safeYear, safeMonthIndex - 1, 1);
+    const previousEnd = new Date(safeYear, safeMonthIndex, 0);
+
+    return this.buildClientPeriodSummary(
+      companyId,
+      'monthly',
+      {
+        label: currentStart.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
+        dateFrom: this.formatDate(currentStart),
+        dateTo: this.formatDate(currentEnd),
+      },
+      {
+        label: previousStart.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
+        dateFrom: this.formatDate(previousStart),
+        dateTo: this.formatDate(previousEnd),
+      },
+    );
+  }
+
+  static async getClientAnnualSummary(
+    companyId: string,
+    year: number,
+  ): Promise<ClientPeriodSummaryReport> {
+    const safeYear = Number.isFinite(year) ? year : new Date().getFullYear();
+    const currentStart = new Date(safeYear, 0, 1);
+    const currentEnd = new Date(safeYear, 11, 31);
+    const previousStart = new Date(safeYear - 1, 0, 1);
+    const previousEnd = new Date(safeYear - 1, 11, 31);
+
+    return this.buildClientPeriodSummary(
+      companyId,
+      'annual',
+      {
+        label: String(safeYear),
+        dateFrom: this.formatDate(currentStart),
+        dateTo: this.formatDate(currentEnd),
+      },
+      {
+        label: String(safeYear - 1),
+        dateFrom: this.formatDate(previousStart),
+        dateTo: this.formatDate(previousEnd),
+      },
+    );
   }
 
   /**

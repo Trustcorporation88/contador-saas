@@ -431,7 +431,7 @@ export class AuthService {
     logger.info(`MFA habilitação iniciada para usuário: ${user.email}`);
 
     return {
-      qrCode: secret.qr_code_data_url,
+      qrCode: secret.otpauth_url || '',
       secret: secret.base32,
       backupCodes: backupCodes,
     };

@@ -3,7 +3,7 @@
 **Projeto**: Contador App (Cross-Platform)  
 **Status**: Planejamento  
 **Data Criação**: 2026-05-17  
-**Total Tasks**: 52  
+**Total Tasks**: 56  
 **Duração Estimada**: 12 semanas (480 horas)
 
 ---
@@ -90,6 +90,18 @@
 - Associação com impostos (IRPJ, CSLL, PIS, COFINS, ICMS, ISS)
 - Arquivo importável (JSON/CSV)
 **Entrega**: plano-contas-padrao.json
+
+### [ ] 1.9 Matriz de Acesso por Função Especialista
+**Responsável**: Security Engineer + Product Manager + Contador e Controlador  
+**Tempo**: 4h  
+**Descrição**: Definir matriz formal para as funções:
+- Contador e Controlador
+- Estrategista de Impostos
+- Auditor de Conformidade
+- Gerente de Produto
+- Perfil Cliente/Visualizador
+- Mapear serviços permitidos, ações vedadas, critérios de segregação e dependências de aprovação
+**Entrega**: Documento de matriz de acesso + critérios de governança
 
 ---
 
@@ -267,6 +279,28 @@
 - Database queries
 **Entrega**: Jest tests + coverage report
 
+### [ ] 2.17 Serviço de Resumo do Cliente (Mensal e Anual)
+**Responsável**: Backend Architect + Contador e Controlador  
+**Tempo**: 6h  
+**Dependência**: 2.6, 2.8, 2.9, 2.12  
+**Descrição**: Endpoints:
+- GET /api/v1/companies/:id/client-summary/monthly?period=YYYY-MM
+- GET /api/v1/companies/:id/client-summary/annual?year=YYYY
+- Retornar: faturamento, despesas, lucro/prejuízo, impostos apurados, contas a receber, contas a pagar, posição de caixa e alertas do período
+- Publicar somente períodos fechados ou explicitamente liberados
+**Entrega**: Client summary service + tests
+
+### [ ] 2.18 Serviço de Publicação do Fechamento para Cliente
+**Responsável**: Backend Architect + Contador e Controlador + Auditor de Conformidade  
+**Tempo**: 5h  
+**Dependência**: 2.7, 2.17  
+**Descrição**: Implementar:
+- Snapshot mensal publicado ao cliente
+- Registro da data de publicação e responsável
+- Checklist mínimo antes da publicação
+- Bloqueio de edição após publicação sem reabertura auditada
+**Entrega**: Closing publication service + audit trail
+
 ---
 
 ## 🎨 Fase 3: Frontend Web/Desktop (Semanas 3-4)
@@ -436,6 +470,28 @@
 - Create journal entry
 - Generate balance sheet
 **Entrega**: E2E test suite
+
+### [ ] 3.16 Aba Cliente - Resumo Executivo
+**Responsável**: Frontend Developer + UI Designer + Product Manager  
+**Tempo**: 5h  
+**Dependência**: 2.17, 3.3  
+**Descrição**: Página read-only:
+- Cards de resumo mensal e anual
+- Comparativo com período anterior
+- Seção de impostos apurados e status
+- Lista de alertas e pendências críticas
+- Download do resumo executivo em PDF
+**Entrega**: Client summary page
+
+### [ ] 3.17 Experiência por Função e Visibilidade por Serviço
+**Responsável**: Frontend Developer + Product Manager + Security Engineer  
+**Tempo**: 4h  
+**Dependência**: 1.9, 3.2  
+**Descrição**: Implementar:
+- Visibilidade de menu e rotas por função
+- Separação da experiência entre operação contábil, fiscal, compliance, produto e cliente
+- Guardas de navegação e mensagens de acesso negado
+**Entrega**: Route guards + service visibility matrix no frontend
 
 ---
 

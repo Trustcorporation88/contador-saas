@@ -134,7 +134,7 @@ export function createCompanyRoutes(): Router {
 
         // UPDATE automaticamente scoped
         await updateScoped(db, companyId, 'accounts')
-          .set({
+          .update({
             name,
             type,
             is_active: isActive,

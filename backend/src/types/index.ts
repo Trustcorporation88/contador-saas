@@ -87,12 +87,3 @@ export interface IPaginatedResponse<T> {
   timestamp: Date;
 }
 
-export default {
-  IUser,
-  ICompany,
-  IAccount,
-  IJournalEntry,
-  IJournalItem,
-  IApiResponse,
-  IPaginatedResponse,
-};

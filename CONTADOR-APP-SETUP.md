@@ -65,7 +65,34 @@ Aplicativo de contador que permite gerenciar a contabilidade de empresas brasile
 - [ ] Log de cada operação (quem, quando, o quê)
 - [ ] Backup automático (diário, encrypted)
 - [ ] Bloqueio de período contábil encerrado
+- [ ] Perfil cliente com acesso somente ao resumo executivo mensal e anual
 - [ ] Assinatura digital para documentos críticos (futuro)
+
+### 2.8 Governança por Função Especialista
+
+| Função | Objetivo | Serviços com acesso principal | Limites de atuação |
+|-----------|-----------|-----------|-----------|
+| **Contador e Controlador** | Validar rotina real de escritório, fechamento mensal e consistência operacional | Documentos fiscais, diário contábil, contas a receber, contas a pagar, fluxo de caixa, DRE, balanço, balancete, livro razão, fechamento mensal e resumo do cliente | Não altera regras de roadmap/oferta; mudanças tributárias estruturais dependem do Estrategista de Impostos |
+| **Estrategista de Impostos** | Garantir cobertura tributária e obrigações fiscais por regime | Apuração de impostos, ajustes fiscais, calendário de obrigações, parametrização fiscal, exportações SPED/EFD e relatórios tributários | Não atua como operador do fechamento contábil diário; alterações operacionais dependem do Contador e Controlador |
+| **Auditor de Conformidade** | Transformar promessa regulatória em checklist verificável | Logs de auditoria, trilha de evidências, checklist regulatório, status de obrigações, matriz de permissões, relatórios obrigatórios e histórico de fechamento | Atua como verificador e aprovador; não deve alterar lançamentos ou parâmetros fiscais de produção |
+| **Gerente de Produto** | Separar o que é MVP, backlog e oferta futura | Roadmap, backlog, definição de escopo, priorização por fases, critérios de aceite, visibilidade por perfil e desenho da experiência da aba Cliente | Não altera dados contábeis nem fiscais; coordena priorização e fronteira de produto |
+
+### 2.9 Aba Cliente: Resumo Mensal e Anual
+
+- [ ] Criar uma aba dedicada chamada **Cliente** com experiência read-only
+- [ ] Exibir resumo **mensal** da empresa após fechamento do período
+- [ ] Exibir resumo **anual** consolidado por exercício
+- [ ] Permitir acesso para perfil cliente/visualizador e para consulta por contador/admin
+- [ ] Exibir indicadores mínimos:
+	- faturamento do mês e do ano
+	- despesas do mês e do ano
+	- lucro ou prejuízo do mês e acumulado do ano
+	- impostos apurados e status de pagamento
+	- contas a receber e a pagar em aberto
+	- posição de caixa e comparação com mês anterior
+	- alertas de pendências críticas do período
+- [ ] Disponibilizar exportação em PDF do resumo executivo
+- [ ] Registrar data do último fechamento publicado ao cliente
 
 ---
 

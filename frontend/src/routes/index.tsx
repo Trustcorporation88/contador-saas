@@ -23,6 +23,7 @@ import OutrosPage from '../pages/Relatorios/OutrosPage';
 import ImpostosPage from '../pages/Impostos/ImpostosPage';
 import AuditoriaPage from '../pages/Auditoria/AuditoriaPage';
 import ConfiguracoesPage from '../pages/Configuracoes/ConfiguracoesPage';
+import ClientePage from '../pages/Cliente/ClientePage';
 // Módulos inovadores
 import SaudePage from '../pages/Saude/SaudePage';
 import SimuladorPage from '../pages/Simulador/SimuladorPage';
@@ -31,6 +32,8 @@ import RiscoFiscalPage from '../pages/RiscoFiscal/RiscoFiscalPage';
 import OpenFinancePage from '../pages/OpenFinance/OpenFinancePage';
 import CopilotoPage from '../pages/Copiloto/CopilotoPage';
 import ProvaHashPage from '../pages/ProvaHash/ProvaHashPage';
+import type { UserRole } from '../types';
+import { canAccessPath, getDefaultRoute } from '../utils/access';
 
 // ─── Route guard ─────────────────────────────────────────────────────────────
 
@@ -38,6 +41,19 @@ function ProtectedRoute() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   return <Outlet />;
+}
+
+function DefaultHomeRedirect() {
+  const role = useAuthStore((s) => s.user?.role);
+  return <Navigate to={getDefaultRoute(role)} replace />;
+}
+
+function RoleRoute({ allowedPath, children }: { allowedPath: string; children: React.ReactElement }) {
+  const role = useAuthStore((s) => s.user?.role) as UserRole | undefined;
+  if (!canAccessPath(role, allowedPath)) {
+    return <Navigate to={getDefaultRoute(role)} replace />;
+  }
+  return children;
 }
 
 // ─── Placeholder lazy pages (implementados nas tasks 3.3–3.13) ───────────────
@@ -68,99 +84,103 @@ const router = createBrowserRouter([
       {
         element: <AppLayout />,
         children: [
-          { index: true, element: <Navigate to="/dashboard" replace /> },
+          { index: true, element: <DefaultHomeRedirect /> },
           {
             path: 'dashboard',
-            element: <DashboardPage />,
+            element: <RoleRoute allowedPath="/dashboard"><DashboardPage /></RoleRoute>,
+          },
+          {
+            path: 'cliente',
+            element: <RoleRoute allowedPath="/cliente"><ClientePage /></RoleRoute>,
           },
           {
             path: 'empresas',
-            element: <EmpresasPage />,
+            element: <RoleRoute allowedPath="/empresas"><EmpresasPage /></RoleRoute>,
           },
           {
             path: 'contas',
-            element: <ContasPage />,
+            element: <RoleRoute allowedPath="/contas"><ContasPage /></RoleRoute>,
           },
           {
             path: 'lancamentos',
-            element: <LancamentosPage />,
+            element: <RoleRoute allowedPath="/lancamentos"><LancamentosPage /></RoleRoute>,
           },
           {
             path: 'documentos',
-            element: <DocumentosPage />,
+            element: <RoleRoute allowedPath="/documentos"><DocumentosPage /></RoleRoute>,
           },
           {
             path: 'contas-receber',
-            element: <ContasReceberPage />,
+            element: <RoleRoute allowedPath="/contas-receber"><ContasReceberPage /></RoleRoute>,
           },
           {
             path: 'contas-pagar',
-            element: <ContasPagarPage />,
+            element: <RoleRoute allowedPath="/contas-pagar"><ContasPagarPage /></RoleRoute>,
           },
           {
             path: 'lancamentos/novo',
-            element: <LancadorPage />,
+            element: <RoleRoute allowedPath="/lancamentos"><LancadorPage /></RoleRoute>,
           },
           {
             path: 'lancamentos/:id/editar',
-            element: <LancadorPage />,
+            element: <RoleRoute allowedPath="/lancamentos"><LancadorPage /></RoleRoute>,
           },
           {
             path: 'relatorios/fluxo-caixa',
-            element: <FluxoCaixaPage />,
+            element: <RoleRoute allowedPath="/relatorios/fluxo-caixa"><FluxoCaixaPage /></RoleRoute>,
           },
           {
             path: 'relatorios/balanco',
-            element: <BalancoPage />,
+            element: <RoleRoute allowedPath="/relatorios/balanco"><BalancoPage /></RoleRoute>,
           },
           {
             path: 'relatorios/dre',
-            element: <DREPage />,
+            element: <RoleRoute allowedPath="/relatorios/dre"><DREPage /></RoleRoute>,
           },
           {
             path: 'relatorios/outros',
-            element: <OutrosPage />,
+            element: <RoleRoute allowedPath="/relatorios/outros"><OutrosPage /></RoleRoute>,
           },
           {
             path: 'impostos',
-            element: <ImpostosPage />,
+            element: <RoleRoute allowedPath="/impostos"><ImpostosPage /></RoleRoute>,
           },
           {
             path: 'auditoria',
-            element: <AuditoriaPage />,
+            element: <RoleRoute allowedPath="/auditoria"><AuditoriaPage /></RoleRoute>,
           },
           {
             path: 'configuracoes',
-            element: <ConfiguracoesPage />,
+            element: <RoleRoute allowedPath="/configuracoes"><ConfiguracoesPage /></RoleRoute>,
           },
           // ── Módulos inovadores ────────────────────────────────────────────
           {
             path: 'saude',
-            element: <SaudePage />,
+            element: <RoleRoute allowedPath="/saude"><SaudePage /></RoleRoute>,
           },
           {
             path: 'simulador',
-            element: <SimuladorPage />,
+            element: <RoleRoute allowedPath="/simulador"><SimuladorPage /></RoleRoute>,
           },
           {
             path: 'benchmark',
-            element: <BenchmarkPage />,
+            element: <RoleRoute allowedPath="/benchmark"><BenchmarkPage /></RoleRoute>,
           },
           {
             path: 'risco-fiscal',
-            element: <RiscoFiscalPage />,
+            element: <RoleRoute allowedPath="/risco-fiscal"><RiscoFiscalPage /></RoleRoute>,
           },
           {
             path: 'open-finance',
-            element: <OpenFinancePage />,
+            element: <RoleRoute allowedPath="/open-finance"><OpenFinancePage /></RoleRoute>,
           },
           {
             path: 'copiloto',
-            element: <CopilotoPage />,
+            element: <RoleRoute allowedPath="/copiloto"><CopilotoPage /></RoleRoute>,
           },
           {
             path: 'prova-hash',
-            element: <ProvaHashPage />,
+            element: <RoleRoute allowedPath="/prova-hash"><ProvaHashPage /></RoleRoute>,
           },
         ],
       },

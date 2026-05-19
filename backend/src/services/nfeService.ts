@@ -13,7 +13,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import { db } from '../config/database';
+import { getDatabase } from '../config/database';
 import { logger } from '../middleware/requestLogger';
 import {
   CreateNfeDTO,
@@ -251,6 +251,7 @@ export class NfeService {
     serie: number,
     modelo: number,
   ): Promise<number> {
+    const db = await getDatabase();
     const row = await db('nfe_numeracao')
       .where({ company_id: companyId, serie, modelo })
       .first();
@@ -276,6 +277,7 @@ export class NfeService {
    * Gera XML e chave de acesso mas NÃO envia ao SEFAZ
    */
   static async create(companyId: string, dto: CreateNfeDTO): Promise<NfeRecord> {
+    const db = await getDatabase();
     const serie  = dto.serie  ?? 1;
     const modelo = dto.modelo ?? 55;
 
@@ -376,6 +378,7 @@ export class NfeService {
    * Transição: RASCUNHO → AUTORIZADA
    */
   static async authorize(id: string, companyId: string): Promise<NfeRecord> {
+    const db = await getDatabase();
     const nfe = await db('nfe').where({ id, company_id: companyId }).first();
     if (!nfe) throw Object.assign(new Error('NF-e não encontrada'), { status: 404 });
     if (nfe.status !== NfeStatus.RASCUNHO) {
@@ -413,6 +416,7 @@ export class NfeService {
     companyId: string,
     justificativa: string,
   ): Promise<NfeRecord> {
+    const db = await getDatabase();
     if (!justificativa || justificativa.trim().length < 15) {
       throw Object.assign(
         new Error('Justificativa deve ter no mínimo 15 caracteres'),
@@ -448,6 +452,7 @@ export class NfeService {
 
   /** Buscar NF-e por ID */
   static async get(id: string, companyId: string): Promise<NfeRecord & { itens: unknown[] }> {
+    const db = await getDatabase();
     const nfe = await db('nfe').where({ id, company_id: companyId }).first();
     if (!nfe) throw Object.assign(new Error('NF-e não encontrada'), { status: 404 });
     const itens = await db('nfe_itens').where({ nfe_id: id }).orderBy('numero_item');
@@ -459,6 +464,7 @@ export class NfeService {
     companyId: string,
     filters: NfeListFilters,
   ): Promise<{ data: NfeRecord[]; total: number; page: number; limit: number }> {
+    const db = await getDatabase();
     const page  = Math.max(1, filters.page  ?? 1);
     const limit = Math.min(100, Math.max(1, filters.limit ?? 20));
     const offset = (page - 1) * limit;
@@ -481,6 +487,7 @@ export class NfeService {
 
   /** Obter XML da NF-e (para download ou integração) */
   static async getXml(id: string, companyId: string): Promise<string> {
+    const db = await getDatabase();
     const nfe = await db('nfe').where({ id, company_id: companyId }).select('xml_nfe', 'status').first();
     if (!nfe) throw Object.assign(new Error('NF-e não encontrada'), { status: 404 });
     if (!nfe.xml_nfe) throw Object.assign(new Error('XML não disponível'), { status: 404 });

@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { clsx } from 'clsx';
+import { useAuthStore } from '../../store/authStore';
+import type { UserRole } from '../../types';
+import { canAccessPath } from '../../utils/access';
 import {
   LayoutDashboard,
   Building2,
@@ -20,6 +23,7 @@ import {
   Landmark,
   Bot,
   Lock,
+  Users,
   X,
 } from 'lucide-react';
 
@@ -35,6 +39,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Dashboard',          icon: LayoutDashboard, path: '/dashboard'              },
+  { label: 'Cliente',            icon: Users,           path: '/cliente'                },
   { label: 'Empresas',           icon: Building2,       path: '/empresas'               },
   { label: 'Plano de Contas',    icon: BookOpen,        path: '/contas'                 },
   { label: 'Lançamentos',        icon: FileText,        path: '/lancamentos'            },
@@ -76,9 +81,23 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();
+  const role = useAuthStore((state) => state.user?.role) as UserRole | undefined;
   const [reportsOpen, setReportsOpen] = useState(
     location.pathname.startsWith('/relatorios')
   );
+
+  const visibleItems = navItems
+    .filter((item) => {
+      if (item.path) return canAccessPath(role, item.path);
+      return item.children?.some((child) => canAccessPath(role, child.path));
+    })
+    .map((item) => {
+      if (!item.children) return item;
+      return {
+        ...item,
+        children: item.children.filter((child) => canAccessPath(role, child.path)),
+      };
+    });
 
   return (
     <>
@@ -119,7 +138,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-        {navItems.map((item, idx) => {
+        {visibleItems.map((item, idx) => {
           // Divider before innovative section
           const prevPath = navItems[idx - 1]?.path;
           const showDivider = item.badge === '✦' && (!prevPath || !INNOVATIVE_PATHS.includes(prevPath));

@@ -6,7 +6,7 @@
 
 import { Express, Request, Response, NextFunction } from 'express';
 import { authenticateToken } from './auth';
-import { validateTenantAccess, rateLimitByTenant } from './multiTenant';
+import { validateTenantAccess, rateLimitByTenant, requirePermission } from './multiTenant';
 import { errorHandler } from './errorHandler';
 import { requestLogger } from './requestLogger';
 import { logger } from './requestLogger';
@@ -130,6 +130,7 @@ export {
   authenticateToken,
   validateTenantAccess,
   rateLimitByTenant,
+  requirePermission,
   errorHandler,
   requestLogger,
 };

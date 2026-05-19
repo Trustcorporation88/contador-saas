@@ -10,6 +10,33 @@ import { logger } from '../middleware/requestLogger';
 
 export class ReportController {
 
+  static async clientMonthlySummary(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+    try {
+      const companyId = req.params.companyId;
+      const period = (req.query.period as string | undefined) ?? new Date().toISOString().slice(0, 7);
+
+      const report = await ReportService.getClientMonthlySummary(companyId, period);
+      return res.status(200).json(report);
+    } catch (err) {
+      logger.error('Error generating client monthly summary', { error: (err as Error).message });
+      return next(err);
+    }
+  }
+
+  static async clientAnnualSummary(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+    try {
+      const companyId = req.params.companyId;
+      const queryYear = req.query.year ? Number(req.query.year) : new Date().getFullYear();
+      const year = Number.isFinite(queryYear) ? queryYear : new Date().getFullYear();
+
+      const report = await ReportService.getClientAnnualSummary(companyId, year);
+      return res.status(200).json(report);
+    } catch (err) {
+      logger.error('Error generating client annual summary', { error: (err as Error).message });
+      return next(err);
+    }
+  }
+
   /**
    * GET /companies/:companyId/reports/balance-sheet
    * Balanço Patrimonial (Lei 6.404/76 Art. 178-186)
