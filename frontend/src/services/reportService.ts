@@ -50,6 +50,42 @@ export interface IncomeStatementReport {
   net_income: number;
 }
 
+export interface ExecutiveSummaryReport {
+  company_id: string;
+  date_from: string;
+  date_to: string;
+  generated_at: string;
+  total_revenue: number;
+  total_expenses: number;
+  net_income: number;
+  open_receivables: number;
+  open_payables: number;
+  overdue_receivables: number;
+  overdue_payables: number;
+  current_assets: number;
+  current_liabilities: number;
+  equity_total: number;
+}
+
+export interface CashFlowSummaryPoint {
+  month: string;
+  revenue: number;
+  expenses: number;
+  net_income: number;
+}
+
+export interface CashFlowSummaryReport {
+  company_id: string;
+  generated_at: string;
+  months: number;
+  series: CashFlowSummaryPoint[];
+  totals: {
+    revenue: number;
+    expenses: number;
+    net_income: number;
+  };
+}
+
 export interface TrialBalanceItem {
   account_id: string;
   code: string;
@@ -108,6 +144,22 @@ export const ReportService = {
     const { data } = await api.get<IncomeStatementReport>(
       `/companies/${companyId}/reports/income-statement`,
       { params: { date_from: dateFrom, date_to: dateTo } }
+    );
+    return data;
+  },
+
+  async getExecutiveSummary(companyId: string, dateFrom: string, dateTo: string): Promise<ExecutiveSummaryReport> {
+    const { data } = await api.get<ExecutiveSummaryReport>(
+      `/companies/${companyId}/reports/executive-summary`,
+      { params: { date_from: dateFrom, date_to: dateTo } }
+    );
+    return data;
+  },
+
+  async getCashFlowSummary(companyId: string, months = 12): Promise<CashFlowSummaryReport> {
+    const { data } = await api.get<CashFlowSummaryReport>(
+      `/companies/${companyId}/reports/cash-flow-summary`,
+      { params: { months } }
     );
     return data;
   },

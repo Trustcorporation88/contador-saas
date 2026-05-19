@@ -52,6 +52,45 @@ export class ReportController {
   }
 
   /**
+   * GET /companies/:companyId/reports/executive-summary
+   * Resumo executivo do período para fluxo de caixa e relatórios básicos
+   */
+  static async executiveSummary(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+    try {
+      const companyId = req.params.companyId;
+      const dateFrom = req.query.date_from as string;
+      const dateTo = req.query.date_to as string;
+
+      if (!dateFrom || !dateTo) {
+        return res.status(400).json({ error: 'date_from e date_to são obrigatórios (YYYY-MM-DD)' });
+      }
+
+      const report = await ReportService.getExecutiveSummary(companyId, dateFrom, dateTo);
+      return res.status(200).json(report);
+    } catch (err) {
+      logger.error('Error generating executive summary', { error: (err as Error).message });
+      return next(err);
+    }
+  }
+
+  /**
+   * GET /companies/:companyId/reports/cash-flow-summary
+   * Série mensal de receitas, despesas e resultado
+   */
+  static async cashFlowSummary(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+    try {
+      const companyId = req.params.companyId;
+      const months = req.query.months ? Number(req.query.months) : 12;
+
+      const report = await ReportService.getCashFlowSummary(companyId, months);
+      return res.status(200).json(report);
+    } catch (err) {
+      logger.error('Error generating cash flow summary', { error: (err as Error).message });
+      return next(err);
+    }
+  }
+
+  /**
    * GET /companies/:companyId/reports/trial-balance
    * Balancete de Verificação
    * Query: date_from, date_to (opcionais, YYYY-MM-DD)

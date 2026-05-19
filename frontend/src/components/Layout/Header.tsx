@@ -11,6 +11,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/empresas':           'Empresas',
   '/contas':             'Plano de Contas',
   '/lancamentos':        'Lançamentos Contábeis',
+  '/relatorios/fluxo-caixa': 'Fluxo de Caixa',
   '/relatorios/balanco': 'Balanço Patrimonial',
   '/relatorios/dre':     'DRE',
   '/relatorios/outros':  'Outros Relatórios',

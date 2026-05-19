@@ -16,6 +16,7 @@ import LancadorPage from '../pages/Lancamentos/LancadorPage';
 import DocumentosPage from '../pages/Documentos/DocumentosPage';
 import ContasReceberPage from '../pages/ContasReceber/ContasReceberPage';
 import ContasPagarPage from '../pages/ContasPagar/ContasPagarPage';
+import FluxoCaixaPage from '../pages/Relatorios/FluxoCaixaPage';
 import BalancoPage from '../pages/Relatorios/BalancoPage';
 import DREPage from '../pages/Relatorios/DREPage';
 import OutrosPage from '../pages/Relatorios/OutrosPage';
@@ -103,6 +104,10 @@ const router = createBrowserRouter([
           {
             path: 'lancamentos/:id/editar',
             element: <LancadorPage />,
+          },
+          {
+            path: 'relatorios/fluxo-caixa',
+            element: <FluxoCaixaPage />,
           },
           {
             path: 'relatorios/balanco',

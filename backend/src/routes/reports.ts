@@ -31,6 +31,18 @@ router.get('/balance-sheet', ReportController.balanceSheet);
 router.get('/income-statement', ReportController.incomeStatement);
 
 /**
+ * GET /companies/:companyId/reports/executive-summary
+ * Query: date_from, date_to (obrigatórios)
+ */
+router.get('/executive-summary', ReportController.executiveSummary);
+
+/**
+ * GET /companies/:companyId/reports/cash-flow-summary
+ * Query: months (opcional, default 12)
+ */
+router.get('/cash-flow-summary', ReportController.cashFlowSummary);
+
+/**
  * GET /companies/:companyId/reports/trial-balance
  * Balancete de Verificação
  * Query: date_from, date_to (opcionais)

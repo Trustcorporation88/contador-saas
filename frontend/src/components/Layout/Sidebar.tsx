@@ -45,6 +45,7 @@ const navItems: NavItem[] = [
     label: 'Relatórios',
     icon: BarChart3,
     children: [
+      { label: 'Fluxo de Caixa',      path: '/relatorios/fluxo-caixa' },
       { label: 'Balanço Patrimonial', path: '/relatorios/balanco' },
       { label: 'DRE',                 path: '/relatorios/dre'     },
       { label: 'Outros Relatórios',   path: '/relatorios/outros'  },

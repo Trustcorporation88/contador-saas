@@ -57,6 +57,42 @@ export interface IncomeStatementReport {
   net_income: number;     // Lucro ou Prejuízo (positivo = lucro)
 }
 
+export interface ExecutiveSummaryReport {
+  company_id: string;
+  date_from: string;
+  date_to: string;
+  generated_at: string;
+  total_revenue: number;
+  total_expenses: number;
+  net_income: number;
+  open_receivables: number;
+  open_payables: number;
+  overdue_receivables: number;
+  overdue_payables: number;
+  current_assets: number;
+  current_liabilities: number;
+  equity_total: number;
+}
+
+export interface CashFlowSummaryPoint {
+  month: string;
+  revenue: number;
+  expenses: number;
+  net_income: number;
+}
+
+export interface CashFlowSummaryReport {
+  company_id: string;
+  generated_at: string;
+  months: number;
+  series: CashFlowSummaryPoint[];
+  totals: {
+    revenue: number;
+    expenses: number;
+    net_income: number;
+  };
+}
+
 export interface TrialBalanceItem {
   account_id: string;
   code: string;
@@ -105,6 +141,41 @@ export interface LedgerReport {
  * ReportService - Geração de demonstrações financeiras
  */
 export class ReportService {
+  private static formatDate(date: Date): string {
+    return date.toISOString().slice(0, 10);
+  }
+
+  private static monthLabel(date: Date): string {
+    return date.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }).replace('.', '');
+  }
+
+  private static async getContaResumo(companyId: string, tableName: 'contas_receber' | 'contas_pagar') {
+    const db = await getDatabase();
+    const tableExists = await db.schema.hasTable(tableName);
+    if (!tableExists) {
+      return { aberto: 0, vencido: 0 };
+    }
+
+    const isReceber = tableName === 'contas_receber';
+    const paidColumn = isReceber ? 'valor_recebido' : 'valor_pago';
+    const activeRows = await db(tableName)
+      .where({ company_id: companyId, is_active: true })
+      .whereNot('status', isReceber ? 'recebido' : 'pago')
+      .whereNot('status', 'cancelado')
+      .select('valor_original', paidColumn, 'data_vencimento');
+
+    const hoje = new Date();
+
+    return activeRows.reduce((acc, row: Record<string, unknown>) => {
+      const aberto = Number(row.valor_original || 0) - Number(row[paidColumn] || 0);
+      if (aberto <= 0) return acc;
+      acc.aberto += aberto;
+      if (new Date(String(row.data_vencimento)) < hoje) {
+        acc.vencido += aberto;
+      }
+      return acc;
+    }, { aberto: 0, vencido: 0 });
+  }
 
   /**
    * Buscar saldos de contas para um período
@@ -259,6 +330,84 @@ export class ReportService {
       gross_revenue: grossRevenue,
       total_expenses: totalExpenses,
       net_income: netIncome,
+    };
+  }
+
+  static async getExecutiveSummary(
+    companyId: string,
+    dateFrom: string,
+    dateTo: string,
+  ): Promise<ExecutiveSummaryReport> {
+    const [dre, balanco, receberResumo, pagarResumo] = await Promise.all([
+      this.getIncomeStatement(companyId, dateFrom, dateTo),
+      this.getBalanceSheet(companyId, dateTo),
+      this.getContaResumo(companyId, 'contas_receber'),
+      this.getContaResumo(companyId, 'contas_pagar'),
+    ]);
+
+    const currentAssets = balanco.assets.current.reduce((sum, item) => sum + item.balance, 0);
+    const currentLiabilities = balanco.liabilities.current.reduce((sum, item) => sum + item.balance, 0);
+
+    return {
+      company_id: companyId,
+      date_from: dateFrom,
+      date_to: dateTo,
+      generated_at: new Date().toISOString(),
+      total_revenue: dre.gross_revenue,
+      total_expenses: dre.total_expenses,
+      net_income: dre.net_income,
+      open_receivables: receberResumo.aberto,
+      open_payables: pagarResumo.aberto,
+      overdue_receivables: receberResumo.vencido,
+      overdue_payables: pagarResumo.vencido,
+      current_assets: currentAssets,
+      current_liabilities: currentLiabilities,
+      equity_total: balanco.equity.total,
+    };
+  }
+
+  static async getCashFlowSummary(
+    companyId: string,
+    months = 12,
+  ): Promise<CashFlowSummaryReport> {
+    const safeMonths = Math.min(Math.max(months, 1), 24);
+    const today = new Date();
+    const monthRefs = Array.from({ length: safeMonths }, (_, index) => {
+      const ref = new Date(today.getFullYear(), today.getMonth() - (safeMonths - 1 - index), 1);
+      const start = new Date(ref.getFullYear(), ref.getMonth(), 1);
+      const end = new Date(ref.getFullYear(), ref.getMonth() + 1, 0);
+      return {
+        label: this.monthLabel(ref),
+        dateFrom: this.formatDate(start),
+        dateTo: this.formatDate(end),
+      };
+    });
+
+    const dreSeries = await Promise.all(
+      monthRefs.map(async (monthRef) => {
+        const dre = await this.getIncomeStatement(companyId, monthRef.dateFrom, monthRef.dateTo);
+        return {
+          month: monthRef.label,
+          revenue: dre.gross_revenue,
+          expenses: dre.total_expenses,
+          net_income: dre.net_income,
+        };
+      })
+    );
+
+    const totals = dreSeries.reduce((acc, point) => {
+      acc.revenue += point.revenue;
+      acc.expenses += point.expenses;
+      acc.net_income += point.net_income;
+      return acc;
+    }, { revenue: 0, expenses: 0, net_income: 0 });
+
+    return {
+      company_id: companyId,
+      generated_at: new Date().toISOString(),
+      months: safeMonths,
+      series: dreSeries,
+      totals,
     };
   }
 
