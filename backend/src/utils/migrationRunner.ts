@@ -227,6 +227,69 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           console.log('✓ 003_create_contas_receber_tables completed');
         },
       },
+      {
+        name: '004_create_contas_pagar_tables',
+        up: async (db) => {
+          const exists = await db.schema.hasTable('contas_pagar');
+          if (exists) {
+            console.log('[MIGRATIONS] Skipping 004_create_contas_pagar_tables (already exists)');
+            return;
+          }
+
+          console.log('[MIGRATIONS] Running 004_create_contas_pagar_tables...');
+
+          await db.schema.createTable('contas_pagar', (table) => {
+            table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+            table.uuid('company_id').notNullable();
+            table.uuid('created_by').notNullable();
+            table.uuid('updated_by').nullable();
+            table.uuid('documento_fiscal_id').nullable();
+            table.string('categoria', 40).notNullable();
+            table.string('numero_titulo', 60).notNullable();
+            table.text('descricao').notNullable();
+            table.string('fornecedor_nome', 255).notNullable();
+            table.string('fornecedor_cnpj', 14).nullable();
+            table.string('fornecedor_email', 255).nullable();
+            table.string('fornecedor_telefone', 30).nullable();
+            table.date('data_emissao').notNullable();
+            table.date('data_vencimento').notNullable();
+            table.decimal('valor_original', 15, 2).notNullable();
+            table.decimal('valor_pago', 15, 2).defaultTo(0);
+            table.decimal('juros', 15, 2).defaultTo(0);
+            table.decimal('multa', 15, 2).defaultTo(0);
+            table.decimal('desconto', 15, 2).defaultTo(0);
+            table.string('status', 30).defaultTo('pendente');
+            table.text('observacoes').nullable();
+            table.boolean('is_active').defaultTo(true);
+            table.timestamp('created_at').defaultTo(db.fn.now());
+            table.timestamp('updated_at').defaultTo(db.fn.now());
+            table.index(['company_id']);
+            table.index(['status']);
+            table.index(['categoria']);
+            table.index(['data_vencimento']);
+            table.index(['fornecedor_cnpj']);
+            table.unique(['company_id', 'numero_titulo']);
+          });
+
+          await db.schema.createTable('pagamentos_contas_pagar', (table) => {
+            table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+            table.uuid('conta_pagar_id').notNullable().references('id').inTable('contas_pagar').onDelete('CASCADE');
+            table.date('data_pagamento').notNullable();
+            table.decimal('valor_pago', 15, 2).notNullable();
+            table.decimal('juros', 15, 2).defaultTo(0);
+            table.decimal('multa', 15, 2).defaultTo(0);
+            table.decimal('desconto', 15, 2).defaultTo(0);
+            table.string('forma_pagamento', 30).notNullable();
+            table.text('observacoes').nullable();
+            table.timestamp('created_at').defaultTo(db.fn.now());
+            table.uuid('created_by').notNullable();
+            table.index(['conta_pagar_id']);
+            table.index(['data_pagamento']);
+          });
+
+          console.log('✓ 004_create_contas_pagar_tables completed');
+        },
+      },
     ];
 
     // Execute migrations that haven't been run yet

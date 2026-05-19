@@ -40,6 +40,7 @@ const navItems: NavItem[] = [
   { label: 'Lançamentos',        icon: FileText,        path: '/lancamentos'            },
   { label: 'Documentos Fiscais', icon: FileText,        path: '/documentos'             },
   { label: 'Contas a Receber',   icon: FileText,        path: '/contas-receber'         },
+  { label: 'Contas a Pagar',     icon: FileText,        path: '/contas-pagar'           },
   {
     label: 'Relatórios',
     icon: BarChart3,
