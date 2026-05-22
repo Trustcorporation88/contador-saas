@@ -2,22 +2,30 @@ name: CI/CD Pipeline - O Contador
 
 on:
   push:
-    branches: [master, develop]
+    branches: [main, master, develop]
   pull_request:
-    branches: [master, develop]
+    branches: [main, master]
   workflow_dispatch:
+
+# Cancela runs anteriores do mesmo branch para economizar minutos
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '18'
 
 jobs:
   test-backend:
     runs-on: ubuntu-latest
-    name: Backend Tests (Jest)
-    
+    name: 🧪 Backend Tests (Jest)
+
     services:
       postgres:
-        image: postgres:15-alpine
+        image: postgres:16-alpine
         env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_pass
           POSTGRES_DB: contador_test
         options: >-
           --health-cmd pg_isready
@@ -27,13 +35,23 @@ jobs:
         ports:
           - 5432:5432
 
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
-          node-version: '18.x'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
 
@@ -41,30 +59,49 @@ jobs:
         working-directory: backend
         run: npm ci
 
+      - name: Lint backend
+        working-directory: backend
+        run: npm run lint
+
       - name: Run Jest tests
         working-directory: backend
         env:
           NODE_ENV: test
-          DATABASE_URL: postgresql://test:test@localhost:5432/contador_test
-          JWT_SECRET: test-jwt-secret-key-for-unit-tests-only
+          DATABASE_URL: postgresql://test_user:test_pass@localhost:5432/contador_test
+          JWT_SECRET: test-jwt-secret-key-for-unit-tests-only-64-chars-padding-ok
           JWT_EXPIRES_IN: 24h
-          REFRESH_TOKEN_SECRET: test-refresh-token-secret
+          REFRESH_TOKEN_SECRET: test-refresh-secret-for-ci-only-not-real-64ch-padding
           REFRESH_TOKEN_EXPIRES_IN: 7d
+          REDIS_URL: redis://localhost:6379
+          REDIS_HOST: localhost
+          REDIS_PORT: '6379'
+          CACHE_ENABLED: 'true'
           DEEPSEEK_API_KEY: test-key-ci
           DEEPSEEK_MODEL: deepseek-chat
-        run: npm test
+          RATE_LIMIT_MAX_REQUESTS: '10000'
+          RATE_LIMIT_MAX_LOGIN: '1000'
+          LOG_LEVEL: error
+        run: npm test -- --forceExit --detectOpenHandles
+
+      - name: Upload cobertura de testes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage/
+          retention-days: 7
 
   test-frontend:
     runs-on: ubuntu-latest
-    name: Frontend Lint & Build
-    
+    name: 🖼️ Frontend Lint, TypeCheck & Build
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
-          node-version: '18.x'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
@@ -78,13 +115,13 @@ jobs:
 
       - name: Lint (ESLint)
         working-directory: frontend
-        run: npm run lint || true
+        run: npm run lint
 
-      - name: Build Vite
+      - name: Build Vite (produção)
         working-directory: frontend
         run: npm run build
         env:
-          VITE_API_URL: https://staging-api.ocontador.com
+          VITE_API_BASE_URL: https://api.ocontador.app/api/v1
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -95,16 +132,16 @@ jobs:
 
   e2e-tests:
     runs-on: ubuntu-latest
-    name: E2E Tests (Playwright)
+    name: 🎭 E2E Tests (Playwright)
     needs: [test-backend, test-frontend]
     if: success()
 
     services:
       postgres:
-        image: postgres:15-alpine
+        image: postgres:16-alpine
         env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_pass
           POSTGRES_DB: contador_test
         options: >-
           --health-cmd pg_isready
@@ -114,13 +151,23 @@ jobs:
         ports:
           - 5432:5432
 
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
-          node-version: '18.x'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
@@ -128,7 +175,10 @@ jobs:
         run: |
           cd backend && npm ci
           cd ../frontend && npm ci
-          npx playwright install --with-deps
+
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install chromium --with-deps
 
       - name: Build backend
         working-directory: backend
@@ -138,27 +188,36 @@ jobs:
         working-directory: backend
         env:
           NODE_ENV: test
-          DATABASE_URL: postgresql://test:test@localhost:5432/contador_test
-          JWT_SECRET: test-jwt-secret-key-for-unit-tests-only
+          DATABASE_URL: postgresql://test_user:test_pass@localhost:5432/contador_test
+          JWT_SECRET: test-jwt-secret-key-for-unit-tests-only-64-chars-padding-ok
+          REFRESH_TOKEN_SECRET: test-refresh-secret-for-ci-only-not-real-64ch-padding
+          REDIS_URL: redis://localhost:6379
+          REDIS_HOST: localhost
+          REDIS_PORT: '6379'
+          CACHE_ENABLED: 'true'
           PORT: 3000
+          LOG_LEVEL: error
         run: nohup npm start >/tmp/backend.log 2>&1 &
 
       - name: Wait for backend
         run: |
           for i in {1..30}; do
-            if curl -fsS http://localhost:3000/health >/dev/null; then
-              echo "Backend pronto";
-              exit 0;
+            if curl -fsS http://localhost:3000/api/v1/health >/dev/null 2>&1; then
+              echo "✅ Backend pronto na tentativa $i"
+              exit 0
             fi
-            sleep 2
+            echo "Aguardando backend... ($i/30)"
+            sleep 3
           done
-          echo "Backend nao subiu";
+          echo "❌ Backend não subiu em 90s"
           cat /tmp/backend.log || true
           exit 1
 
       - name: Run Playwright tests
         working-directory: frontend
         run: npx playwright test
+        env:
+          VITE_API_BASE_URL: http://localhost:3000/api/v1
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
@@ -168,9 +227,17 @@ jobs:
           path: frontend/playwright-report/
           retention-days: 7
 
+      - name: Upload screenshots (falhas)
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-screenshots
+          path: frontend/test-results/
+          retention-days: 7
+
   docker-build:
     runs-on: ubuntu-latest
-    name: Docker Build Validation
+    name: 🐳 Docker Build Validation
     needs: [test-backend, test-frontend]
 
     steps:
@@ -182,40 +249,126 @@ jobs:
       - name: Build frontend image
         run: docker build -t ocontador-frontend:ci ./frontend
 
+      - name: Smoke test containers
+        run: |
+          echo "✅ Imagens Docker construídas com sucesso"
+          docker images | grep ocontador
+
   security-scan:
     runs-on: ubuntu-latest
-    name: Security Checks (non-blocking)
+    name: 🔒 Security Checks (non-blocking)
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run npm audit
-        run: |
-          cd backend && npm audit --audit-level=moderate || true
-          cd ../frontend && npm audit --audit-level=moderate || true
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
-  deploy-staging:
+      - name: Install backend deps
+        run: cd backend && npm ci --prefer-offline
+
+      - name: Backend npm audit
+        run: cd backend && npm audit --audit-level=high || true
+
+      - name: Install frontend deps
+        run: cd frontend && npm ci --prefer-offline
+
+      - name: Frontend npm audit
+        run: cd frontend && npm audit --audit-level=high || true
+
+  deploy:
     runs-on: ubuntu-latest
-    name: Deploy to Staging
+    name: 🚀 Deploy — Render + Vercel
     needs: [test-backend, test-frontend, e2e-tests, docker-build]
-    if: github.ref == 'refs/heads/master' && success()
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && github.event_name == 'push'
+
+    environment:
+      name: production
+      url: https://ocontador.app
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy backend (Railway via hook)
-        if: ${{ secrets.RAILWAY_DEPLOY_HOOK_URL != '' }}
-        run: curl -fsSL -X POST "${{ secrets.RAILWAY_DEPLOY_HOOK_URL }}"
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
-      - name: Deploy frontend (Vercel)
-        if: ${{ secrets.VERCEL_TOKEN != '' && secrets.VERCEL_ORG_ID != '' && secrets.VERCEL_PROJECT_ID != '' }}
+      # ── Backend → Render ────────────────────────────────────
+      - name: 🚀 Deploy Backend → Render
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          echo "Iniciando deploy backend no Render..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache": false}')
+
+          HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "✅ Deploy Render iniciado com sucesso (HTTP $HTTP_STATUS)"
+          else
+            echo "❌ Falha no deploy Render — HTTP $HTTP_STATUS"
+            echo "$BODY"
+            exit 1
+          fi
+
+      - name: ⏳ Aguardar deploy backend estabilizar
+        run: sleep 45
+
+      - name: 🏥 Health check backend pós-deploy
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_PROD_URL }}
+        run: |
+          MAX_ATTEMPTS=15
+          ATTEMPT=1
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "Health check $ATTEMPT/$MAX_ATTEMPTS..."
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_URL/api/v1/health" 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Backend saudável após deploy"
+              break
+            fi
+            if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+              echo "❌ Backend não respondeu (último HTTP: $STATUS)"
+              exit 1
+            fi
+            sleep 10
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+
+      # ── Frontend → Vercel ───────────────────────────────────
+      - name: Instalar Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: 🚀 Deploy Frontend → Vercel (produção)
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          npm i -g vercel@latest
           cd frontend
-          vercel pull --yes --environment=preview --token "$VERCEL_TOKEN"
-          vercel build --token "$VERCEL_TOKEN"
-          vercel deploy --prebuilt --token "$VERCEL_TOKEN"
+          vercel pull --yes --environment=production --token=$VERCEL_TOKEN
+          vercel build --prod --token=$VERCEL_TOKEN
+          DEPLOY_URL=$(vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN)
+          echo "✅ Deploy Vercel concluído: $DEPLOY_URL"
+
+      - name: 📢 Resumo do deploy
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "🎉 Deploy concluído com sucesso!"
+          else
+            echo "💥 Deploy falhou — verifique os logs acima"
+          fi
+          echo "  Branch: ${{ github.ref_name }}"
+          echo "  Commit: ${{ github.sha }}"
+          echo "  Autor:  ${{ github.actor }}"
+

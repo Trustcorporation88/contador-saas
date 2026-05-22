@@ -1,0 +1,159 @@
+# =============================================================
+# CONTADOR SAAS - Render.com PRODUÇÃO
+# Versão otimizada com health checks, scaling e env vars
+# Documentação: https://render.com/docs/yaml-spec
+# =============================================================
+
+services:
+  # ── Backend Node.js/Express (Render Web Service) ──────────
+  - type: web
+    name: contador-backend
+    env: docker
+    region: oregon           # us-west-2 — melhor latência para BR via CDN
+    plan: starter            # starter ($7/mês) → mude para standard em prod real
+    rootDir: backend
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    autoDeploy: true         # deploy automático ao push em main
+
+    # Build settings
+    buildCommand: ""         # gerenciado pelo Dockerfile
+
+    # Health check — Render verifica antes de rotear tráfego
+    healthCheckPath: /api/v1/health
+
+    # Scaling (disponível nos planos standard+)
+    scaling:
+      minInstances: 1
+      maxInstances: 3
+      targetMemoryPercent: 80
+      targetCPUPercent: 75
+
+    # Variáveis de ambiente
+    envVars:
+      # ── App ────────────────────────────────────────────────
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000          # Render expõe na porta 10000
+      - key: HOST
+        value: 0.0.0.0
+
+      # ── Banco — preencher no dashboard do Render ──────────
+      - key: DATABASE_URL
+        sync: false           # sync: false = secret, não versionado
+
+      # ── Redis — preencher no dashboard do Render ──────────
+      - key: REDIS_URL
+        sync: false
+      - key: REDIS_PASSWORD
+        sync: false
+
+      # ── Segurança — secrets obrigatórios ─────────────────
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 24h
+      - key: REFRESH_TOKEN_SECRET
+        sync: false
+      - key: REFRESH_TOKEN_EXPIRES_IN
+        value: 7d
+
+      # ── Cache TTLs ────────────────────────────────────────
+      - key: CACHE_ENABLED
+        value: 'true'
+      - key: CACHE_REPORTS_TTL
+        value: '300'
+      - key: CACHE_ACCOUNTS_TTL
+        value: '900'
+      - key: CACHE_TAXES_TTL
+        value: '3600'
+      - key: CACHE_DASHBOARD_TTL
+        value: '120'
+
+      # ── Rate limiting ─────────────────────────────────────
+      - key: RATE_LIMIT_WINDOW_MS
+        value: '60000'
+      - key: RATE_LIMIT_MAX_REQUESTS
+        value: '100'
+      - key: RATE_LIMIT_MAX_LOGIN
+        value: '5'
+
+      # ── CORS ──────────────────────────────────────────────
+      - key: CORS_ORIGIN
+        value: https://app.ocontador.app
+
+      # ── Logs ──────────────────────────────────────────────
+      - key: LOG_LEVEL
+        value: warn
+
+      # ── IA / Integrações (opcionais) ──────────────────────
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: DEEPSEEK_MODEL
+        value: deepseek-chat
+
+      # ── Email ─────────────────────────────────────────────
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: '587'
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+
+      # ── Sentry ────────────────────────────────────────────
+      - key: SENTRY_DSN
+        sync: false
+
+  # ── Frontend React (Render Static Site) ──────────────────
+  - type: web
+    name: contador-frontend
+    env: static
+    region: oregon
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    autoDeploy: true
+
+    # Redirects SPA — React Router
+    routes:
+      - type: rewrite
+        source: "/*"
+        destination: "/index.html"
+
+    headers:
+      # Cache assets versionados por 1 ano
+      - path: "/assets/*"
+        name: Cache-Control
+        value: "public, max-age=31536000, immutable"
+      # Não cacheia o HTML (SPA precisa do html atualizado)
+      - path: "/*"
+        name: Cache-Control
+        value: "no-cache, no-store, must-revalidate"
+      # Segurança
+      - path: "/*"
+        name: X-Frame-Options
+        value: DENY
+      - path: "/*"
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: "/*"
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+
+    envVars:
+      - key: VITE_API_BASE_URL
+        sync: false           # URL do backend Render em produção
+      - key: VITE_APP_VERSION
+        value: '1.0.0'
+
+# ── Banco de dados PostgreSQL gerenciado pelo Render ─────
+databases:
+  - name: contador-db
+    databaseName: contador_db
+    user: contador_user
+    plan: starter             # starter ($7/mês) → mude para standard em prod real
+    region: oregon
+    ipAllowList: []           # [] = apenas serviços internos do Render acessam

@@ -1,0 +1,170 @@
+name: Security Audit
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Toda segunda-feira às 9h UTC
+  workflow_dispatch:      # Acionamento manual
+  push:
+    paths:
+      - 'backend/package-lock.json'
+      - 'frontend/package-lock.json'
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # ────────────────────────────────────────────────────────────
+  # JOB 1: Auditoria de dependências npm
+  # ────────────────────────────────────────────────────────────
+  npm-audit:
+    name: 🔒 npm audit (backend + frontend)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Instalar dependências backend
+        run: cd backend && npm ci --prefer-offline
+
+      - name: Auditoria de segurança backend
+        id: backend-audit
+        run: |
+          cd backend
+          echo "## Backend npm audit" >> $GITHUB_STEP_SUMMARY
+          if npm audit --audit-level=high --json > audit-backend.json 2>&1; then
+            echo "✅ Backend: sem vulnerabilidades críticas ou altas" >> $GITHUB_STEP_SUMMARY
+          else
+            VULNS=$(cat audit-backend.json | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
+          meta=d.get('metadata',{}).get('vulnerabilities',{})
+          print(f'High: {meta.get(\"high\",0)}, Critical: {meta.get(\"critical\",0)}')
+          " 2>/dev/null || echo "parse error")
+            echo "❌ Backend: vulnerabilidades encontradas — $VULNS" >> $GITHUB_STEP_SUMMARY
+            npm audit --audit-level=high
+            exit 1
+          fi
+
+      - name: Instalar dependências frontend
+        run: cd frontend && npm ci --prefer-offline
+
+      - name: Auditoria de segurança frontend
+        id: frontend-audit
+        run: |
+          cd frontend
+          echo "## Frontend npm audit" >> $GITHUB_STEP_SUMMARY
+          if npm audit --audit-level=high --json > audit-frontend.json 2>&1; then
+            echo "✅ Frontend: sem vulnerabilidades críticas ou altas" >> $GITHUB_STEP_SUMMARY
+          else
+            VULNS=$(cat audit-frontend.json | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
+          meta=d.get('metadata',{}).get('vulnerabilities',{})
+          print(f'High: {meta.get(\"high\",0)}, Critical: {meta.get(\"critical\",0)}')
+          " 2>/dev/null || echo "parse error")
+            echo "❌ Frontend: vulnerabilidades encontradas — $VULNS" >> $GITHUB_STEP_SUMMARY
+            npm audit --audit-level=high
+            exit 1
+          fi
+
+      - name: Upload relatórios de auditoria
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-reports
+          path: |
+            backend/audit-backend.json
+            frontend/audit-frontend.json
+          retention-days: 30
+
+  # ────────────────────────────────────────────────────────────
+  # JOB 2: Análise estática de segurança (SAST)
+  # ────────────────────────────────────────────────────────────
+  sast-scan:
+    name: 🔍 SAST — Análise estática de segurança
+    runs-on: ubuntu-latest
+
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Inicializar CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript, typescript
+          config-file: ./.github/codeql/codeql-config.yml
+          queries: security-and-quality
+
+      - name: Executar análise CodeQL
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"
+
+  # ────────────────────────────────────────────────────────────
+  # JOB 3: Verificação de secrets expostos
+  # ────────────────────────────────────────────────────────────
+  secret-scan:
+    name: 🔑 Scan de secrets expostos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # histórico completo para detectar secrets antigos
+
+      - name: Scan com TruffleHog
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+          extra_args: --debug --only-verified
+
+  # ────────────────────────────────────────────────────────────
+  # JOB 4: Verificação de licenças
+  # ────────────────────────────────────────────────────────────
+  license-check:
+    name: 📄 Verificação de licenças
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Instalar license-checker
+        run: npm install -g license-checker
+
+      - name: Verificar licenças backend
+        run: |
+          cd backend && npm ci --prefer-offline
+          echo "### Licenças Backend" >> $GITHUB_STEP_SUMMARY
+          license-checker --production \
+            --excludeLicenses "MIT,ISC,BSD-2-Clause,BSD-3-Clause,Apache-2.0,CC0-1.0,Unlicense,0BSD,Python-2.0" \
+            --failOn "GPL;LGPL;AGPL" \
+            --summary >> $GITHUB_STEP_SUMMARY || true
+
+      - name: Verificar licenças frontend
+        run: |
+          cd frontend && npm ci --prefer-offline
+          echo "### Licenças Frontend" >> $GITHUB_STEP_SUMMARY
+          license-checker --production \
+            --excludeLicenses "MIT,ISC,BSD-2-Clause,BSD-3-Clause,Apache-2.0,CC0-1.0,Unlicense,0BSD" \
+            --failOn "GPL;LGPL;AGPL" \
+            --summary >> $GITHUB_STEP_SUMMARY || true

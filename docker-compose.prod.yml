@@ -1,0 +1,289 @@
+# =============================================================
+# CONTADOR SAAS - Docker Compose PRODUÇÃO
+# Versão melhorada com Nginx, redes isoladas, resource limits,
+# volumes persistentes e labels de monitoramento
+# =============================================================
+
+version: '3.9'
+
+# --------------- NETWORKS ---------------
+networks:
+  frontend_net:
+    driver: bridge
+    labels:
+      - "com.contador.network=frontend"
+  backend_net:
+    driver: bridge
+    labels:
+      - "com.contador.network=backend"
+  db_net:
+    driver: bridge
+    labels:
+      - "com.contador.network=database"
+
+# --------------- VOLUMES ---------------
+volumes:
+  postgres_data:
+    driver: local
+    labels:
+      - "com.contador.volume=postgres"
+  redis_data:
+    driver: local
+    labels:
+      - "com.contador.volume=redis"
+  nginx_logs:
+    driver: local
+  app_logs:
+    driver: local
+
+# --------------- COMMON ANCHORS ---------------
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+    labels: "service"
+
+x-restart: &default-restart
+  restart: unless-stopped
+
+# =============================================================
+#  SERVICES
+# =============================================================
+services:
+
+  # ── PostgreSQL 16 ──────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: contador_postgres_prod
+    <<: *default-restart
+    networks:
+      - db_net
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-contador_db}
+      POSTGRES_USER: ${POSTGRES_USER:-contador_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD é obrigatório}
+      PGDATA: /var/lib/postgresql/data/pgdata
+      # Performance tuning
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./001_create_accounts.sql:/docker-entrypoint-initdb.d/001_create_accounts.sql:ro
+      - ./002_create_journal_tables.sql:/docker-entrypoint-initdb.d/002_create_journal_tables.sql:ro
+      - ./003_create_audit_triggers.sql:/docker-entrypoint-initdb.d/003_create_audit_triggers.sql:ro
+      - ./004_create_companies_users.sql:/docker-entrypoint-initdb.d/004_create_companies_users.sql:ro
+      - ./005_create_documents_attachments.sql:/docker-entrypoint-initdb.d/005_create_documents_attachments.sql:ro
+      - ./006_create_tax_tables.sql:/docker-entrypoint-initdb.d/006_create_tax_tables.sql:ro
+      - ./007_create_access_audit.sql:/docker-entrypoint-initdb.d/007_create_access_audit.sql:ro
+      - ./008_create_nfe_tables.sql:/docker-entrypoint-initdb.d/008_create_nfe_tables.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-contador_user} -d ${POSTGRES_DB:-contador_db}"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    logging: *default-logging
+    labels:
+      - "com.contador.service=postgres"
+      - "com.contador.tier=database"
+      - "com.contador.env=production"
+      - "prometheus.io/scrape=true"
+      - "prometheus.io/port=5432"
+
+  # ── Redis 7 ───────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: contador_redis_prod
+    <<: *default-restart
+    networks:
+      - db_net
+      - backend_net
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD é obrigatório}
+      --maxmemory ${REDIS_MAXMEMORY:-256mb}
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+      --appendonly yes
+      --appendfsync everysec
+      --no-appendfsync-on-rewrite yes
+      --auto-aof-rewrite-percentage 100
+      --auto-aof-rewrite-min-size 64mb
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 64M
+    logging: *default-logging
+    labels:
+      - "com.contador.service=redis"
+      - "com.contador.tier=cache"
+      - "com.contador.env=production"
+
+  # ── Backend Node.js ────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+      args:
+        NODE_ENV: production
+    image: contador-backend:${APP_VERSION:-latest}
+    container_name: contador_backend_prod
+    <<: *default-restart
+    networks:
+      - backend_net
+      - db_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ./backend/.env.production
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-contador_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-contador_db}
+      # Redis (com senha)
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DB: "0"
+      # Cache TTLs
+      CACHE_ENABLED: "true"
+      CACHE_REPORTS_TTL: "300"
+      CACHE_ACCOUNTS_TTL: "900"
+      CACHE_TAXES_TTL: "3600"
+      CACHE_DASHBOARD_TTL: "120"
+      # Rate limiting
+      RATE_LIMIT_WINDOW_MS: "60000"
+      RATE_LIMIT_MAX_REQUESTS: "100"
+      RATE_LIMIT_MAX_LOGIN: "5"
+      # Logs
+      LOG_LEVEL: ${LOG_LEVEL:-warn}
+    volumes:
+      - app_logs:/var/log/contador
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging: *default-logging
+    labels:
+      - "com.contador.service=backend"
+      - "com.contador.tier=api"
+      - "com.contador.env=production"
+      - "prometheus.io/scrape=true"
+      - "prometheus.io/port=3000"
+      - "prometheus.io/path=/api/v1/metrics"
+
+  # ── Frontend React (build estático) ──────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-https://api.ocontador.app/api/v1}
+        VITE_APP_VERSION: ${APP_VERSION:-1.0.0}
+    image: contador-frontend:${APP_VERSION:-latest}
+    container_name: contador_frontend_prod
+    <<: *default-restart
+    networks:
+      - frontend_net
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80/health.txt || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
+    logging: *default-logging
+    labels:
+      - "com.contador.service=frontend"
+      - "com.contador.tier=web"
+      - "com.contador.env=production"
+
+  # ── Nginx Reverse Proxy ────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: contador_nginx_prod
+    <<: *default-restart
+    networks:
+      - frontend_net
+      - backend_net
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t && wget -qO- http://localhost/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
+    logging: *default-logging
+    labels:
+      - "com.contador.service=nginx"
+      - "com.contador.tier=proxy"
+      - "com.contador.env=production"
