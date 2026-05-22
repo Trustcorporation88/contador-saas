@@ -41,6 +41,6 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
 /** Full-page loading overlay */
 export const PageLoader: React.FC = () => (
   <div className="flex h-screen w-screen items-center justify-center bg-gray-50">
-    <LoadingSpinner size="lg" label="Carregando Contador SaaS..." />
+    <LoadingSpinner size="lg" label="Carregando Pro Contador..." />
   </div>
 );

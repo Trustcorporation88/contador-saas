@@ -501,6 +501,20 @@ export class AuthService {
         throw new InvalidTokenError('Token does not belong to user');
       }
 
+      // Adiciona token ao blacklist
+      const jti = (decoded as any).jti;
+      if (jti) {
+        const { addToBlacklist } = require('./cache/tokenBlacklist');
+        await addToBlacklist(
+          jti,
+          userId,
+          decoded.exp,
+          'logout',
+          { email: decoded.email, companyId: decoded.companyId }
+        );
+        logger.info(`Refresh token blacklisted on logout`, { userId, jti });
+      }
+
       const storedToken = this.findRefreshTokenByUserAndHash(userId, refreshToken);
       if (storedToken) {
         this.deleteRefreshToken(storedToken.id);

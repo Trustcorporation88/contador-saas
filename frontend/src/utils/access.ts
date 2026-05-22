@@ -22,6 +22,7 @@ export function canAccessPath(role: UserRole | undefined, path: string): boolean
   if (!role) return false;
 
   if (path === '/cliente') return CLIENT_ACCESS.includes(role);
+  if (path === '/servicos') return SETTINGS_ACCESS.includes(role);
   if (path === '/configuracoes') return SETTINGS_ACCESS.includes(role);
   if (path === '/auditoria') return AUDIT_ACCESS.includes(role);
   if (path === '/impostos') return TAX_ACCESS.includes(role);

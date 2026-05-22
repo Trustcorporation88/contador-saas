@@ -3,6 +3,8 @@ import { LogOut, User as UserIcon, ChevronDown, PanelLeft, Sparkles } from 'luci
 import { useState, useRef, useEffect } from 'react';
 import { useAuthStore } from '../../store/authStore';
 import { AuthService } from '../../services/authService';
+import { PUBLIC_ACCESS_ENABLED } from '../../config/publicAccess';
+import { getOperationalStatusMeta, getServiceDefinition } from '../../config/serviceCatalog';
 
 // ─── Breadcrumb map ───────────────────────────────────────────────────────────
 
@@ -18,6 +20,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/relatorios/outros':  'Outros Relatórios',
   '/impostos':           'Apuração de Impostos',
   '/auditoria':          'Auditoria & Logs',
+  '/servicos':           'Guia Operacional',
   '/configuracoes':      'Configurações',
   '/saude':             'Saúde Financeira',
   '/simulador':         'Simulador Fiscal',
@@ -53,6 +56,8 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
   };
 
   const pageTitle = resolvePageTitle(location.pathname);
+  const service = getServiceDefinition(location.pathname);
+  const serviceStatus = service ? getOperationalStatusMeta(service.status) : null;
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -88,9 +93,11 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
           <div className="hidden rounded-2xl border border-primary-100 bg-primary-50 px-3 py-2 text-right sm:block">
             <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-primary-700/70">
               <Sparkles className="h-3.5 w-3.5" />
-              Operação ativa
+              {PUBLIC_ACCESS_ENABLED ? 'Modo demo' : 'Modo real'}
             </div>
-            <p className="mt-1 text-sm font-semibold text-ink-800">Estrutura contábil em produção</p>
+            <p className="mt-1 text-sm font-semibold text-ink-800">
+              {serviceStatus ? `${serviceStatus.label} · ${service?.title}` : 'Estrutura contábil ativa'}
+            </p>
           </div>
 
           <div className="relative" ref={menuRef}>
@@ -125,13 +132,15 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
                   <UserIcon className="h-4 w-4" />
                   Meu Perfil
                 </button>
-                <button
-                  onClick={handleLogout}
-                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-600 transition hover:bg-red-50"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Sair
-                </button>
+                {!PUBLIC_ACCESS_ENABLED && (
+                  <button
+                    onClick={handleLogout}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-600 transition hover:bg-red-50"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sair
+                  </button>
+                )}
               </div>
             )}
           </div>

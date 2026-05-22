@@ -2,6 +2,7 @@
  * Account Controller
  * Handlers HTTP para endpoints de plano de contas
  * Implementa autenticação, autorização e manipulação de requisições/respostas
+ * Com cache Redis para otimização de performance
  */
 
 import { Request, Response } from 'express';
@@ -14,6 +15,8 @@ import {
   AccountTypeEnum,
   TaxCodeEnum,
 } from '../models/dtos/accountDTO';
+import cacheService, { TTL_CONFIG } from '../services/cache/cacheService';
+import CacheKeys from '../services/cache/cacheKeys';
 
 /**
  * Account Controller - Handlers para endpoints de contas
@@ -24,6 +27,7 @@ export class AccountController {
    * GET /companies/:companyId/accounts
    * Listar contas com filtros, paginação e opção de hierarquia
    * Acesso: Todos os usuários (isolamento por empresa)
+   * Cache: 15 minutos
    *
    * Query params:
    * - page: número da página (default: 1)
@@ -58,7 +62,25 @@ export class AccountController {
       if (parent_code) filters.parent_code = parent_code as string;
       if (tax_code) filters.tax_code = tax_code as TaxCodeEnum;
 
+      // Determinar cache key baseado em hierarchy
+      const cacheKey = filters.hierarchy 
+        ? CacheKeys.accountsTree(companyId)
+        : CacheKeys.accountsList(companyId, filters);
+
+      // Try cache first
+      const cached = await cacheService.get(cacheKey);
+      if (cached) {
+        logger.info('Cache HIT - Accounts List', { companyId, hierarchy: filters.hierarchy, key: cacheKey });
+        res.status(200).json(cached);
+        return;
+      }
+
+      // Cache MISS - fetch from database
+      logger.info('Cache MISS - Accounts List', { companyId, hierarchy: filters.hierarchy, key: cacheKey });
       const result = await AccountService.list(companyId, filters);
+
+      // Store in cache (15 minutos)
+      await cacheService.set(cacheKey, result, TTL_CONFIG.ACCOUNTS);
 
       res.status(200).json(result);
       logger.info(`Listed accounts for company ${companyId}`, {
@@ -83,6 +105,7 @@ export class AccountController {
    * POST /companies/:companyId/accounts
    * Criar nova conta contábil
    * Acesso: ACCOUNTANT, ADMIN
+   * INVALIDATES CACHE: Invalida todos os caches de accounts da empresa
    *
    * Body:
    * {
@@ -110,6 +133,14 @@ export class AccountController {
       // TODO: Verificar autorização (ACCOUNTANT ou ADMIN)
 
       const account = await AccountService.create(companyId, data);
+
+      // INVALIDATE CACHE: Remove todos os caches de accounts desta empresa
+      const invalidatedCount = await cacheService.invalidateAccounts(companyId);
+      logger.info('Cache invalidated after account creation', { 
+        companyId, 
+        accountId: account.id,
+        invalidatedKeys: invalidatedCount 
+      });
 
       res.status(201).json(account);
       logger.info(`Account created: ${account.id} (${account.code}) in company ${companyId}`);
@@ -166,6 +197,7 @@ export class AccountController {
    * Atualizar conta contábil
    * Acesso: ACCOUNTANT, ADMIN
    * IMUTÁVEL: code (não pode ser alterado)
+   * INVALIDATES CACHE: Invalida todos os caches de accounts da empresa
    *
    * Body:
    * {
@@ -192,6 +224,14 @@ export class AccountController {
 
       const account = await AccountService.update(accountId, companyId, data);
 
+      // INVALIDATE CACHE
+      const invalidatedCount = await cacheService.invalidateAccounts(companyId);
+      logger.info('Cache invalidated after account update', { 
+        companyId, 
+        accountId,
+        invalidatedKeys: invalidatedCount 
+      });
+
       res.status(200).json(account);
       logger.info(`Account updated: ${accountId} (${account.code})`);
     } catch (error) {
@@ -214,6 +254,7 @@ export class AccountController {
    * DELETE /companies/:companyId/accounts/:accountId
    * Deletar conta (soft delete)
    * Acesso: ADMIN only
+   * INVALIDATES CACHE: Invalida todos os caches de accounts da empresa
    *
    * Responses:
    * - 204: Deletado com sucesso (vazio)
@@ -229,6 +270,14 @@ export class AccountController {
       // TODO: Verificar autorização (ADMIN only)
 
       await AccountService.delete(accountId, companyId);
+
+      // INVALIDATE CACHE
+      const invalidatedCount = await cacheService.invalidateAccounts(companyId);
+      logger.info('Cache invalidated after account deletion', { 
+        companyId, 
+        accountId,
+        invalidatedKeys: invalidatedCount 
+      });
 
       res.status(204).send();
       logger.info(`Account deleted: ${accountId}`);

@@ -58,6 +58,18 @@ services:
       REFRESH_TOKEN_SECRET: change-me-in-prod-refresh
       DEEPSEEK_API_KEY: ''
       DEEPSEEK_MODEL: deepseek-chat
+      # Redis Configuration
+      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ''
+      REDIS_DB: 0
+      # Cache Configuration
+      CACHE_ENABLED: 'true'
+      CACHE_REPORTS_TTL: 300
+      CACHE_ACCOUNTS_TTL: 900
+      CACHE_TAXES_TTL: 3600
+      CACHE_DASHBOARD_TTL: 120
     ports:
       - "3000:3000"
     restart: unless-stopped

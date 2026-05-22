@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import ServiceGuidePanel from '../services/ServiceGuidePanel';
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -18,6 +19,7 @@ export default function AppLayout() {
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <Header onToggleSidebar={() => setSidebarOpen((open) => !open)} />
+          <ServiceGuidePanel />
           <main className="flex-1 overflow-y-auto animate-fade-in">
             <div className="mx-auto min-h-full w-full max-w-[1680px]">
               <Outlet />

@@ -59,11 +59,11 @@ function DimensionCard({ dim }: { dim: HealthDimension }) {
   const badge = STATUS_BADGE[dim.status];
 
   return (
-    <div className="card card-body">
-      <div className="flex items-start justify-between mb-3">
-        <div>
+    <div className="card card-body border-white/80 bg-white/90">
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="min-w-0">
           <p className="text-sm font-semibold text-gray-800">{dim.label}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-0.5 tabular-nums">{dim.value}</p>
+          <p className="mt-1 text-[clamp(2rem,3vw,2.8rem)] font-black leading-none tracking-[-0.04em] text-gray-900 tabular-nums">{dim.value}</p>
         </div>
         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${badge.cls}`}>
           {badge.label}
@@ -78,8 +78,8 @@ function DimensionCard({ dim }: { dim: HealthDimension }) {
         />
       </div>
 
-      <div className="flex items-center justify-between text-xs text-gray-500">
-        <span className="flex items-center gap-1">
+      <div className="flex items-start justify-between gap-3 text-xs text-gray-500">
+        <span className="flex items-start gap-1.5 leading-relaxed">
           <Info className="h-3 w-3 flex-shrink-0" />
           {dim.description}
         </span>
@@ -122,7 +122,7 @@ function Recommendations({ dims }: { dims: HealthDimension[] }) {
     <div className="card card-body space-y-3">
       <div className="flex items-center gap-2 mb-1">
         <AlertTriangle className="h-4 w-4 text-amber-500" />
-        <p className="text-sm font-semibold text-gray-800">Recomendações O Contador</p>
+        <p className="text-sm font-semibold text-gray-800">Recomendações Pro Contador</p>
       </div>
       {issues.map((d) => (
         <div key={d.label} className="flex items-start gap-3 py-2 border-t border-gray-100 first:border-0 first:pt-0">
@@ -178,10 +178,10 @@ export default function SaudePage() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl mx-auto">
+    <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6 lg:p-8">
 
       {/* Header */}
-      <div>
+      <div className="glass-strip px-5 py-5 sm:px-6">
         <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
           <Activity className="h-6 w-6 text-primary-600" />
           Score de Saúde Financeira
@@ -189,7 +189,7 @@ export default function SaudePage() {
         <p className="text-sm text-gray-500 mt-1">
           Diagnóstico automático da saúde financeira da sua empresa — atualizado a cada lançamento.
           <span className="ml-2 inline-flex items-center gap-1 text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full border border-primary-200">
-            ✦ Exclusivo O Contador
+            ✦ Exclusivo Pro Contador
           </span>
         </p>
       </div>
@@ -234,7 +234,7 @@ export default function SaudePage() {
                         style={{ width: `${(d.score / d.maxScore) * 100}%`, transition: 'width 0.8s ease' }}
                       />
                     </div>
-                    <span className="font-mono w-12 text-right text-gray-500">{d.score}/250</span>
+                    <span className="w-14 text-right font-mono text-gray-500">{d.score}/250</span>
                   </div>
                 ))}
               </div>

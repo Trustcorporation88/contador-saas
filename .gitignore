@@ -75,3 +75,5 @@ uploads/
 
 # Exceção: manter arquivos de exemplo
 !plano-contas-padrao.json
+.vercel
+.env*.local

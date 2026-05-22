@@ -1,5 +1,4 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
-import helmet from 'helmet';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
@@ -7,6 +6,9 @@ import { errorHandler } from './middleware/errorHandler';
 import { requestLogger, getRequestMetricsSnapshot } from './middleware/requestLogger';
 import { auditMiddleware } from './middleware/auditMiddleware';
 import { debugLoggerMiddleware } from './middleware/debugLogger';
+import { rateLimiter } from './middleware/rateLimiter';
+import { securityMiddleware } from './middleware/security';
+import { trackRequest } from './controllers/healthController';
 import routes from './routes';
 import { envConfig } from './config/env';
 
@@ -20,9 +22,6 @@ app.disable('x-powered-by');
 app.set('trust proxy', 1);
 
 const mutatingMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-const requestWindowMs = envConfig.rateLimitWindowMs;
-const requestLimit = envConfig.rateLimitRequests;
-const requestCounters = new Map<string, { count: number; resetAt: number }>();
 const allowedOrigins = envConfig.corsOrigin
   .split(',')
   .map((item) => item.trim())
@@ -52,8 +51,8 @@ const sanitizeValue = (value: unknown): unknown => {
   return value;
 };
 
-// Security middleware
-app.use(helmet());
+// Security middleware (Helmet.js + custom headers)
+app.use(securityMiddleware());
 
 // CORS configuration
 app.use(
@@ -61,6 +60,9 @@ app.use(
     origin: allowedOrigins,
     credentials: envConfig.corsCredentials,
     optionsSuccessStatus: 200,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    maxAge: 86400, // Cache preflight 24h
   }),
 );
 
@@ -92,40 +94,21 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   next();
 });
 
-// OWASP A04/A10: rate limit global simples por IP.
-app.use((req: Request, res: Response, next: NextFunction) => {
-  if (!envConfig.enableRateLimiting) return next();
-
-  const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
-    || req.socket.remoteAddress
-    || 'unknown';
-
-  const now = Date.now();
-  const bucket = requestCounters.get(ip);
-
-  if (!bucket || bucket.resetAt <= now) {
-    requestCounters.set(ip, { count: 1, resetAt: now + requestWindowMs });
-    return next();
-  }
-
-  if (bucket.count >= requestLimit) {
-    const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
-    res.setHeader('Retry-After', retryAfter.toString());
-    return res.status(429).json({
-      error: 'Too Many Requests',
-      code: 'RATE_LIMIT_EXCEEDED',
-      message: 'Global rate limit exceeded. Please try again later.',
-    });
-  }
-
-  bucket.count += 1;
-  requestCounters.set(ip, bucket);
-  return next();
-});
+// Multi-tier rate limiting (global, IP, user, tenant, endpoint-specific)
+app.use(rateLimiter());
 
 // Request logging
 app.use(requestLogger);
 app.use(debugLoggerMiddleware);
+
+// Track API metrics para health check
+app.use((req: Request, res: Response, next: NextFunction) => {
+  res.on('finish', () => {
+    const isError = res.statusCode >= 500;
+    trackRequest(isError);
+  });
+  next();
+});
 
 // DEBUG: Log all requests to /api/v1/companies
 app.use((req: Request, _res: Response, next: NextFunction) => {

@@ -11,6 +11,7 @@ import copilotoRoutes from './copiloto';
 import documentosFiscaisRoutes from './documentosFiscais';
 import contasReceberRoutes from './contasReceber';
 import contasPagarRoutes from './contasPagar';
+import healthRoutes from './health';
 
 /**
  * Main API v1 router
@@ -31,6 +32,7 @@ router.use('/copiloto', copilotoRoutes);
 router.use('/documentos', documentosFiscaisRoutes);
 router.use('/contas-receber', contasReceberRoutes);
 router.use('/contas-pagar', contasPagarRoutes);
+router.use('/health', healthRoutes);
 
 // API status
 router.get('/status', (_req, res) => {

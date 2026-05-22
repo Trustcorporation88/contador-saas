@@ -9,6 +9,7 @@ import { envConfig } from '../config/env';
 import { ERROR_CODES, HTTP_STATUS } from '../config/constants';
 import { logger } from './requestLogger';
 import { JWTPayload } from '../types/auth';
+import { validateToken as validateTokenBlacklist } from '../services/cache/tokenBlacklist';
 
 /**
  * Extend Express Request with authenticated user data
@@ -87,22 +88,88 @@ export function authenticateToken(
 
       const payload = decoded as JWTPayload & { mfaRequired?: boolean };
 
-      req.user = {
-        id: payload.sub,
-        email: payload.email,
-        role: payload.role,
-        companyId: payload.companyId,
-        mfaRequired: payload.mfaRequired,
-      };
+      // Check token blacklist (revoked tokens)
+      const jti = (payload as any).jti || '';
+      if (jti) {
+        validateTokenBlacklist(jti, payload.sub, payload.iat)
+          .then((result) => {
+            if (!result.valid) {
+              logger.warn('Blacklisted token attempted', {
+                userId: payload.sub,
+                reason: result.reason,
+                jti,
+              });
+              res.status(HTTP_STATUS.UNAUTHORIZED).json({
+                error: 'Token Revoked',
+                code: 'TOKEN_REVOKED',
+                message: 'This token has been revoked. Please login again.',
+                reason: result.reason,
+              });
+              return;
+            }
 
-      req.tokenMetadata = {
-        issuedAt: payload.iat,
-        expiresAt: payload.exp,
-        isMFAToken: !!payload.mfaRequired,
-      };
+            // Token válido e não blacklisted
+            req.user = {
+              id: payload.sub,
+              email: payload.email,
+              role: payload.role,
+              companyId: payload.companyId,
+              mfaRequired: payload.mfaRequired,
+            };
 
-      logger.debug('Token validated', { userId: payload.sub });
-      next();
+            req.tokenMetadata = {
+              issuedAt: payload.iat,
+              expiresAt: payload.exp,
+              isMFAToken: !!payload.mfaRequired,
+            };
+
+            logger.debug('Token validated', { userId: payload.sub });
+            next();
+          })
+          .catch((err) => {
+            logger.error('Token blacklist check failed', {
+              error: err.message,
+              userId: payload.sub,
+            });
+            // Fail open: se Redis falhar, permite request (degraded mode)
+            req.user = {
+              id: payload.sub,
+              email: payload.email,
+              role: payload.role,
+              companyId: payload.companyId,
+              mfaRequired: payload.mfaRequired,
+            };
+
+            req.tokenMetadata = {
+              issuedAt: payload.iat,
+              expiresAt: payload.exp,
+              isMFAToken: !!payload.mfaRequired,
+            };
+
+            logger.debug('Token validated (blacklist check bypassed)', {
+              userId: payload.sub,
+            });
+            next();
+          });
+      } else {
+        // Token sem JTI (legacy tokens)
+        logger.warn('Token without JTI', { userId: payload.sub });
+        req.user = {
+          id: payload.sub,
+          email: payload.email,
+          role: payload.role,
+          companyId: payload.companyId,
+          mfaRequired: payload.mfaRequired,
+        };
+
+        req.tokenMetadata = {
+          issuedAt: payload.iat,
+          expiresAt: payload.exp,
+          isMFAToken: !!payload.mfaRequired,
+        };
+
+        next();
+      }
     });
   } catch (error) {
     logger.error('Authentication middleware error', {
@@ -187,20 +254,26 @@ export function authorize(...allowedRoles: string[]) {
 }
 
 /**
- * Generate JWT token
+ * Generate JWT token with JTI (unique identifier for revocation)
  */
 export function generateToken(payload: Record<string, unknown>): string {
+  const { v4: uuidv4 } = require('crypto');
+  
   return jwt.sign(payload, envConfig.jwt.secret, {
+    jwtid: uuidv4(), // Unique identifier para blacklist
     expiresIn: envConfig.jwt.expiry as any,
     algorithm: envConfig.jwt.algorithm as any,
   });
 }
 
 /**
- * Generate refresh token
+ * Generate refresh token with JTI
  */
 export function generateRefreshToken(payload: Record<string, unknown>): string {
+  const { v4: uuidv4 } = require('crypto');
+  
   return jwt.sign(payload, envConfig.jwt.refreshSecret, {
+    jwtid: uuidv4(), // Unique identifier para blacklist
     expiresIn: envConfig.jwt.refreshExpiry as any,
     algorithm: envConfig.jwt.algorithm as any,
   });

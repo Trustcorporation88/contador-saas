@@ -3,38 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, CalendarDays, CircleDollarSign, FileText, RefreshCw, TrendingUp, Wallet } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuthStore } from '../../store/authStore';
+import { KpiCard } from '../../components/ui/KpiCard';
 import { ReportService, type ClientPeriodSummaryReport } from '../../services/reportService';
-
-function brl(value: number) {
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
+import { formatCurrencyBRL, formatSignedCurrencyDelta } from '../../utils/formatters';
 
 function deltaLabel(current: number, previous: number) {
-  const delta = current - previous;
-  const signal = delta >= 0 ? '+' : '-';
-  return `${signal}${brl(Math.abs(delta))}`;
-}
-
-function SummaryCard({
-  label,
-  value,
-  comparison,
-  positive,
-}: {
-  label: string;
-  value: string;
-  comparison: string;
-  positive?: boolean;
-}) {
-  return (
-    <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">{label}</p>
-      <p className="mt-3 text-3xl font-bold text-gray-900">{value}</p>
-      <p className={clsx('mt-2 text-xs font-semibold', positive === false ? 'text-red-600' : 'text-emerald-600')}>
-        vs período anterior: {comparison}
-      </p>
-    </div>
-  );
+  return formatSignedCurrencyDelta(current - previous, { compact: true });
 }
 
 function AlertList({ summary }: { summary?: ClientPeriodSummaryReport }) {
@@ -132,28 +106,32 @@ export default function ClientePage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard
+        <KpiCard
           label="Faturamento do mês"
-          value={brl(monthly?.metrics.revenue ?? 0)}
-          comparison={deltaLabel(monthly?.metrics.revenue ?? 0, monthly?.comparison.revenue ?? 0)}
+          value={formatCurrencyBRL(monthly?.metrics.revenue ?? 0, { compact: true })}
+          detail={formatCurrencyBRL(monthly?.metrics.revenue ?? 0)}
+          footnote={`vs período anterior: ${deltaLabel(monthly?.metrics.revenue ?? 0, monthly?.comparison.revenue ?? 0)}`}
         />
-        <SummaryCard
+        <KpiCard
           label="Despesas do mês"
-          value={brl(monthly?.metrics.expenses ?? 0)}
-          comparison={deltaLabel(monthly?.metrics.expenses ?? 0, monthly?.comparison.expenses ?? 0)}
-          positive={false}
+          value={formatCurrencyBRL(monthly?.metrics.expenses ?? 0, { compact: true })}
+          detail={formatCurrencyBRL(monthly?.metrics.expenses ?? 0)}
+          footnote={`vs período anterior: ${deltaLabel(monthly?.metrics.expenses ?? 0, monthly?.comparison.expenses ?? 0)}`}
+          tone="negative"
         />
-        <SummaryCard
+        <KpiCard
           label="Resultado do mês"
-          value={brl(monthly?.metrics.net_income ?? 0)}
-          comparison={deltaLabel(monthly?.metrics.net_income ?? 0, monthly?.comparison.net_income ?? 0)}
-          positive={(monthly?.metrics.net_income ?? 0) >= 0}
+          value={formatCurrencyBRL(monthly?.metrics.net_income ?? 0, { compact: true })}
+          detail={formatCurrencyBRL(monthly?.metrics.net_income ?? 0)}
+          footnote={`vs período anterior: ${deltaLabel(monthly?.metrics.net_income ?? 0, monthly?.comparison.net_income ?? 0)}`}
+          tone={(monthly?.metrics.net_income ?? 0) >= 0 ? 'positive' : 'negative'}
         />
-        <SummaryCard
+        <KpiCard
           label="Caixa estrutural"
-          value={brl(monthly?.metrics.cash_position ?? 0)}
-          comparison={deltaLabel(monthly?.metrics.cash_position ?? 0, monthly?.comparison.cash_position ?? 0)}
-          positive={(monthly?.metrics.cash_position ?? 0) >= 0}
+          value={formatCurrencyBRL(monthly?.metrics.cash_position ?? 0, { compact: true })}
+          detail={formatCurrencyBRL(monthly?.metrics.cash_position ?? 0)}
+          footnote={`vs período anterior: ${deltaLabel(monthly?.metrics.cash_position ?? 0, monthly?.comparison.cash_position ?? 0)}`}
+          tone={(monthly?.metrics.cash_position ?? 0) >= 0 ? 'positive' : 'negative'}
         />
       </div>
 
@@ -171,18 +149,18 @@ export default function ClientePage() {
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Impostos apurados</p>
-                <p className="mt-2 text-lg font-semibold text-gray-900">{brl(monthly?.metrics.taxes_due ?? 0)}</p>
+                <p className="mt-2 text-lg font-semibold text-gray-900 tabular-nums">{formatCurrencyBRL(monthly?.metrics.taxes_due ?? 0)}</p>
                 <p className="mt-1 text-xs text-gray-500">Pendências: {monthly?.metrics.pending_tax_items ?? 0}</p>
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">A receber em aberto</p>
-                <p className="mt-2 text-lg font-semibold text-gray-900">{brl(monthly?.metrics.open_receivables ?? 0)}</p>
-                <p className="mt-1 text-xs text-red-500">Vencido: {brl(monthly?.metrics.overdue_receivables ?? 0)}</p>
+                <p className="mt-2 text-lg font-semibold text-gray-900 tabular-nums">{formatCurrencyBRL(monthly?.metrics.open_receivables ?? 0)}</p>
+                <p className="mt-1 text-xs text-red-500">Vencido: {formatCurrencyBRL(monthly?.metrics.overdue_receivables ?? 0)}</p>
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">A pagar em aberto</p>
-                <p className="mt-2 text-lg font-semibold text-gray-900">{brl(monthly?.metrics.open_payables ?? 0)}</p>
-                <p className="mt-1 text-xs text-red-500">Vencido: {brl(monthly?.metrics.overdue_payables ?? 0)}</p>
+                <p className="mt-2 text-lg font-semibold text-gray-900 tabular-nums">{formatCurrencyBRL(monthly?.metrics.open_payables ?? 0)}</p>
+                <p className="mt-1 text-xs text-red-500">Vencido: {formatCurrencyBRL(monthly?.metrics.overdue_payables ?? 0)}</p>
               </div>
             </div>
           </div>
@@ -195,19 +173,19 @@ export default function ClientePage() {
             <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Faturamento</p>
-                <p className="mt-2 text-lg font-semibold text-gray-900">{brl(annual?.metrics.revenue ?? 0)}</p>
+                <p className="mt-2 text-lg font-semibold text-gray-900 tabular-nums">{formatCurrencyBRL(annual?.metrics.revenue ?? 0)}</p>
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Despesas</p>
-                <p className="mt-2 text-lg font-semibold text-gray-900">{brl(annual?.metrics.expenses ?? 0)}</p>
+                <p className="mt-2 text-lg font-semibold text-gray-900 tabular-nums">{formatCurrencyBRL(annual?.metrics.expenses ?? 0)}</p>
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Resultado</p>
-                <p className="mt-2 text-lg font-semibold text-gray-900">{brl(annual?.metrics.net_income ?? 0)}</p>
+                <p className="mt-2 text-lg font-semibold text-gray-900 tabular-nums">{formatCurrencyBRL(annual?.metrics.net_income ?? 0)}</p>
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Patrimônio líquido</p>
-                <p className="mt-2 text-lg font-semibold text-gray-900">{brl(annual?.metrics.equity_total ?? 0)}</p>
+                <p className="mt-2 text-lg font-semibold text-gray-900 tabular-nums">{formatCurrencyBRL(annual?.metrics.equity_total ?? 0)}</p>
               </div>
             </div>
             <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-600">
@@ -226,11 +204,11 @@ export default function ClientePage() {
             <div className="mt-4 space-y-3 text-sm text-gray-700">
               <div className="flex items-center justify-between">
                 <span>Ativo circulante</span>
-                <strong>{brl(monthly?.metrics.current_assets ?? 0)}</strong>
+                <strong className="tabular-nums">{formatCurrencyBRL(monthly?.metrics.current_assets ?? 0)}</strong>
               </div>
               <div className="flex items-center justify-between">
                 <span>Passivo circulante</span>
-                <strong>{brl(monthly?.metrics.current_liabilities ?? 0)}</strong>
+                <strong className="tabular-nums">{formatCurrencyBRL(monthly?.metrics.current_liabilities ?? 0)}</strong>
               </div>
               <div className="flex items-center justify-between">
                 <span>Última atualização</span>

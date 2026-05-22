@@ -3,6 +3,8 @@ import axios, {
   InternalAxiosRequestConfig,
 } from 'axios';
 import { useAuthStore } from '../store/authStore';
+import { PUBLIC_ACCESS_ENABLED } from './publicAccess';
+import { createDemoAdapter } from './demoApi';
 
 const baseUrlFromLegacy = import.meta.env.VITE_API_BASE_URL
   ? String(import.meta.env.VITE_API_BASE_URL).replace(/\/api\/v1\/?$/, '')
@@ -13,6 +15,7 @@ const BASE_URL = import.meta.env.VITE_API_URL || baseUrlFromLegacy || 'http://lo
 export const api = axios.create({
   baseURL: `${BASE_URL}/api/v1`,
   timeout: 30_000,
+  adapter: PUBLIC_ACCESS_ENABLED ? createDemoAdapter() : undefined,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -44,7 +47,9 @@ api.interceptors.response.use(
 
       const refreshToken = useAuthStore.getState().refreshToken;
       if (!refreshToken) {
-        useAuthStore.getState().logout();
+        if (!PUBLIC_ACCESS_ENABLED) {
+          useAuthStore.getState().logout();
+        }
         return Promise.reject(error);
       }
 
@@ -61,7 +66,9 @@ api.interceptors.response.use(
         }
         return api(originalRequest);
       } catch {
-        useAuthStore.getState().logout();
+        if (!PUBLIC_ACCESS_ENABLED) {
+          useAuthStore.getState().logout();
+        }
         return Promise.reject(error);
       }
     }

@@ -1,5 +1,6 @@
 import app from './app';
 import { envConfig } from './config/env';
+import { validateEnvironment } from './config/validateEnv';
 import { initializeDatabase } from './config/database';
 import { logger } from './middleware/requestLogger';
 import { BackupService } from './services/backupService';
@@ -15,6 +16,11 @@ const HOST = envConfig.host;
 
 async function startServer(): Promise<void> {
   try {
+    // Valida environment ANTES de qualquer coisa
+    console.log('Validating environment configuration...');
+    validateEnvironment();
+    console.log('✓ Environment validation passed');
+
     // Initialize database connection pool
     console.log('Initializing database connection pool...');
     await initializeDatabase();

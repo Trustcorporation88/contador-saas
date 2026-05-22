@@ -15,11 +15,11 @@ import {
 } from 'recharts';
 import { BarChart3, Download, RefreshCw, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
+import { KpiCard } from '../../components/ui/KpiCard';
 import { ReportService, downloadBlob } from '../../services/reportService';
+import { formatCurrencyBRL } from '../../utils/formatters';
 
-function brl(value: number) {
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
+const brl = formatCurrencyBRL;
 
 function brlAxis(value: number) {
   if (Math.abs(value) >= 1_000_000) return `R$${(value / 1_000_000).toFixed(1)}M`;
@@ -123,25 +123,29 @@ export default function FluxoCaixaPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Receita total</p>
-          <p className="mt-3 text-3xl font-bold text-gray-900">{brl(summary?.total_revenue ?? 0)}</p>
-        </div>
-        <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Despesa total</p>
-          <p className="mt-3 text-3xl font-bold text-gray-900">{brl(summary?.total_expenses ?? 0)}</p>
-        </div>
-        <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm">
-          <div className="flex items-center gap-2">
-            {netPositive ? <TrendingUp className="h-4 w-4 text-green-600" /> : <TrendingDown className="h-4 w-4 text-red-600" />}
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Saldo do período</p>
-          </div>
-          <p className={clsx('mt-3 text-3xl font-bold', netPositive ? 'text-green-700' : 'text-red-700')}>{brl(summary?.net_income ?? 0)}</p>
-        </div>
-        <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Caixa estrutural</p>
-          <p className="mt-3 text-3xl font-bold text-gray-900">{brl((summary?.current_assets ?? 0) - (summary?.current_liabilities ?? 0))}</p>
-        </div>
+        <KpiCard
+          label="Receita total"
+          value={brl(summary?.total_revenue ?? 0, { compact: true })}
+          detail={brl(summary?.total_revenue ?? 0)}
+        />
+        <KpiCard
+          label="Despesa total"
+          value={brl(summary?.total_expenses ?? 0, { compact: true })}
+          detail={brl(summary?.total_expenses ?? 0)}
+          tone="negative"
+        />
+        <KpiCard
+          label="Saldo do período"
+          value={brl(summary?.net_income ?? 0, { compact: true })}
+          detail={brl(summary?.net_income ?? 0)}
+          tone={netPositive ? 'positive' : 'negative'}
+          icon={netPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+        />
+        <KpiCard
+          label="Caixa estrutural"
+          value={brl((summary?.current_assets ?? 0) - (summary?.current_liabilities ?? 0), { compact: true })}
+          detail={brl((summary?.current_assets ?? 0) - (summary?.current_liabilities ?? 0))}
+        />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.7fr_1fr]">
@@ -180,20 +184,20 @@ export default function FluxoCaixaPage() {
         <div className="space-y-4">
           <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">A receber em aberto</p>
-            <p className="mt-2 text-2xl font-bold text-gray-900">{brl(summary?.open_receivables ?? 0)}</p>
+            <p className="mt-2 text-2xl font-bold text-gray-900 tabular-nums tracking-tight">{brl(summary?.open_receivables ?? 0)}</p>
             <p className="mt-2 text-xs text-red-500">Vencido: {brl(summary?.overdue_receivables ?? 0)}</p>
           </div>
           <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">A pagar em aberto</p>
-            <p className="mt-2 text-2xl font-bold text-gray-900">{brl(summary?.open_payables ?? 0)}</p>
+            <p className="mt-2 text-2xl font-bold text-gray-900 tabular-nums tracking-tight">{brl(summary?.open_payables ?? 0)}</p>
             <p className="mt-2 text-xs text-red-500">Vencido: {brl(summary?.overdue_payables ?? 0)}</p>
           </div>
           <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Relatórios básicos</p>
             <div className="mt-3 space-y-2 text-sm text-gray-700">
-              <div className="flex items-center justify-between"><span>Ativo circulante</span><strong>{brl(summary?.current_assets ?? 0)}</strong></div>
-              <div className="flex items-center justify-between"><span>Passivo circulante</span><strong>{brl(summary?.current_liabilities ?? 0)}</strong></div>
-              <div className="flex items-center justify-between"><span>Patrimônio líquido</span><strong>{brl(summary?.equity_total ?? 0)}</strong></div>
+              <div className="flex items-center justify-between"><span>Ativo circulante</span><strong className="tabular-nums">{brl(summary?.current_assets ?? 0)}</strong></div>
+              <div className="flex items-center justify-between"><span>Passivo circulante</span><strong className="tabular-nums">{brl(summary?.current_liabilities ?? 0)}</strong></div>
+              <div className="flex items-center justify-between"><span>Patrimônio líquido</span><strong className="tabular-nums">{brl(summary?.equity_total ?? 0)}</strong></div>
             </div>
           </div>
         </div>

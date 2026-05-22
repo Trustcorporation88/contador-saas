@@ -230,7 +230,7 @@ export default function CopilotoPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      text: 'Olá! Sou o **Copiloto O Contador** 🤖\n\nPosso responder perguntas sobre os dados financeiros da sua empresa em linguagem natural. Experimente perguntar algo!',
+      text: 'Olá! Sou o **Copiloto Pro Contador** 🤖\n\nPosso responder perguntas sobre os dados financeiros da sua empresa em linguagem natural. Experimente perguntar algo!',
       ts: Date.now(),
     },
   ]);
@@ -362,6 +362,7 @@ export default function CopilotoPage() {
           Perguntas em linguagem natural sobre seus dados financeiros.
           <span className="inline-flex items-center gap-1 text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full border border-primary-200">
             <Sparkles className="h-3 w-3" /> Exclusivo O Contador
+            <Sparkles className="h-3 w-3" /> Exclusivo Pro Contador
           </span>
           {modeLabel && (
             <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${modeLabel.cls}`}>

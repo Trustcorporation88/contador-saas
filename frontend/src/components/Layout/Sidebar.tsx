@@ -16,6 +16,7 @@ import {
   ChevronDown,
   ChevronRight,
   TrendingUp,
+  ClipboardList,
   HeartPulse,
   Sliders,
   GitCompareArrows,
@@ -58,6 +59,7 @@ const navItems: NavItem[] = [
   },
   { label: 'Apuração Impostos',  icon: Calculator,  path: '/impostos'      },
   { label: 'Auditoria & Logs',   icon: Shield,      path: '/auditoria'     },
+  { label: 'Guia Operacional',   icon: ClipboardList, path: '/servicos'    },
   { label: 'Configurações',      icon: Settings,    path: '/configuracoes' },
   // ── Módulos inovadores ──────────────────────────────────────────────────
   { label: 'Saúde Financeira',   icon: HeartPulse,  path: '/saude',        badge: '✦' },
@@ -122,7 +124,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <TrendingUp className="h-5 w-5 text-white" />
           </div>
           <div>
-            <p className="text-sm font-extrabold leading-tight tracking-tight text-white">O Contador</p>
+            <p className="text-sm font-extrabold leading-tight tracking-tight text-white">Pro Contador</p>
             <p className="text-[11px] uppercase tracking-[0.22em] text-white/50">Lei 6.404/76</p>
           </div>
         </div>

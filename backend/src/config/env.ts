@@ -55,7 +55,29 @@ interface EnvConfig {
   adminBootstrapPassword: string;
   adminBootstrapForceReset: boolean;
 
+  // Redis
+  redis: {
+    url: string;
+    host: string;
+    port: number;
+    password: string;
+    db: number;
+    maxRetries: number;
+    retryDelay: number;
+    enableOfflineQueue: boolean;
+    lazyConnect: boolean;
+  };
+
   // Cache
+  cache: {
+    enabled: boolean;
+    defaultTtl: number;
+    reportsTtl: number;
+    accountsTtl: number;
+    taxesTtl: number;
+    dashboardTtl: number;
+  };
+  // Legacy cache config (deprecated, use cache.*)
   cacheDefaultTtl: number;
   cacheMaxKeys: number;
 
@@ -120,8 +142,26 @@ const envSchema = joi.object({
   ADMIN_BOOTSTRAP_EMAIL: joi.string().email().default('admin@contador.dev'),
   ADMIN_BOOTSTRAP_PASSWORD: joi.string().allow('').default(''),
   ADMIN_BOOTSTRAP_FORCE_RESET: joi.boolean().default(false),
-  CACHE_DEFAULT_TTL: joi.number().default(3600),
-  CACHE_MAX_KEYS: joi.number().default(1000),
+  // Redis Configuration
+  REDIS_URL: joi.string().default('redis://localhost:6379'),
+  REDIS_HOST: joi.string().default('localhost'),
+  REDIS_PORT: joi.number().default(6379),
+  REDIS_PASSWORD: joi.string().allow('').default(''),
+  REDIS_DB: joi.number().default(0),
+  REDIS_MAX_RETRIES: joi.number().default(3),
+  REDIS_RETRY_DELAY: joi.number().default(500),
+  REDIS_ENABLE_OFFLINE_QUEUE: joi.boolean().default(true),
+  REDIS_LAZY_CONNECT: joi.boolean().default(false),
+
+  // Cache Configuration
+  CACHE_ENABLED: joi.boolean().default(true),
+  CACHE_DEFAULT_TTL: joi.number().default(600),  // 10 minutos
+  CACHE_REPORTS_TTL: joi.number().default(300),  // 5 minutos
+  CACHE_ACCOUNTS_TTL: joi.number().default(900),  // 15 minutos
+  CACHE_TAXES_TTL: joi.number().default(3600),  // 1 hora
+  CACHE_DASHBOARD_TTL: joi.number().default(120),  // 2 minutos
+  CACHE_MAX_KEYS: joi.number().default(1000),  // Legacy
+
   API_TIMEOUT: joi.number().default(30000),
   API_VERSION: joi.string().default('v1'),
   TOTP_WINDOW: joi.number().default(2),
@@ -195,6 +235,27 @@ export const envConfig: EnvConfig = {
   adminBootstrapEmail: envVars.ADMIN_BOOTSTRAP_EMAIL,
   adminBootstrapPassword: envVars.ADMIN_BOOTSTRAP_PASSWORD,
   adminBootstrapForceReset: envVars.ADMIN_BOOTSTRAP_FORCE_RESET,
+
+  redis: {
+    url: envVars.REDIS_URL,
+    host: envVars.REDIS_HOST,
+    port: envVars.REDIS_PORT,
+    password: envVars.REDIS_PASSWORD,
+    db: envVars.REDIS_DB,
+    maxRetries: envVars.REDIS_MAX_RETRIES,
+    retryDelay: envVars.REDIS_RETRY_DELAY,
+    enableOfflineQueue: envVars.REDIS_ENABLE_OFFLINE_QUEUE,
+    lazyConnect: envVars.REDIS_LAZY_CONNECT,
+  },
+
+  cache: {
+    enabled: envVars.CACHE_ENABLED,
+    defaultTtl: envVars.CACHE_DEFAULT_TTL,
+    reportsTtl: envVars.CACHE_REPORTS_TTL,
+    accountsTtl: envVars.CACHE_ACCOUNTS_TTL,
+    taxesTtl: envVars.CACHE_TAXES_TTL,
+    dashboardTtl: envVars.CACHE_DASHBOARD_TTL,
+  },
 
   cacheDefaultTtl: envVars.CACHE_DEFAULT_TTL,
   cacheMaxKeys: envVars.CACHE_MAX_KEYS,

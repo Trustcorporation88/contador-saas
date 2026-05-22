@@ -264,7 +264,7 @@ export default function RiscoFiscalPage() {
         <p className="text-sm text-gray-500 mt-1">
           Detecta inconsistências que a Receita Federal pode questionar — antes do envio do SPED.
           <span className="ml-2 inline-flex items-center gap-1 text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full border border-primary-200">
-            ✦ Exclusivo O Contador
+            ✦ Exclusivo Pro Contador
           </span>
         </p>
       </div>

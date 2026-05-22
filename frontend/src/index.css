@@ -178,4 +178,20 @@
   .shell-title {
     @apply text-[11px] font-bold uppercase tracking-[0.24em] text-primary-700/70;
   }
+
+  .kpi-card {
+    @apply rounded-[30px] border border-white/80 bg-white/90 p-5 shadow-panel backdrop-blur-xl;
+  }
+
+  .kpi-label {
+    @apply text-[11px] font-bold uppercase tracking-[0.28em] text-ink-500;
+  }
+
+  .kpi-value {
+    @apply mt-3 text-[clamp(2.1rem,3vw,3.2rem)] font-black leading-[0.95] tracking-[-0.05em] text-ink-950 tabular-nums;
+  }
+
+  .kpi-detail {
+    @apply mt-2 text-xs text-ink-500;
+  }
 }

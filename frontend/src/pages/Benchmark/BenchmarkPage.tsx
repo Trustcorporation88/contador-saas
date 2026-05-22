@@ -185,7 +185,7 @@ export default function BenchmarkPage() {
         <p className="text-sm text-gray-500 mt-1">
           Compare seus indicadores com a média anônima de empresas do mesmo setor.
           <span className="ml-2 inline-flex items-center gap-1 text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full border border-primary-200">
-            ✦ Exclusivo O Contador
+            ✦ Exclusivo Pro Contador
           </span>
         </p>
       </div>
@@ -233,6 +233,7 @@ export default function BenchmarkPage() {
               empresaVal={empresa.liquidezCorrente}
               setorVal={sectorData.liquidezCorrente}
               format={(v) => v.toFixed(2)}
+              suffix="x"
             />
             <MetricRow
               label="Endividamento"
@@ -246,6 +247,7 @@ export default function BenchmarkPage() {
               empresaVal={empresa.giroAtivo}
               setorVal={sectorData.giroAtivo}
               format={(v) => v.toFixed(2)}
+              suffix="x"
             />
           </div>
         </div>

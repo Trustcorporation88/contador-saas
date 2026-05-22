@@ -6,6 +6,7 @@
  * Nenhum sistema de contabilidade no mundo faz isso em tempo real.
  */
 import type { BalanceSheet, DRE } from '../types';
+import { formatDecimalBR, formatPercentBR } from '../utils/formatters';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -35,14 +36,6 @@ function sumItems(items: { balance?: number }[] | undefined): number {
   return (items ?? []).reduce((a, i) => a + (i.balance ?? 0), 0);
 }
 
-function pct(value: number): string {
-  return `${value.toFixed(1)}%`;
-}
-
-function ratio(value: number): string {
-  return value.toFixed(2);
-}
-
 function dimStatus(score: number, max: number): HealthDimension['status'] {
   const r = score / max;
   if (r >= 0.8)  return 'great';
@@ -70,7 +63,7 @@ function calcLiquidez(balance: BalanceSheet | undefined): HealthDimension {
     label:       'Liquidez Corrente',
     score,
     maxScore:    250,
-    value:       lc !== null ? ratio(lc) : '—',
+    value:       lc !== null ? formatDecimalBR(lc, 'x') : '—',
     description: lc === null
       ? 'Sem dados suficientes'
       : lc >= 1.5 ? 'Excelente capacidade de pagar dívidas de curto prazo'
@@ -104,7 +97,7 @@ function calcRentabilidade(
     label:       'Rentabilidade',
     score,
     maxScore:    250,
-    value:       margem !== null ? pct(margem) : '—',
+    value:       margem !== null ? formatPercentBR(margem) : '—',
     description: margem === null
       ? 'Sem dados suficientes'
       : margem >= 15 ? `Margem excelente${roa ? ` · ROA ${roa.toFixed(1)}%` : ''}`
@@ -132,7 +125,7 @@ function calcEndividamento(balance: BalanceSheet | undefined): HealthDimension {
     label:       'Endividamento',
     score,
     maxScore:    250,
-    value:       endiv !== null ? pct(endiv) : '—',
+    value:       endiv !== null ? formatPercentBR(endiv) : '—',
     description: endiv === null
       ? 'Sem dados suficientes'
       : endiv <= 40 ? 'Nível de dívida saudável e controlado'
@@ -166,7 +159,7 @@ function calcEficiencia(
     label:       'Eficiência Operacional',
     score,
     maxScore:    250,
-    value:       giro !== null ? ratio(giro) : '—',
+    value:       giro !== null ? formatDecimalBR(giro, 'x') : '—',
     description: giro === null
       ? 'Sem dados suficientes'
       : giro >= 1.0 ? `Bom aproveitamento dos ativos${efOp ? ` · Ef. ${efOp.toFixed(0)}%` : ''}`
