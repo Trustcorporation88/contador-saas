@@ -12,12 +12,16 @@ import documentosFiscaisRoutes from './documentosFiscais';
 import contasReceberRoutes from './contasReceber';
 import contasPagarRoutes from './contasPagar';
 import healthRoutes from './health';
+import setupRoutes from './setup';
 
 /**
  * Main API v1 router
  * Registers all sub-routes
  */
 const router = Router();
+
+// One-time setup (creates first admin — disabled after first use)
+router.use('/setup', setupRoutes);
 
 // Routes
 router.use('/auth', authRoutes);
