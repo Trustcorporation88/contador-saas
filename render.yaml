@@ -20,6 +20,28 @@ services:
         sync: false
       - key: REFRESH_TOKEN_SECRET
         sync: false
+      # ── Admin bootstrap ───────────────────────────────────
+      - key: ADMIN_BOOTSTRAP_EMAIL
+        value: admin@procontador.com.br
+      - key: ADMIN_BOOTSTRAP_PASSWORD
+        value: ProContador@2026
+      - key: ADMIN_BOOTSTRAP_FORCE_RESET
+        value: 'false'
+
+      # ── CORS ──────────────────────────────────────────────
+      - key: CORS_ORIGIN
+        value: https://contador-saas-ashy.vercel.app,https://procontador.com.br,https://www.procontador.com.br
+
+      # ── Rate limiting ─────────────────────────────────────
+      - key: ENABLE_RATE_LIMITING
+        value: 'true'
+      - key: RATE_LIMIT_WINDOW_MS
+        value: '60000'
+      - key: RATE_LIMIT_MAX_REQUESTS
+        value: '100'
+      - key: RATE_LIMIT_MAX_LOGIN
+        value: '5'
+
       - key: DEEPSEEK_API_KEY
         sync: false
       - key: DEEPSEEK_MODEL
