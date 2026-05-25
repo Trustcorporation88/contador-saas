@@ -1,4 +1,4 @@
-import { FC } from 'react';
+﻿import { FC } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, TrendingDown, TrendingUp } from 'lucide-react';
@@ -50,14 +50,14 @@ export const ServiceCard: FC<ServiceCardProps> = ({
   const helpContent = help
     ? {
         description: help.summary,
-        example: help.examples?.join(' • '),
+        example: help.examples?.join(' â€¢ '),
         helpText:
           help.requiredInputs && help.requiredInputs.length > 0
             ? `Dados para imputar: ${help.requiredInputs.join(', ')}${
-                help.automation ? `. Automação: ${help.automation}` : ''
+                help.automation ? `. AutomaÃ§Ã£o: ${help.automation}` : ''
               }`
             : help.automation
-              ? `Automação: ${help.automation}`
+              ? `AutomaÃ§Ã£o: ${help.automation}`
               : undefined,
       }
     : undefined;
@@ -100,7 +100,7 @@ export const ServiceCard: FC<ServiceCardProps> = ({
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="truncate text-base font-semibold text-white">{title}</h3>
+              <h3 className="text-base whitespace-normal break-words font-semibold text-white">{title}</h3>
               {helpContent && (
                 <SmartTooltip content={helpContent} position="bottom">
                   <span className="inline-flex items-center rounded-full border border-sky-400/20 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-200">
@@ -117,7 +117,7 @@ export const ServiceCard: FC<ServiceCardProps> = ({
           {automated && (
             <div className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-200">
               <Sparkles className="h-3 w-3" />
-              Automação
+              AutomaÃ§Ã£o
             </div>
           )}
 

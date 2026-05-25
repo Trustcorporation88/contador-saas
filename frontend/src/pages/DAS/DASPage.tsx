@@ -1,349 +1,422 @@
-import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { 
-  FileText, 
-  Download, 
-  Plus, 
-  RefreshCw, 
-  AlertTriangle, 
-  CheckCircle,
-  Clock,
-  Filter
-} from 'lucide-react';
-import { Modal } from '../../components/ui/Modal';
-import { Button } from '../../components/ui/Button';
-import DASForm from '../../components/DAS/DASForm';
-import DASList from '../../components/DAS/DASList';
-import DASPaymentForm from '../../components/DAS/DASPaymentForm';
+import React, { useState, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuthStore } from '../../store/authStore';
 import { DASService, DASBoleto } from '../../services/dasService';
+import { DASForm, DASList, DASPaymentForm } from '../../components/DAS';
+import { Plus, BarChart3, Settings, AlertCircle, TrendingUp } from 'lucide-react';
+import { format } from 'date-fns';
 
-type ModalState =
-  | { open: false }
-  | { open: true; mode: 'create' }
-  | { open: true; mode: 'edit'; das: DASBoleto };
+interface DASFormData {
+  mes_competencia: number;
+  ano_competencia: number;
+  valor_original: number;
+  regime_tributario: 'SIMPLES' | 'LUCRO_REAL' | 'LUCRO_PRESUMIDO';
+  descricao?: string;
+}
 
-type PagamentoModalState =
-  | { open: false }
-  | {
-      open: true;
-      das: {
-        id: string;
-        numero_boleto?: string | null;
-        mes_competencia: number;
-        ano_competencia: number;
-        valor_total: number;
-        valor_pago: number;
-        data_vencimento: string;
-      };
-    };
+interface PaymentFormData {
+  data_pagamento: string;
+  valor_pago: number;
+  comprovante?: string;
+  juros?: number;
+  multa?: number;
+  observacoes?: string;
+}
 
 export default function DASPage() {
-  const qc = useQueryClient();
-  const [modalState, setModalState] = useState<ModalState>({ open: false });
-  const [pagamentoState, setPagamentoState] = useState<PagamentoModalState>({ open: false });
-  const [apiError, setApiError] = useState('');
-  const [regimeFilter, setRegimeFilter] = useState<'SIMPLES' | 'LUCRO_REAL' | 'LUCRO_PRESUMIDO' | ''>('SIMPLES');
+  const { currentCompanyId } = useAuthStore();
+  const queryClient = useQueryClient();
+
+  // States
+  const [currentPage, setCurrentPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>('');
-  const [somenteAtrasadas, setSomenteAtrasadas] = useState(false);
-  const [somenteNaoPagos, setSomenteNaoPagos] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedDAS, setSelectedDAS] = useState<DASBoleto | null>(null);
+  const [createError, setCreateError] = useState<string>();
+  const [paymentError, setPaymentError] = useState<string>();
 
-  const params = useMemo(() => ({
-    page: 1,
-    limit: 50,
-    regime_tributario: regimeFilter || undefined,
-    status: statusFilter || undefined,
-    somente_atrasadas: somenteAtrasadas || undefined,
-    somente_nao_pagos: somenteNaoPagos || undefined,
-    sort_by: 'data_vencimento' as const,
-    sort_order: 'asc' as const,
-  }), [regimeFilter, statusFilter, somenteAtrasadas, somenteNaoPagos]);
+  const companyId = currentCompanyId || '';
 
-  const { data: listResponse, isLoading } = useQuery({
-    queryKey: ['das', params],
-    queryFn: () => DASService.list(params),
+  // Fetch DAS list
+  const { data: dasListData, isLoading: isLoadingList, error: listError } = useQuery({
+    queryKey: ['das-list', companyId, currentPage, statusFilter],
+    queryFn: () => {
+      if (!companyId) throw new Error('Company ID not found');
+      return DASService.list(companyId, {
+        page: currentPage,
+        limit: 10,
+        status: statusFilter || undefined,
+        sort_by: 'data_vencimento',
+        sort_order: 'asc',
+      });
+    },
+    enabled: !!companyId,
   });
 
-  const { data: stats } = useQuery({
-    queryKey: ['das-stats'],
-    queryFn: () => DASService.getEstatisticas(),
+  // Fetch statistics
+  const { data: stats, isLoading: isLoadingStats } = useQuery({
+    queryKey: ['das-stats', companyId],
+    queryFn: () => {
+      if (!companyId) throw new Error('Company ID not found');
+      return DASService.getEstatisticas(companyId);
+    },
+    enabled: !!companyId,
   });
 
-  // Criar DAS
+  // Create DAS mutation
   const createMutation = useMutation({
-    mutationFn: (data: any) => DASService.create(data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['das'] });
-      qc.invalidateQueries({ queryKey: ['das-stats'] });
-      setModalState({ open: false });
-      setApiError('');
+    mutationFn: (data: DASFormData) => {
+      if (!companyId) throw new Error('Company ID not found');
+      return DASService.create(companyId, {
+        mes_competencia: data.mes_competencia,
+        ano_competencia: data.ano_competencia,
+        valor_original: data.valor_original,
+        regime_tributario: data.regime_tributario,
+        observacoes: data.descricao,
+      });
     },
-    onError: (err: any) => {
-      setApiError(err.message || 'Erro ao criar DAS');
+    onSuccess: () => {
+      setShowCreateModal(false);
+      setCreateError(undefined);
+      queryClient.invalidateQueries({ queryKey: ['das-list'] });
+      queryClient.invalidateQueries({ queryKey: ['das-stats'] });
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Erro ao criar DAS';
+      setCreateError(message);
     },
   });
 
-  // Registrar pagamento
+  // Payment mutation
   const paymentMutation = useMutation({
-    mutationFn: (data: { dasId: string; payload: any }) =>
-      DASService.registrarPagamento(data.dasId, data.payload),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['das'] });
-      qc.invalidateQueries({ queryKey: ['das-stats'] });
-      setPagamentoState({ open: false });
-      setApiError('');
+    mutationFn: (data: PaymentFormData) => {
+      if (!companyId || !selectedDAS) throw new Error('Missing data');
+      return DASService.registrarPagamento(companyId, selectedDAS.id, {
+        data_pagamento: data.data_pagamento,
+        valor_pago: data.valor_pago,
+        juros_pago: data.juros,
+        multa_paga: data.multa,
+        numero_comprovante: data.comprovante,
+      });
     },
-    onError: (err: any) => {
-      setApiError(err.message || 'Erro ao registrar pagamento');
+    onSuccess: () => {
+      setShowPaymentModal(false);
+      setSelectedDAS(null);
+      setPaymentError(undefined);
+      queryClient.invalidateQueries({ queryKey: ['das-list'] });
+      queryClient.invalidateQueries({ queryKey: ['das-stats'] });
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Erro ao registrar pagamento';
+      setPaymentError(message);
     },
   });
 
-  // Cancelar DAS
+  // Cancel DAS mutation
   const cancelMutation = useMutation({
-    mutationFn: (dasId: string) => DASService.cancelar(dasId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['das'] });
-      qc.invalidateQueries({ queryKey: ['das-stats'] });
+    mutationFn: (dasId: string) => {
+      if (!companyId) throw new Error('Company ID not found');
+      return DASService.cancelar(companyId, dasId);
     },
-    onError: (err: any) => {
-      setApiError(err.message || 'Erro ao cancelar DAS');
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['das-list'] });
+      queryClient.invalidateQueries({ queryKey: ['das-stats'] });
     },
   });
 
-  const handleDownloadBoleto = (das: DASBoleto) => {
-    // TODO: Implementar download do PDF do boleto
-    console.log('Download boleto:', das.numero_boleto);
+  // Computed values
+  const dasList = dasListData?.data || [];
+  const pagination = dasListData?.pagination;
+  const totalPages = pagination?.totalPages || 1;
+
+  const nextVencimento = useMemo(() => {
+    const hoje = new Date();
+    const em30dias = new Date(hoje.getTime() + 30 * 24 * 60 * 60 * 1000);
+    return dasList.filter(d => {
+      const venc = new Date(d.data_vencimento);
+      return venc > hoje && venc <= em30dias && d.status !== 'PAGO' && d.status !== 'CANCELADO';
+    }).length;
+  }, [dasList]);
+
+  // Handlers
+  const handleCreateSubmit = (data: DASFormData) => {
+    createMutation.mutate(data);
   };
 
-  const totalApagar = listResponse?.data.reduce((sum: number, das: DASBoleto) => 
-    das.status !== 'PAGO' ? sum + (das.valor_total - das.valor_pago) : sum, 0
-  ) || 0;
+  const handlePaymentSubmit = (data: PaymentFormData) => {
+    paymentMutation.mutate(data);
+  };
 
-  const atrasados = listResponse?.data.filter((das: DASBoleto) => 
-    das.status === 'VENCIDO'
-  ) || [];
+  const handleEdit = (das: DASBoleto) => {
+    // Edit functionality would be implemented if needed
+    console.log('Edit DAS:', das);
+  };
+
+  const handlePay = (das: DASBoleto) => {
+    setSelectedDAS(das);
+    setShowPaymentModal(true);
+    setPaymentError(undefined);
+  };
+
+  const handleCancel = async (das: DASBoleto) => {
+    if (window.confirm(`Deseja cancelar o DAS ${das.mes_competencia}/${das.ano_competencia}?`)) {
+      cancelMutation.mutate(das.id);
+    }
+  };
+
+  const handleDownload = (das: DASBoleto) => {
+    // Download PDF functionality would be implemented if needed
+    console.log('Download DAS PDF:', das);
+  };
+
+  if (!companyId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="mx-auto h-12 w-12 text-red-500 mb-3" />
+          <p className="text-gray-700 font-medium">Empresa não selecionada</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="p-6 max-w-7xl mx-auto">
-        {/* Cabeçalho */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <FileText className="w-8 h-8 text-blue-600" />
-              <h1 className="text-3xl font-bold text-gray-900">DAS - Documento de Arrecadação do Simples</h1>
-            </div>
-            <Button
-              onClick={() => setModalState({ open: true, mode: 'create' })}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
-            >
-              <Plus className="w-4 h-4" />
-              Gerar DAS
-            </Button>
-          </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">DAS</h1>
+          <p className="text-gray-600 text-sm mt-1">
+            Declaração de Impostos Simplificada
+          </p>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => {
+              setShowCreateModal(true);
+              setCreateError(undefined);
+            }}
+            disabled={createMutation.isPending}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+          >
+            <Plus size={18} />
+            Criar DAS
+          </button>
+          <button
+            className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
+          >
+            <BarChart3 size={18} />
+            Relatório
+          </button>
+          <button
+            className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
+          >
+            <Settings size={18} />
+            Config
+          </button>
+        </div>
+      </div>
 
-          {/* Cards de Estatísticas */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm">Total a Pagar</p>
-                  <p className="text-2xl font-bold text-gray-900">R$ {totalApagar.toFixed(2)}</p>
-                </div>
-                <Clock className="w-8 h-8 text-blue-400" />
-              </div>
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Total DAS */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-sm text-gray-600 uppercase tracking-wide">Total DAS</p>
+              {isLoadingStats ? (
+                <div className="h-8 bg-gray-200 rounded animate-pulse mt-2 w-24"></div>
+              ) : (
+                <p className="text-2xl font-bold text-gray-900 mt-2">
+                  {stats?.totalRegistrado || 0}
+                </p>
+              )}
+              <p className="text-xs text-gray-500 mt-2">
+                A pagar: R$ {(stats?.totalApagar || 0).toLocaleString('pt-BR', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </p>
             </div>
-
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm">Atrasados</p>
-                  <p className="text-2xl font-bold text-red-600">{atrasados.length}</p>
-                </div>
-                <AlertTriangle className="w-8 h-8 text-red-400" />
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm">Pagos este mês</p>
-                  <p className="text-2xl font-bold text-green-600">
-                    {listResponse?.data.filter((d: DASBoleto) => d.status === 'PAGO').length || 0}
-                  </p>
-                </div>
-                <CheckCircle className="w-8 h-8 text-green-400" />
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm">Total registrado</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {listResponse?.data.length || 0}
-                  </p>
-                </div>
-                <FileText className="w-8 h-8 text-gray-400" />
-              </div>
-            </div>
+            <TrendingUp className="text-blue-500" size={24} />
           </div>
         </div>
 
-        {/* Filtros */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
-          <div className="flex items-center gap-4 flex-wrap">
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-gray-600" />
-              <span className="text-sm font-medium text-gray-700">Filtros:</span>
+        {/* Overdue */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-sm text-gray-600 uppercase tracking-wide">Vencidos</p>
+              {isLoadingStats ? (
+                <div className="h-8 bg-gray-200 rounded animate-pulse mt-2 w-24"></div>
+              ) : (
+                <p className="text-2xl font-bold text-red-600 mt-2">
+                  {stats?.atrasados || 0}
+                </p>
+              )}
+              <p className="text-xs text-red-500 mt-2">Atenção necessária</p>
             </div>
-
-            <select
-              value={regimeFilter}
-              onChange={(e) => setRegimeFilter(e.target.value as any)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-            >
-              <option value="">Todos os regimes</option>
-              <option value="SIMPLES">Simples Nacional</option>
-              <option value="LUCRO_REAL">Lucro Real</option>
-              <option value="LUCRO_PRESUMIDO">Lucro Presumido</option>
-            </select>
-
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-            >
-              <option value="">Todos os status</option>
-              <option value="EMITIDO">Emitido</option>
-              <option value="PENDENTE">Pendente</option>
-              <option value="PAGO">Pago</option>
-              <option value="VENCIDO">Vencido</option>
-              <option value="CANCELADO">Cancelado</option>
-            </select>
-
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={somenteAtrasadas}
-                onChange={(e) => setSomenteAtrasadas(e.target.checked)}
-                className="w-4 h-4"
-              />
-              <span className="text-sm text-gray-700">Apenas atrasados</span>
-            </label>
-
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={somenteNaoPagos}
-                onChange={(e) => setSomenteNaoPagos(e.target.checked)}
-                className="w-4 h-4"
-              />
-              <span className="text-sm text-gray-700">Apenas não pagos</span>
-            </label>
+            <AlertCircle className="text-red-500" size={24} />
           </div>
         </div>
 
-        {/* Lista de DAS */}
-        <div className="bg-white rounded-lg shadow">
-          {isLoading ? (
-            <div className="p-8 text-center">
-              <RefreshCw className="w-8 h-8 text-gray-400 mx-auto animate-spin" />
-              <p className="text-gray-600 mt-2">Carregando...</p>
+        {/* Next 30 Days */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-sm text-gray-600 uppercase tracking-wide">Próx. 30 dias</p>
+              {isLoadingList ? (
+                <div className="h-8 bg-gray-200 rounded animate-pulse mt-2 w-24"></div>
+              ) : (
+                <p className="text-2xl font-bold text-blue-600 mt-2">
+                  {nextVencimento}
+                </p>
+              )}
+              <p className="text-xs text-gray-500 mt-2">A vencer</p>
             </div>
-          ) : listResponse?.data.length === 0 ? (
+            <TrendingUp className="text-blue-500" size={24} />
+          </div>
+        </div>
+      </div>
+
+      {/* Filters and List */}
+      <div className="bg-white rounded-lg border border-gray-200">
+        {/* Filters */}
+        <div className="border-b border-gray-200 p-4 flex gap-2 flex-wrap">
+          <button
+            onClick={() => {
+              setStatusFilter('');
+              setCurrentPage(1);
+            }}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition ${
+              statusFilter === ''
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Todos
+          </button>
+          {['PENDENTE', 'VENCIDO', 'PAGO', 'CANCELADO'].map((status) => (
+            <button
+              key={status}
+              onClick={() => {
+                setStatusFilter(status);
+                setCurrentPage(1);
+              }}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition ${
+                statusFilter === status
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {status}
+            </button>
+          ))}
+        </div>
+
+        {/* List */}
+        <div>
+          {listError ? (
             <div className="p-8 text-center">
-              <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600 mb-4">Nenhum DAS encontrado</p>
-              <Button
-                onClick={() => setModalState({ open: true, mode: 'create' })}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Criar primeiro DAS
-              </Button>
+              <AlertCircle className="mx-auto h-12 w-12 text-red-500 mb-3" />
+              <p className="text-red-700 font-medium">
+                {listError instanceof Error ? listError.message : 'Erro ao carregar DAS'}
+              </p>
             </div>
           ) : (
             <DASList
-              dados={listResponse?.data.map((d: DASBoleto) => ({
-                id: d.id,
-                numero_boleto: d.numero_boleto,
-                mes_competencia: d.mes_competencia,
-                ano_competencia: d.ano_competencia,
-                valor_original: d.valor_original,
-                valor_total: d.valor_total,
-                valor_pago: d.valor_pago,
-                status: d.status,
-                data_vencimento: d.data_vencimento,
-                regime_tributario: d.codigo_receita === '0201' ? 'SIMPLES' : 'LUCRO_REAL',
-                data_pagamento: d.data_pagamento,
-                juros: d.juros,
-                multa: d.multa,
-              })) || []}
-              onEdit={(das) => setModalState({ open: true, mode: 'edit', das: das as any })}
-              onPay={(das) => {
-                setPagamentoState({
-                  open: true,
-                  das: {
-                    id: das.id,
-                    numero_boleto: das.numero_boleto,
-                    mes_competencia: das.mes_competencia,
-                    ano_competencia: das.ano_competencia,
-                    valor_total: das.valor_total,
-                    valor_pago: das.valor_pago,
-                    data_vencimento: das.data_vencimento,
-                  },
-                });
-              }}
-              onCancel={(das) => cancelMutation.mutate(das.id)}
-              onDownload={(das) => handleDownloadBoleto(das as any)}
-              isLoading={cancelMutation.isPending}
+              dados={dasList as any}
+              isLoading={isLoadingList}
+              onEdit={(das) => handleEdit(das as DASBoleto)}
+              onCancel={(das) => handleCancel(das as DASBoleto)}
+              onPay={(das) => handlePay(das as DASBoleto)}
+              onDownload={(das) => handleDownload(das as DASBoleto)}
             />
           )}
         </div>
 
-        {apiError && (
-          <div className="fixed bottom-4 right-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-            {apiError}
+        {/* Pagination */}
+        {!isLoadingList && dasList.length > 0 && (
+          <div className="border-t border-gray-200 p-4 flex items-center justify-between">
+            <p className="text-sm text-gray-600">
+              Página {currentPage} de {totalPages}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+              >
+                Anterior
+              </button>
+              <button
+                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+              >
+                Próxima
+              </button>
+            </div>
           </div>
         )}
-
-        {/* Modal: Criar/Editar DAS */}
-        <Modal
-          open={modalState.open}
-          onClose={() => setModalState({ open: false })}
-          title={modalState.open && modalState.mode === 'create' ? 'Criar DAS' : 'Editar DAS'}
-        >
-          {modalState.open && (
-            <DASForm
-              initialData={modalState.mode === 'edit' ? modalState.das : undefined}
-              onSubmit={(data) => createMutation.mutate(data)}
-              isLoading={createMutation.isPending}
-              error={apiError}
-            />
-          )}
-        </Modal>
-
-        {/* Modal: Registrar Pagamento */}
-        <Modal
-          open={pagamentoState.open}
-          onClose={() => setPagamentoState({ open: false })}
-          title="Registrar Pagamento"
-        >
-          {pagamentoState.open && (
-            <DASPaymentForm
-              das={pagamentoState.das}
-              onSubmit={(data) =>
-                paymentMutation.mutate({
-                  dasId: pagamentoState.das.id,
-                  payload: data,
-                })
-              }
-              isLoading={paymentMutation.isPending}
-              error={apiError}
-            />
-          )}
-        </Modal>
       </div>
+
+      {/* Create DAS Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="border-b border-gray-200 p-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Criar novo DAS</h2>
+              <button
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setCreateError(undefined);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4">
+              <DASForm
+                onSubmit={handleCreateSubmit}
+                isLoading={createMutation.isPending}
+                error={createError}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Modal */}
+      {showPaymentModal && selectedDAS && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="border-b border-gray-200 p-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Registrar pagamento</h2>
+              <button
+                onClick={() => {
+                  setShowPaymentModal(false);
+                  setSelectedDAS(null);
+                  setPaymentError(undefined);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4">
+              <DASPaymentForm
+                das={selectedDAS}
+                onSubmit={handlePaymentSubmit}
+                isLoading={paymentMutation.isPending}
+                error={paymentError}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import api from '../config/api';
+﻿import api from '../config/api';
 
 export interface DASBoleto {
   id: string;
@@ -67,9 +67,11 @@ export interface DASListResponse {
 }
 
 export class DASService {
-  static baseURL = '/api/v1/das';
+  static getBaseURL(companyId: string) {
+    return `/companies/${companyId}/das`;
+  }
 
-  static async list(filters?: DASListFilters): Promise<DASListResponse> {
+  static async list(companyId: string, filters?: DASListFilters): Promise<DASListResponse> {
     const params = new URLSearchParams();
     
     if (filters?.status) params.append('status', filters.status);
@@ -84,19 +86,19 @@ export class DASService {
     if (filters?.sort_order) params.append('sort_order', filters.sort_order);
 
     const response = await api.get<DASListResponse>(
-      `${this.baseURL}?${params.toString()}`
+      `${this.getBaseURL(companyId)}?${params.toString()}`
     );
     return response.data;
   }
 
-  static async getById(dasId: string): Promise<DASBoleto> {
+  static async getById(companyId: string, dasId: string): Promise<DASBoleto> {
     const response = await api.get<{ success: boolean; data: DASBoleto }>(
-      `${this.baseURL}/${dasId}`
+      `${this.getBaseURL(companyId)}/${dasId}`
     );
     return response.data.data;
   }
 
-  static async create(data: {
+  static async create(companyId: string, data: {
     mes_competencia: number;
     ano_competencia: number;
     valor_original: number;
@@ -108,25 +110,25 @@ export class DASService {
     tax_calculation_id?: string;
   }): Promise<DASBoleto> {
     const response = await api.post<{ success: boolean; data: DASBoleto }>(
-      `${this.baseURL}/generate`,
+      `${this.getBaseURL(companyId)}/generate`,
       data
     );
     
     if (!response.data.success) {
-      throw new Error(response.data.data?.observacoes || 'Erro ao criar DAS');
+      throw new Error('Erro ao criar DAS');
     }
     
     return response.data.data;
   }
 
-  static async update(dasId: string, data: {
+  static async update(companyId: string, dasId: string, data: {
     juros?: number;
     multa?: number;
     desconto?: number;
     observacoes?: string;
   }): Promise<DASBoleto> {
     const response = await api.patch<{ success: boolean; data: DASBoleto }>(
-      `${this.baseURL}/${dasId}`,
+      `${this.getBaseURL(companyId)}/${dasId}`,
       data
     );
     
@@ -137,7 +139,7 @@ export class DASService {
     return response.data.data;
   }
 
-  static async registrarPagamento(dasId: string, data: {
+  static async registrarPagamento(companyId: string, dasId: string, data: {
     data_pagamento: string;
     valor_pago: number;
     juros_pago?: number;
@@ -145,7 +147,7 @@ export class DASService {
     numero_comprovante?: string;
   }): Promise<DASBoleto> {
     const response = await api.post<{ success: boolean; data: DASBoleto }>(
-      `${this.baseURL}/${dasId}/pay`,
+      `${this.getBaseURL(companyId)}/${dasId}/pay`,
       data
     );
     
@@ -156,9 +158,9 @@ export class DASService {
     return response.data.data;
   }
 
-  static async cancelar(dasId: string): Promise<DASBoleto> {
+  static async cancelar(companyId: string, dasId: string): Promise<DASBoleto> {
     const response = await api.delete<{ success: boolean; data: DASBoleto }>(
-      `${this.baseURL}/${dasId}`,
+      `${this.getBaseURL(companyId)}/${dasId}`,
       { data: { motivo: 'Cancelamento via sistema' } }
     );
     
@@ -169,13 +171,13 @@ export class DASService {
     return response.data.data;
   }
 
-  static async getEstatisticas(): Promise<{
+  static async getEstatisticas(companyId: string): Promise<{
     totalApagar: number;
     atrasados: number;
     pagosEsteMes: number;
     totalRegistrado: number;
   }> {
-    const listResponse = await this.list({
+    const listResponse = await this.list(companyId, {
       limit: 1000,
       page: 1,
     });

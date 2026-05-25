@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+﻿import { Router, Request, Response } from 'express';
 import { CompanyController } from '../controllers/companyController';
 import { authenticateToken } from '../middleware/auth';
 import accountsRoutes from './accounts';
@@ -6,6 +6,7 @@ import journalsRoutes from './journals';
 import reportsRoutes from './reports';
 import taxesRoutes from './taxes';
 import nfeRoutes from './nfe';
+import dasRoutes from './das';
 
 /**
  * Companies API Routes
@@ -105,5 +106,6 @@ router.use('/:companyId/journal-entries', journalsRoutes);
 router.use('/:companyId/reports', reportsRoutes);
 router.use('/:companyId/taxes', taxesRoutes);
 router.use('/:companyId/nfe', nfeRoutes);
+router.use('/:companyId/das', dasRoutes);
 
 export default router;

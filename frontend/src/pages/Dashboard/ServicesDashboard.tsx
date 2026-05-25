@@ -1,4 +1,5 @@
-import { FC, useMemo, useState } from 'react';
+﻿import { FC, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertTriangle,
@@ -64,7 +65,7 @@ export const ServicesDashboard: FC = () => {
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-sky-300">
               Pro Contador
             </p>
-            <h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">
+            <h1 className="mt-2 text-xl font-bold text-white sm:text-2xl break-words">
               Dashboard operacional estilo streaming
             </h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-300">
@@ -182,7 +183,7 @@ export const ServicesDashboard: FC = () => {
         </section>
 
         <section className="mt-8 grid gap-4 lg:grid-cols-3">
-          <div className="rounded-[28px] border border-white/10 bg-white/5 p-5">
+          <Link to="/impostos/das" className="rounded-[28px] border border-white/10 bg-white/5 p-5 hover:bg-white/10 transition-colors block text-left">
             <div className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
               Em destaque
             </div>
@@ -190,9 +191,9 @@ export const ServicesDashboard: FC = () => {
             <p className="mt-2 text-sm text-slate-300">
               Conferência de receita, cálculo da guia e alerta de vencimento no mesmo fluxo.
             </p>
-          </div>
+          </Link>
 
-          <div className="rounded-[28px] border border-white/10 bg-white/5 p-5">
+          <Link to="/impostos/das" className="rounded-[28px] border border-white/10 bg-white/5 p-5 hover:bg-white/10 transition-colors block text-left">
             <div className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
               Inputs guiados
             </div>
@@ -200,9 +201,9 @@ export const ServicesDashboard: FC = () => {
             <p className="mt-2 text-sm text-slate-300">
               Serviços com dados manuais mostram como imputar, exemplos e o que é obrigatório.
             </p>
-          </div>
+          </Link>
 
-          <div className="rounded-[28px] border border-white/10 bg-white/5 p-5">
+          <Link to="/impostos/das" className="rounded-[28px] border border-white/10 bg-white/5 p-5 hover:bg-white/10 transition-colors block text-left">
             <div className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
               Prioridade operacional
             </div>
@@ -211,11 +212,11 @@ export const ServicesDashboard: FC = () => {
               Fluxos de guias, conciliação e importação bancária aparecem primeiro para acelerar a
               rotina.
             </p>
-          </div>
+          </Link>
         </section>
 
         <section className="mt-8">
-          <div className="flex gap-2 overflow-x-auto pb-2">
+          <div className="flex flex-wrap gap-2 pb-2">
             <button
               onClick={() => setSelectedCategory('all')}
               className={cn(

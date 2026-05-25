@@ -1,4 +1,4 @@
-import type { UserRole } from "../types";
+﻿import type { UserRole } from "../types";
 
 const FULL_ACCESS: UserRole[] = ["admin", "accountant"];
 const REPORT_ACCESS: UserRole[] = ["admin", "accountant", "manager", "auditor"];
@@ -26,7 +26,7 @@ export function getDefaultRoute(role?: UserRole | null): string {
     case "auditor":
       return "/auditoria";
     default:
-      return "/dashboard";
+      return "/";
   }
 }
 
@@ -43,7 +43,7 @@ export function canAccessPath(
   if (path === "/auditoria") return AUDIT_ACCESS.includes(role);
   if (path === "/impostos") return TAX_ACCESS.includes(role);
   if (path.startsWith("/relatorios/")) return REPORT_ACCESS.includes(role);
-  if (path === "/dashboard") return role !== "viewer";
+  if (path === "/") return role !== "viewer";
   if (
     [
       "/empresas",

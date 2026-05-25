@@ -1,4 +1,4 @@
-import { Router } from 'express';
+﻿import { Router } from 'express';
 import authRoutes from './auth';
 import companiesRoutes from './companies';
 import auditRoutes from './audit';
@@ -10,7 +10,7 @@ import contasReceberRoutes from './contasReceber';
 import contasPagarRoutes from './contasPagar';
 import healthRoutes from './health';
 import setupRoutes from './setup';
-import dasRoutes from './das';
+
 
 /**
  * Main API v1 router
@@ -18,12 +18,12 @@ import dasRoutes from './das';
  */
 const router = Router();
 
-// One-time setup (creates first admin — disabled after first use)
+// One-time setup (creates first admin â€” disabled after first use)
 router.use('/setup', setupRoutes);
 
 // Routes
 router.use('/auth', authRoutes);
-// Nota: journals, reports e taxes são acessíveis apenas via /companies/:companyId/...
+// Nota: journals, reports e taxes sÃ£o acessÃ­veis apenas via /companies/:companyId/...
 router.use('/companies', companiesRoutes);
 router.use('/audit', auditRoutes);
 router.use('/cnpj', cnpjRoutes);
@@ -32,7 +32,7 @@ router.use('/copiloto', copilotoRoutes);
 router.use('/documentos', documentosFiscaisRoutes);
 router.use('/contas-receber', contasReceberRoutes);
 router.use('/contas-pagar', contasPagarRoutes);
-router.use('/das', dasRoutes);
+
 router.use('/health', healthRoutes);
 
 // API status

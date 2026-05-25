@@ -1,0 +1,34 @@
+diff --git a/frontend/src/hooks/useAuth.ts b/frontend/src/hooks/useAuth.ts
+index e9919f8..5060824 100644
+--- a/frontend/src/hooks/useAuth.ts
++++ b/frontend/src/hooks/useAuth.ts
+@@ -33,7 +33,7 @@ export function useAuth() {
+ 
+       if ('user' in response) {
+         setAuth(response.user, response.accessToken, response.refreshToken);
+-        navigate('/dashboard', { replace: true });
++        navigate('/', { replace: true });
+         return { success: true };
+       }
+ 
+@@ -51,7 +51,7 @@ export function useAuth() {
+     try {
+       const response = await AuthService.verifyMfa({ tempToken, totpToken });
+       setAuth(response.user, response.accessToken, response.refreshToken);
+-      navigate('/dashboard', { replace: true });
++      navigate('/', { replace: true });
+       return { success: true };
+     } catch (err) {
+       return { success: false, error: extractMessage(err) };
+diff --git a/frontend/src/utils/access.ts b/frontend/src/utils/access.ts
+index a8c688c..e447990 100644
+--- a/frontend/src/utils/access.ts
++++ b/frontend/src/utils/access.ts
+@@ -24,7 +24,7 @@ export function getDefaultRoute(role?: UserRole | null): string {
+     case "auditor":
+       return "/auditoria";
+     default:
+-      return "/dashboard";
++      return "/";
+   }
+ }

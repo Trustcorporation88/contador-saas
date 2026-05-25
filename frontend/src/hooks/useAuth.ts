@@ -1,9 +1,9 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { AuthService } from '../services/authService';
 
-// ─── Result types ─────────────────────────────────────────────────────────────
+// --- Result types -------------------------------------------------------------
 
 interface LoginPayload {
   email: string;
@@ -22,7 +22,7 @@ interface ActionResult {
   error?: string;
 }
 
-// ─── Hook ─────────────────────────────────────────────────────────────────────
+// --- Hook ---------------------------------------------------------------------
 
 export function useAuth() {
   const [loading, setLoading] = useState(false);
@@ -32,7 +32,7 @@ export function useAuth() {
 
   /**
    * Etapa 1 do login. Se o usuário tiver MFA ativo, retorna requiresMfa + tempToken.
-   * Em caso de sucesso direto, navega para /dashboard.
+   * Em caso de sucesso direto, navega para a home (Services Dashboard).
    */
   async function login(payload: LoginPayload): Promise<LoginResult> {
     setLoading(true);
@@ -45,7 +45,7 @@ export function useAuth() {
 
       if ('user' in response) {
         setAuth(response.user, response.accessToken, response.refreshToken);
-        navigate('/dashboard', { replace: true });
+        navigate('/', { replace: true });
         return { success: true };
       }
 
@@ -59,14 +59,14 @@ export function useAuth() {
 
   /**
    * Etapa 2 do login (MFA). Envia tempToken + código TOTP de 6 dígitos.
-   * Em caso de sucesso, navega para /dashboard.
+   * Em caso de sucesso, navega para a home.
    */
   async function verifyMfa(tempToken: string, totpToken: string): Promise<ActionResult> {
     setLoading(true);
     try {
       const response = await AuthService.verifyMfa({ tempToken, totpToken });
       setAuth(response.user, response.accessToken, response.refreshToken);
-      navigate('/dashboard', { replace: true });
+      navigate('/', { replace: true });
       return { success: true };
     } catch (err) {
       return { success: false, error: extractMessage(err) };
@@ -92,7 +92,7 @@ export function useAuth() {
   return { login, verifyMfa, logout, loading };
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// --- Helpers -----------------------------------------------------------------
 
 function extractMessage(err: unknown): string {
   if (err != null && typeof err === 'object') {

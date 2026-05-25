@@ -58,7 +58,7 @@ const ServicesCatalogPage = lazy(
 const ServiceDetailPage = lazy(
   () => import("../pages/ServiceDetail/ServiceDetailPage"),
 );
-// Módulos inovadores
+// M�dulos inovadores
 const SaudePage = lazy(() => import("../pages/Saude/SaudePage"));
 const SimuladorPage = lazy(() => import("../pages/Simulador/SimuladorPage"));
 const BenchmarkPage = lazy(() => import("../pages/Benchmark/BenchmarkPage"));
@@ -70,8 +70,9 @@ const OpenFinancePage = lazy(
 );
 const CopilotoPage = lazy(() => import("../pages/Copiloto/CopilotoPage"));
 const ProvaHashPage = lazy(() => import("../pages/ProvaHash/ProvaHashPage"));
+const DASPage = lazy(() => import("../pages/DAS/DASPage"));
 
-// ─── Route guard ─────────────────────────────────────────────────────────────
+// --- Route guard -------------------------------------------------------------
 
 function ProtectedRoute() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -99,7 +100,7 @@ function RoleRoute({
   return children;
 }
 
-// ─── Placeholder lazy pages (implementados nas tasks 3.3–3.13) ───────────────
+// --- Placeholder lazy pages (implementados nas tasks 3.3�3.13) ---------------
 
 const Placeholder: React.FC<{ title: string; task: string }> = ({
   title,
@@ -108,7 +109,7 @@ const Placeholder: React.FC<{ title: string; task: string }> = ({
   <div className="p-8">
     <div className="card max-w-lg">
       <div className="card-body text-center py-12">
-        <div className="text-4xl mb-4">🏗️</div>
+        <div className="text-4xl mb-4">???</div>
         <h2 className="mb-2">{title}</h2>
         <p className="text-sm text-gray-500">Implementado na {task}</p>
       </div>
@@ -116,7 +117,7 @@ const Placeholder: React.FC<{ title: string; task: string }> = ({
   </div>
 );
 
-// ─── Router definition ────────────────────────────────────────────────────────
+// --- Router definition --------------------------------------------------------
 
 const router = createBrowserRouter([
   {
@@ -255,6 +256,16 @@ const router = createBrowserRouter([
             ),
           },
           {
+            path: "impostos/das",
+            element: (
+              <RoleRoute allowedPath="/impostos">
+                <Suspense fallback={<LoadingScreen />}>
+                  <DASPage />
+                </Suspense>
+              </RoleRoute>
+            ),
+          },
+          {
             path: "lancamentos/novo",
             element: (
               <RoleRoute allowedPath="/lancamentos">
@@ -344,7 +355,7 @@ const router = createBrowserRouter([
               </RoleRoute>
             ),
           },
-          // ── Módulos inovadores ────────────────────────────────────────────
+          // -- M�dulos inovadores --------------------------------------------
           {
             path: "saude",
             element: (
