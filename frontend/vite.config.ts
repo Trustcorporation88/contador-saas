@@ -13,14 +13,6 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
-  define: {
-    'import.meta.env.VITE_API_URL': JSON.stringify(
-      process.env.VITE_API_URL ??
-        (process.env.NODE_ENV === 'production'
-          ? 'https://contador-backend-staging.onrender.com'
-          : 'http://localhost:3000')
-    ),
-  },
   server: {
     port: 5173,
     strictPort: true,
