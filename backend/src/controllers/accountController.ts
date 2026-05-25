@@ -49,9 +49,6 @@ export class AccountController {
       const { companyId } = req.params;
       const { page, limit, search, type, hierarchy, parent_code, tax_code } = req.query;
 
-      // TODO: Validar acesso multi-tenant
-      // Verificar se usuário tem acesso a esta empresa
-
       // Montar filtros
       const filters: AccountFilters = {};
       if (page) filters.page = parseInt(page as string, 10);
@@ -63,20 +60,28 @@ export class AccountController {
       if (tax_code) filters.tax_code = tax_code as TaxCodeEnum;
 
       // Determinar cache key baseado em hierarchy
-      const cacheKey = filters.hierarchy 
+      const cacheKey = filters.hierarchy
         ? CacheKeys.accountsTree(companyId)
         : CacheKeys.accountsList(companyId, filters);
 
       // Try cache first
       const cached = await cacheService.get(cacheKey);
       if (cached) {
-        logger.info('Cache HIT - Accounts List', { companyId, hierarchy: filters.hierarchy, key: cacheKey });
+        logger.info('Cache HIT - Accounts List', {
+          companyId,
+          hierarchy: filters.hierarchy,
+          key: cacheKey,
+        });
         res.status(200).json(cached);
         return;
       }
 
       // Cache MISS - fetch from database
-      logger.info('Cache MISS - Accounts List', { companyId, hierarchy: filters.hierarchy, key: cacheKey });
+      logger.info('Cache MISS - Accounts List', {
+        companyId,
+        hierarchy: filters.hierarchy,
+        key: cacheKey,
+      });
       const result = await AccountService.list(companyId, filters);
 
       // Store in cache (15 minutos)
@@ -129,17 +134,14 @@ export class AccountController {
       const { companyId } = req.params;
       const data = req.body as CreateAccountDTO;
 
-      // TODO: Validar acesso multi-tenant
-      // TODO: Verificar autorização (ACCOUNTANT ou ADMIN)
-
       const account = await AccountService.create(companyId, data);
 
       // INVALIDATE CACHE: Remove todos os caches de accounts desta empresa
       const invalidatedCount = await cacheService.invalidateAccounts(companyId);
-      logger.info('Cache invalidated after account creation', { 
-        companyId, 
+      logger.info('Cache invalidated after account creation', {
+        companyId,
         accountId: account.id,
-        invalidatedKeys: invalidatedCount 
+        invalidatedKeys: invalidatedCount,
       });
 
       res.status(201).json(account);
@@ -173,8 +175,6 @@ export class AccountController {
   static async getAccount(req: Request, res: Response): Promise<void> {
     try {
       const { companyId, accountId } = req.params;
-
-      // TODO: Validar acesso multi-tenant
 
       const account = await AccountService.getById(accountId, companyId);
 
@@ -219,17 +219,14 @@ export class AccountController {
       const { companyId, accountId } = req.params;
       const data = req.body as UpdateAccountDTO;
 
-      // TODO: Validar acesso multi-tenant
-      // TODO: Verificar autorização (ACCOUNTANT ou ADMIN)
-
       const account = await AccountService.update(accountId, companyId, data);
 
       // INVALIDATE CACHE
       const invalidatedCount = await cacheService.invalidateAccounts(companyId);
-      logger.info('Cache invalidated after account update', { 
-        companyId, 
+      logger.info('Cache invalidated after account update', {
+        companyId,
         accountId,
-        invalidatedKeys: invalidatedCount 
+        invalidatedKeys: invalidatedCount,
       });
 
       res.status(200).json(account);
@@ -266,17 +263,14 @@ export class AccountController {
     try {
       const { companyId, accountId } = req.params;
 
-      // TODO: Validar acesso multi-tenant
-      // TODO: Verificar autorização (ADMIN only)
-
       await AccountService.delete(accountId, companyId);
 
       // INVALIDATE CACHE
       const invalidatedCount = await cacheService.invalidateAccounts(companyId);
-      logger.info('Cache invalidated after account deletion', { 
-        companyId, 
+      logger.info('Cache invalidated after account deletion', {
+        companyId,
         accountId,
-        invalidatedKeys: invalidatedCount 
+        invalidatedKeys: invalidatedCount,
       });
 
       res.status(204).send();
@@ -307,8 +301,6 @@ export class AccountController {
   static async getBalance(req: Request, res: Response): Promise<void> {
     try {
       const { companyId, accountId } = req.params;
-
-      // TODO: Validar acesso multi-tenant
 
       const balance = await AccountService.getBalance(accountId, companyId);
 
@@ -342,8 +334,6 @@ export class AccountController {
     try {
       const { companyId } = req.params;
       const { parent_code } = req.query;
-
-      // TODO: Validar acesso multi-tenant
 
       const hierarchy = await AccountService.getHierarchy(
         companyId,
@@ -387,15 +377,15 @@ export class AccountController {
       const { companyId } = req.params;
       const { overwrite } = req.body;
 
-      // TODO: Validar acesso multi-tenant
-      // TODO: Verificar autorização (ADMIN only)
-
       const result = await AccountService.importPadraoPlano(companyId, overwrite ?? false);
 
       res.status(200).json(result);
-      logger.info(`Imported plano de contas: ${result.imported} imported, ${result.skipped} skipped`, {
-        companyId,
-      });
+      logger.info(
+        `Imported plano de contas: ${result.imported} imported, ${result.skipped} skipped`,
+        {
+          companyId,
+        },
+      );
     } catch (error) {
       const message = (error as Error).message || 'Failed to import plano de contas';
 

@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { JournalController } from '../controllers/journalController';
+import { authenticateToken } from '../middleware/auth';
+import { validateTenantAccess } from '../middleware/multiTenant';
 
 /**
  * Journal Entries Routes
@@ -14,6 +16,8 @@ import { JournalController } from '../controllers/journalController';
  * POST   /companies/:cId/journal-entries/:entryId/reverse - Estornar (POSTED)
  */
 const router = Router({ mergeParams: true });
+
+router.use(authenticateToken, validateTenantAccess);
 
 /**
  * POST /companies/:companyId/journal-entries

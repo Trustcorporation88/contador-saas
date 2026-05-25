@@ -118,10 +118,14 @@ export class AuthService {
     const adminEmail = envConfig.adminBootstrapEmail.toLowerCase().trim();
     const adminPassword = envConfig.adminBootstrapPassword;
 
+    // Detecta nomes reais das colunas para compatibilidade com diferentes schemas
+    const usersColumns = (await db('users').columnInfo()) as Record<string, unknown>;
+    const hasPasswordHashColumn = Boolean(usersColumns.password_hash);
+    const hasPasswordColumn = Boolean(usersColumns.password);
+    const nameColumn = usersColumns.full_name ? 'full_name' : 'name';
+    const activeColumn = usersColumns.is_active ? 'is_active' : 'active';
+
     const existingAdmin = await db('users').whereRaw('LOWER(email) = ?', [adminEmail]).first();
-    const usersColumns = await db('users').columnInfo();
-    const hasPasswordHashColumn = Boolean((usersColumns as any).password_hash);
-    const hasPasswordColumn = Boolean((usersColumns as any).password);
 
     if (!existingAdmin) {
       if (!adminPassword) {
@@ -132,41 +136,53 @@ export class AuthService {
         return;
       }
 
+      // Garante que existe uma empresa para o admin bootstrap
+      const BOOTSTRAP_COMPANY_CNPJ = '00000000000000';
+      let bootstrapCompany = await db('companies').where('cnpj', BOOTSTRAP_COMPANY_CNPJ).first();
+
+      if (!bootstrapCompany) {
+        const [inserted] = await db('companies')
+          .insert({
+            cnpj: BOOTSTRAP_COMPANY_CNPJ,
+            legal_name: 'Empresa Bootstrap',
+            trade_name: 'O Contador',
+            status: 'active',
+            is_active: true,
+            created_at: new Date(),
+            updated_at: new Date(),
+          })
+          .returning('*');
+        bootstrapCompany = inserted;
+        logger.info('Bootstrap company created', { id: bootstrapCompany.id });
+      }
+
       const passwordHash = await bcrypt.hash(adminPassword, envConfig.bcryptRounds);
       const payload: Record<string, unknown> = {
-        id: crypto.randomUUID(),
         email: adminEmail,
-        name: 'Administrador',
         role: 'admin',
-        company_id: 'bootstrap-company',
-        active: true,
-        mfa_enabled: false,
+        company_id: bootstrapCompany.id,
         created_at: new Date(),
         updated_at: new Date(),
       };
 
+      payload[nameColumn] = 'Administrador';
+      payload[activeColumn] = true;
       if (hasPasswordHashColumn) payload.password_hash = passwordHash;
       if (hasPasswordColumn) payload.password = passwordHash;
 
       await db('users').insert(payload);
 
-      logger.info('Admin user bootstrapped successfully', {
-        adminEmail,
-      });
+      logger.info('Admin user bootstrapped successfully', { adminEmail });
     } else if (envConfig.adminBootstrapForceReset && adminPassword) {
       const passwordHash = await bcrypt.hash(adminPassword, envConfig.bcryptRounds);
-      const payload: Record<string, unknown> = {
-        updated_at: new Date(),
-      };
+      const payload: Record<string, unknown> = { updated_at: new Date() };
 
       if (hasPasswordHashColumn) payload.password_hash = passwordHash;
       if (hasPasswordColumn) payload.password = passwordHash;
 
       await db('users').where('id', existingAdmin.id).update(payload);
 
-      logger.warn('Admin password force-reset via bootstrap flag', {
-        adminEmail,
-      });
+      logger.warn('Admin password force-reset via bootstrap flag', { adminEmail });
     }
 
     this.bootstrapFinished = true;
@@ -236,7 +252,12 @@ export class AuthService {
     }
 
     // Gerar tokens JWT
-    const { accessToken, refreshToken } = this.generateTokens(user.id, user.email, user.role, user.companyId);
+    const { accessToken, refreshToken } = this.generateTokens(
+      user.id,
+      user.email,
+      user.role,
+      user.companyId,
+    );
 
     // Armazenar refresh token no BD (hash)
     await this.storeRefreshToken(user.id, refreshToken);
@@ -344,7 +365,9 @@ export class AuthService {
   /**
    * Refresh access token usando refresh token
    */
-  async refreshAccessToken(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
+  async refreshAccessToken(
+    refreshToken: string,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
     if (!refreshToken) {
       throw new InvalidTokenError('Refresh token is required');
     }
@@ -422,7 +445,9 @@ export class AuthService {
     const backupCodes = this.generateBackupCodes(10);
 
     // Hash dos backup codes (não armazenar plaintext)
-    const backupCodesHash = await Promise.all(backupCodes.map((code) => bcrypt.hash(code, envConfig.bcryptRounds)));
+    const backupCodesHash = await Promise.all(
+      backupCodes.map((code) => bcrypt.hash(code, envConfig.bcryptRounds)),
+    );
 
     // Armazenar secret e backup codes temporariamente
     user.mfaSecret = secret.base32;
@@ -505,13 +530,10 @@ export class AuthService {
       const jti = (decoded as any).jti;
       if (jti) {
         const { addToBlacklist } = require('./cache/tokenBlacklist');
-        await addToBlacklist(
-          jti,
-          userId,
-          decoded.exp,
-          'logout',
-          { email: decoded.email, companyId: decoded.companyId }
-        );
+        await addToBlacklist(jti, userId, decoded.exp, 'logout', {
+          email: decoded.email,
+          companyId: decoded.companyId,
+        });
         logger.info(`Refresh token blacklisted on logout`, { userId, jti });
       }
 
@@ -544,10 +566,7 @@ export class AuthService {
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(Date.now() + envConfig.passwordResetTtlMinutes * 60 * 1000);
 
-    await db('password_reset_tokens')
-      .where('user_id', user.id)
-      .whereNull('used_at')
-      .del();
+    await db('password_reset_tokens').where('user_id', user.id).whereNull('used_at').del();
 
     await db('password_reset_tokens').insert({
       id: crypto.randomUUID(),
@@ -696,7 +715,10 @@ export class AuthService {
   /**
    * Buscar refresh token no BD
    */
-  private findRefreshTokenByUserAndHash(userId: string, token: string): RefreshTokenStore | undefined {
+  private findRefreshTokenByUserAndHash(
+    userId: string,
+    token: string,
+  ): RefreshTokenStore | undefined {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
     for (const stored of refreshTokensStore.values()) {
@@ -720,9 +742,7 @@ export class AuthService {
    */
   private async findUserByEmail(email: string): Promise<UserStore | undefined> {
     const db = await getDatabase();
-    const dbUser = await db('users')
-      .whereRaw('LOWER(email) = ?', [email.toLowerCase()])
-      .first();
+    const dbUser = await db('users').whereRaw('LOWER(email) = ?', [email.toLowerCase()]).first();
 
     if (dbUser) {
       const passwordHash = this.extractPasswordHashFromRow(dbUser);
@@ -890,7 +910,12 @@ export class AuthService {
     return bcrypt.compare(password, hash);
   }
 
-  static generateAccessToken(user: { id: string; email: string; role: string; company_id?: string }): string {
+  static generateAccessToken(user: {
+    id: string;
+    email: string;
+    role: string;
+    company_id?: string;
+  }): string {
     const secret = process.env.JWT_SECRET ?? envConfig.jwt.secret;
     return jwt.sign(
       { userId: user.id, email: user.email, role: user.role, companyId: user.company_id },
@@ -901,11 +926,7 @@ export class AuthService {
 
   static generateRefreshToken(userId: string): string {
     const secret = process.env.JWT_REFRESH_SECRET ?? envConfig.jwt.refreshSecret;
-    return jwt.sign(
-      { userId },
-      secret,
-      { expiresIn: envConfig.jwt.refreshExpiry as any },
-    );
+    return jwt.sign({ userId }, secret, { expiresIn: envConfig.jwt.refreshExpiry as any });
   }
 
   static verifyAccessToken(token: string): JWTPayload | null {

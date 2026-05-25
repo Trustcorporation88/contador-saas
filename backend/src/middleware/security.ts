@@ -23,7 +23,7 @@ function getCSPDirectives() {
   const isDevelopment = envConfig.nodeEnv === 'development';
 
   // CSP base (strict)
-  const baseDirectives: helmet.ContentSecurityPolicyOptions['directives'] = {
+  const baseDirectives = {
     defaultSrc: ["'self'"],
     scriptSrc: ["'self'"],
     styleSrc: ["'self'"],
@@ -67,8 +67,6 @@ function getCSPDirectives() {
  * Helmet.js configuration
  */
 export function securityHeaders() {
-  const isProd = envConfig.nodeEnv === 'production';
-
   return helmet({
     // Content Security Policy
     contentSecurityPolicy: {
@@ -109,14 +107,6 @@ export function securityHeaders() {
 
     // Hide X-Powered-By
     hidePoweredBy: true,
-
-    // Expect-CT (Certificate Transparency)
-    expectCt: isProd
-      ? {
-          maxAge: 86400,
-          enforce: true,
-        }
-      : undefined,
 
     // Cross-Origin policies
     crossOriginEmbedderPolicy: false, // Pode quebrar alguns recursos

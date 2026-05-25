@@ -1,0 +1,28 @@
+{
+	"folders": [
+		{
+			"path": "../.github"
+		},
+		{
+			"path": "../.venv"
+		},
+		{
+			"path": "../.vercel"
+		},
+		{
+			"path": "../.vscode"
+		},
+		{
+			"path": "."
+		},
+		{
+			"path": "../docs"
+		},
+		{
+			"path": "../frontend"
+		},
+		{
+			"path": "../nginx"
+		}
+	]
+}

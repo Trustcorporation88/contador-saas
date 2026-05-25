@@ -1,7 +1,8 @@
 import { FC } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { LucideIcon, TrendingUp, TrendingDown } from 'lucide-react';
+import { Sparkles, TrendingDown, TrendingUp } from 'lucide-react';
+import { SmartTooltip } from '../SmartTooltip';
 import { Service, ServiceStatus } from '../../types/service';
 import { cn } from '../../utils/cn';
 
@@ -9,31 +10,26 @@ export interface ServiceCardProps extends Service {
   className?: string;
 }
 
-const statusConfig: Record<ServiceStatus, { bg: string; border: string; badge: string }> = {
+const statusConfig: Record<ServiceStatus, { accent: string; badge: string }> = {
   active: {
-    bg: 'bg-white dark:bg-gray-800',
-    border: 'border-gray-200 dark:border-gray-700',
-    badge: 'bg-green-100 text-green-700 border-green-300',
+    accent: 'from-sky-500/20 via-cyan-400/10 to-transparent',
+    badge: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30',
   },
   warning: {
-    bg: 'bg-white dark:bg-gray-800',
-    border: 'border-yellow-300 dark:border-yellow-600',
-    badge: 'bg-yellow-100 text-yellow-700 border-yellow-300',
+    accent: 'from-amber-500/25 via-orange-400/10 to-transparent',
+    badge: 'bg-amber-500/15 text-amber-200 border-amber-400/30',
   },
   error: {
-    bg: 'bg-white dark:bg-gray-800',
-    border: 'border-red-300 dark:border-red-600',
-    badge: 'bg-red-100 text-red-700 border-red-300',
+    accent: 'from-rose-500/25 via-red-400/10 to-transparent',
+    badge: 'bg-rose-500/15 text-rose-200 border-rose-400/30',
   },
   disabled: {
-    bg: 'bg-gray-100 dark:bg-gray-900',
-    border: 'border-gray-200 dark:border-gray-700',
-    badge: 'bg-gray-100 text-gray-500 border-gray-200',
+    accent: 'from-slate-500/10 via-slate-400/5 to-transparent',
+    badge: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
   },
 };
 
 export const ServiceCard: FC<ServiceCardProps> = ({
-  id,
   title,
   description,
   icon: Icon,
@@ -43,11 +39,28 @@ export const ServiceCard: FC<ServiceCardProps> = ({
   badge,
   metrics,
   quickActions,
+  help,
+  automated,
   className,
 }) => {
   const navigate = useNavigate();
   const isDisabled = status === 'disabled';
   const config = statusConfig[status];
+
+  const helpContent = help
+    ? {
+        description: help.summary,
+        example: help.examples?.join(' • '),
+        helpText:
+          help.requiredInputs && help.requiredInputs.length > 0
+            ? `Dados para imputar: ${help.requiredInputs.join(', ')}${
+                help.automation ? `. Automação: ${help.automation}` : ''
+              }`
+            : help.automation
+              ? `Automação: ${help.automation}`
+              : undefined,
+      }
+    : undefined;
 
   const handleClick = () => {
     if (isDisabled) return;
@@ -56,17 +69,19 @@ export const ServiceCard: FC<ServiceCardProps> = ({
 
   return (
     <motion.div
-      whileHover={isDisabled ? {} : { scale: 1.03, y: -4 }}
-      whileTap={isDisabled ? {} : { scale: 0.98 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+      whileHover={isDisabled ? {} : { scale: 1.02, y: -6 }}
+      whileTap={isDisabled ? {} : { scale: 0.985 }}
+      transition={{ type: 'spring', stiffness: 280, damping: 24 }}
       onClick={handleClick}
       className={cn(
-        'relative overflow-hidden rounded-2xl border-2 p-6',
-        'flex flex-col gap-4',
-        'transition-all duration-200',
-        config.bg,
-        config.border,
-        isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:shadow-lg',
+        'group relative overflow-hidden rounded-[28px] border border-white/10 p-6',
+        'flex min-h-[280px] flex-col gap-4',
+        'bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(17,24,39,0.96)_100%)]',
+        'shadow-[0_18px_50px_rgba(2,6,23,0.42)] transition-all duration-300',
+        automated && 'ring-1 ring-emerald-400/30',
+        isDisabled
+          ? 'cursor-not-allowed opacity-55'
+          : 'cursor-pointer hover:shadow-[0_25px_70px_rgba(2,6,23,0.55)]',
         className
       )}
       role="button"
@@ -74,54 +89,71 @@ export const ServiceCard: FC<ServiceCardProps> = ({
       aria-label={`${title} - ${description}`}
       aria-disabled={isDisabled}
     >
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
-            <Icon className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+      <div className={cn('absolute inset-0 bg-gradient-to-br opacity-100', config.accent)} />
+      <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/40 to-transparent" />
+
+      <div className="relative flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/10 backdrop-blur">
+            <Icon className="h-6 w-6 text-white" />
           </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-base truncate">
-              {title}
-            </h3>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="truncate text-base font-semibold text-white">{title}</h3>
+              {helpContent && (
+                <SmartTooltip content={helpContent} position="bottom">
+                  <span className="inline-flex items-center rounded-full border border-sky-400/20 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-200">
+                    Como imputar
+                  </span>
+                </SmartTooltip>
+              )}
+            </div>
+            <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-400">{category}</p>
           </div>
         </div>
-        
-        {badge && (
-          <div className={cn(
-            'px-2 py-1 rounded-md text-xs font-medium border',
-            'flex-shrink-0',
-            config.badge
-          )}>
-            {badge}
-          </div>
-        )}
+
+        <div className="flex flex-col items-end gap-2">
+          {automated && (
+            <div className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-200">
+              <Sparkles className="h-3 w-3" />
+              Automação
+            </div>
+          )}
+
+          {badge && (
+            <div
+              className={cn(
+                'rounded-full border px-2.5 py-1 text-[11px] font-medium backdrop-blur',
+                config.badge
+              )}
+            >
+              {badge}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Description */}
-      <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
-        {description}
-      </p>
+      <p className="relative line-clamp-3 text-sm leading-6 text-slate-300">{description}</p>
 
-      {/* Metrics */}
       {metrics && metrics.length > 0 && (
-        <div className="flex flex-col gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+        <div className="relative mt-1 flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 p-3 backdrop-blur-sm">
           {metrics.map((metric, index) => (
             <div key={index} className="flex items-center justify-between text-xs">
-              <span className="text-gray-500 dark:text-gray-400">{metric.label}</span>
+              <span className="text-slate-400">{metric.label}</span>
               <div className="flex items-center gap-1">
-                <span className="font-semibold text-gray-900 dark:text-gray-100">
-                  {metric.value}
-                </span>
+                <span className="font-semibold text-white">{metric.value}</span>
                 {metric.trend && metric.trendValue && (
-                  <span className={cn(
-                    'flex items-center gap-0.5 text-xs',
-                    metric.trend === 'up' ? 'text-green-600' : 'text-red-600'
-                  )}>
+                  <span
+                    className={cn(
+                      'flex items-center gap-0.5 text-xs',
+                      metric.trend === 'up' ? 'text-emerald-300' : 'text-rose-300'
+                    )}
+                  >
                     {metric.trend === 'up' ? (
-                      <TrendingUp className="w-3 h-3" />
+                      <TrendingUp className="h-3 w-3" />
                     ) : (
-                      <TrendingDown className="w-3 h-3" />
+                      <TrendingDown className="h-3 w-3" />
                     )}
                     {metric.trendValue}
                   </span>
@@ -132,14 +164,9 @@ export const ServiceCard: FC<ServiceCardProps> = ({
         </div>
       )}
 
-      {/* Quick Actions - shown on hover */}
       {quickActions && quickActions.length > 0 && !isDisabled && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          whileHover={{ opacity: 1, y: 0 }}
-          className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white dark:from-gray-800 to-transparent"
-        >
-          <div className="flex gap-2">
+        <motion.div initial={{ opacity: 0, y: 10 }} whileHover={{ opacity: 1, y: 0 }} className="relative mt-auto pt-2">
+          <div className="flex flex-wrap gap-2">
             {quickActions.map((action, index) => (
               <button
                 key={index}
@@ -147,7 +174,7 @@ export const ServiceCard: FC<ServiceCardProps> = ({
                   e.stopPropagation();
                   action.onClick();
                 }}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+                className="rounded-xl bg-white px-3 py-1.5 text-xs font-medium text-slate-900 transition-colors hover:bg-slate-200"
               >
                 {action.label}
               </button>

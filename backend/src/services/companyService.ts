@@ -32,10 +32,7 @@ export class CompanyService {
    * @returns Promise<CompanyResponse>
    * @throws Error se CNPJ duplicado ou validação falhar
    */
-  static async create(
-    data: CreateCompanyDTO,
-    adminUserId?: string,
-  ): Promise<CompanyResponse> {
+  static async create(data: CreateCompanyDTO, adminUserId?: string): Promise<CompanyResponse> {
     const db = await getDatabase();
 
     // Validar DTO
@@ -121,10 +118,7 @@ export class CompanyService {
     userId?: string,
     filters?: CompanyFilters,
   ): Promise<PaginatedCompanyResponse> {
-    console.log('[COMPANY_SERVICE_LIST] Starting list', { adminMode, userId, filters });
-    
     const db = await getDatabase();
-    console.log('[COMPANY_SERVICE_LIST] Database connection obtained');
 
     // Validar e aplicar paginação
     const limit = Math.min(filters?.limit || 10, 100); // Max 100
@@ -172,11 +166,11 @@ export class CompanyService {
     console.log('[COMPANY_SERVICE_LIST] Count result:', { countResult, total: countResult?.total });
     const total = parseInt(countResult?.total || 0, 10);
 
-    console.log('[COMPANY_SERVICE_LIST] About to fetch companies...');
     // Paginar e ordenar
-    const companies = (await query.orderBy('created_at', 'desc').limit(limit).offset(offset)) as any[];
-    console.log('[COMPANY_SERVICE_LIST] Companies fetched:', { count: companies.length });
-
+    const companies = (await query
+      .orderBy('created_at', 'desc')
+      .limit(limit)
+      .offset(offset)) as any[];
     // Formatar resposta
     const response = {
       data: companies.map((c) => this.formatCompanyResponse(c)),
@@ -185,7 +179,6 @@ export class CompanyService {
       limit,
       totalPages: Math.ceil(total / limit),
     };
-    console.log('[COMPANY_SERVICE_LIST] Returning response:', { total: response.total, dataLength: response.data.length });
     return response;
   }
 
@@ -366,10 +359,7 @@ export class CompanyService {
     const db = await getDatabase();
 
     const cleaned = cnpj.replace(/[^\d]/g, '');
-    const existing = await db('companies')
-      .where('cnpj', cleaned)
-      .where('is_active', true)
-      .first();
+    const existing = await db('companies').where('cnpj', cleaned).where('is_active', true).first();
 
     return !!existing;
   }
@@ -387,7 +377,9 @@ export class CompanyService {
       phone: company.phone,
       email: company.email,
       tax_regime: company.tax_regime,
-      fiscal_year_start: company.fiscal_year_start ? JSON.parse(company.fiscal_year_start) : undefined,
+      fiscal_year_start: company.fiscal_year_start
+        ? JSON.parse(company.fiscal_year_start)
+        : undefined,
       is_active: company.is_active,
       created_at: new Date(company.created_at).toISOString(),
       updated_at: new Date(company.updated_at).toISOString(),
@@ -434,14 +426,14 @@ export class CompanyService {
   static async getCompanyStats(companyId: string): Promise<Record<string, any>> {
     const db = await getDatabase();
 
-    const [
-      userCount,
-      journalCount,
-      accountCount,
-    ] = await Promise.all([
-      db('company_users').where('company_id', companyId).where('is_active', true).count('id as count').first(),
+    const [userCount, journalCount, accountCount] = await Promise.all([
+      db('company_users').where('company_id', companyId).count('id as count').first(),
       db('journal_entries').where('company_id', companyId).count('id as count').first(),
-      db('accounts').where('company_id', companyId).where('is_active', true).count('id as count').first(),
+      db('accounts')
+        .where('company_id', companyId)
+        .where('is_active', true)
+        .count('id as count')
+        .first(),
     ]);
 
     return {

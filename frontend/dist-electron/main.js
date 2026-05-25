@@ -1,33 +1,33 @@
-import { app as n, BrowserWindow as s, shell as h } from "electron";
-import o from "node:path";
-import { fileURLToPath as p } from "node:url";
-const c = p(import.meta.url), l = o.dirname(c), a = o.join(l, ".."), r = o.join(a, "dist"), i = process.env.VITE_DEV_SERVER_URL;
-process.env.VITE_PUBLIC = i ? o.join(a, "public") : r;
-let e = null;
+import { BrowserWindow as e, app as t, shell as n } from "electron";
+import r from "node:path";
+import { fileURLToPath as i } from "node:url";
+//#region electron/main.ts
+var a = i(import.meta.url), o = r.dirname(a), s = r.join(o, ".."), c = r.join(s, "dist"), l = process.env.VITE_DEV_SERVER_URL;
+process.env.VITE_PUBLIC = l ? r.join(s, "public") : c;
+var u = null;
 function d() {
-  e = new s({
-    width: 1280,
-    height: 800,
-    minWidth: 1024,
-    minHeight: 640,
-    title: "O Contador",
-    show: !1,
-    // prevents flash of unstyled content
-    webPreferences: {
-      preload: o.join(l, "preload.mjs"),
-      contextIsolation: !0,
-      nodeIntegration: !1,
-      sandbox: !1
-    }
-  }), e.once("ready-to-show", () => e == null ? void 0 : e.show()), e.webContents.setWindowOpenHandler(({ url: t }) => ((t.startsWith("http://") || t.startsWith("https://")) && h.openExternal(t), { action: "deny" })), i ? (e.loadURL(i), e.webContents.openDevTools()) : e.loadFile(o.join(r, "index.html")), e.on("closed", () => {
-    e = null;
-  });
+	u = new e({
+		width: 1280,
+		height: 800,
+		minWidth: 1024,
+		minHeight: 640,
+		title: "O Contador",
+		show: !1,
+		webPreferences: {
+			preload: r.join(o, "preload.mjs"),
+			contextIsolation: !0,
+			nodeIntegration: !1,
+			sandbox: !1
+		}
+	}), u.once("ready-to-show", () => u?.show()), u.webContents.setWindowOpenHandler(({ url: e }) => ((e.startsWith("http://") || e.startsWith("https://")) && n.openExternal(e), { action: "deny" })), l ? (u.loadURL(l), u.webContents.openDevTools()) : u.loadFile(r.join(c, "index.html")), u.on("closed", () => {
+		u = null;
+	});
 }
-n.whenReady().then(d);
-n.on("window-all-closed", () => {
-  process.platform !== "darwin" && (n.quit(), e = null);
+t.whenReady().then(d), t.on("window-all-closed", () => {
+	process.platform !== "darwin" && (t.quit(), u = null);
+}), t.on("activate", () => {
+	e.getAllWindows().length === 0 && d();
 });
-n.on("activate", () => {
-  s.getAllWindows().length === 0 && d();
-});
+//#endregion
+
 //# sourceMappingURL=main.js.map

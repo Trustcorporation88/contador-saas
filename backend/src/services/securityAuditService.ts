@@ -57,7 +57,7 @@ export interface SecurityAuditEvent {
  */
 export async function logSecurityEvent(event: SecurityAuditEvent): Promise<void> {
   try {
-    const db = getDatabase();
+    const db = await getDatabase();
 
     // Verifica se tabela existe
     const tableExists = await db.schema.hasTable('security_audit_log');
@@ -334,7 +334,7 @@ export async function getRecentSecurityEvents(
   limit: number = 50,
 ): Promise<any[]> {
   try {
-    const db = getDatabase();
+    const db = await getDatabase();
     
     const tableExists = await db.schema.hasTable('security_audit_log');
     if (!tableExists) {
@@ -364,7 +364,7 @@ export async function getCriticalSecurityEvents(
   limit: number = 100,
 ): Promise<any[]> {
   try {
-    const db = getDatabase();
+    const db = await getDatabase();
     
     const tableExists = await db.schema.hasTable('security_audit_log');
     if (!tableExists) {
@@ -394,7 +394,7 @@ export async function countFailedLogins(
   hoursAgo: number = 1,
 ): Promise<number> {
   try {
-    const db = getDatabase();
+    const db = await getDatabase();
     
     const tableExists = await db.schema.hasTable('security_audit_log');
     if (!tableExists) {

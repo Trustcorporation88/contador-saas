@@ -7,6 +7,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { TaxCalculationService } from '../services/taxCalculationService';
 import { TaxRegime, TaxStatus, TaxType, CalculateTaxDTO } from '../models/dtos/taxDTO';
+import fs from 'fs';
+import path from 'path';
 import { logger } from '../middleware/requestLogger';
 import cacheService, { TTL_CONFIG } from '../services/cache/cacheService';
 import CacheKeys from '../services/cache/cacheKeys';
@@ -92,17 +94,25 @@ export class TaxController {
         return res.status(400).json({ error: 'tax_regime, period_start e period_end são obrigatórios' });
       }
 
-      const result = await TaxCalculationService.calculate(dto);
-      const saved  = await TaxCalculationService.save(result);
+       const result = await TaxCalculationService.calculate(dto);
+       const saved  = await TaxCalculationService.save(result);
+       const guide = await TaxCalculationService.generateDASGuide(result);
 
-      // INVALIDATE CACHE após salvar apuração
-      const invalidatedCount = await cacheService.invalidateTaxes(companyId);
-      logger.info('Cache invalidated after tax appraisal save', { 
-        companyId,
-        invalidatedKeys: invalidatedCount 
-      });
+       const guidesDir = path.resolve(process.cwd(), 'generated-guides');
+       if (!fs.existsSync(guidesDir)) {
+         fs.mkdirSync(guidesDir, { recursive: true });
+       }
+       const filePath = path.join(guidesDir, guide.filename);
+       fs.writeFileSync(filePath, guide.buffer);
 
-      return res.status(201).json({ calculation: result, saved });
+       // INVALIDATE CACHE após salvar apuração
+       const invalidatedCount = await cacheService.invalidateTaxes(companyId);
+       logger.info('Cache invalidated after tax appraisal save', { 
+         companyId,
+         invalidatedKeys: invalidatedCount 
+       });
+
+       return res.status(201).json({ calculation: result, saved, guide: { filename: guide.filename, path: filePath } });
     } catch (err) {
       logger.error('Tax appraisal error', { error: (err as Error).message });
       return next(err);

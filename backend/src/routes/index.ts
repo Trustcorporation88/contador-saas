@@ -1,9 +1,6 @@
 import { Router } from 'express';
 import authRoutes from './auth';
 import companiesRoutes from './companies';
-import journalsRoutes from './journals';
-import reportsRoutes from './reports';
-import taxesRoutes from './taxes';
 import auditRoutes from './audit';
 import cnpjRoutes from './cnpj';
 import backupRoutes from './backup';
@@ -13,6 +10,7 @@ import contasReceberRoutes from './contasReceber';
 import contasPagarRoutes from './contasPagar';
 import healthRoutes from './health';
 import setupRoutes from './setup';
+import dasRoutes from './das';
 
 /**
  * Main API v1 router
@@ -25,10 +23,8 @@ router.use('/setup', setupRoutes);
 
 // Routes
 router.use('/auth', authRoutes);
+// Nota: journals, reports e taxes são acessíveis apenas via /companies/:companyId/...
 router.use('/companies', companiesRoutes);
-router.use('/journals', journalsRoutes);
-router.use('/reports', reportsRoutes);
-router.use('/taxes', taxesRoutes);
 router.use('/audit', auditRoutes);
 router.use('/cnpj', cnpjRoutes);
 router.use('/admin/backups', backupRoutes);
@@ -36,6 +32,7 @@ router.use('/copiloto', copilotoRoutes);
 router.use('/documentos', documentosFiscaisRoutes);
 router.use('/contas-receber', contasReceberRoutes);
 router.use('/contas-pagar', contasPagarRoutes);
+router.use('/das', dasRoutes);
 router.use('/health', healthRoutes);
 
 // API status

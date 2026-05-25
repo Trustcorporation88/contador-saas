@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { TaxController } from '../controllers/taxController';
 import { authenticateToken } from '../middleware/auth';
+import { validateTenantAccess } from '../middleware/multiTenant';
 
 /**
  * Tax Routes — company-scoped via /companies/:companyId/taxes
@@ -12,7 +13,7 @@ import { authenticateToken } from '../middleware/auth';
  */
 const router = Router({ mergeParams: true });
 
-router.use(authenticateToken);
+router.use(authenticateToken, validateTenantAccess);
 
 /** Simular cálculo (sem persistir) */
 router.post('/calculate', TaxController.calculate);

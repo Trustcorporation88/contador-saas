@@ -6,6 +6,7 @@
 
 import { getDatabase } from '../config/database';
 import { ReportService } from './reportService';
+import { exportBalanceSheetToPdf, exportIncomeStatementToPdf } from './exportService';
 import {
   TaxType, TaxRegime, TaxStatus,
   TAX_RATES, SIMPLES_ANEXO_I, SIMPLES_ANEXO_III,
@@ -288,6 +289,25 @@ export class TaxCalculationService {
     }
 
     return saved;
+  }
+
+  static async generateDASGuide(result: TaxCalculationResult): Promise<{ filename: string; buffer: Buffer }> {
+    const total = result.total_tax ?? result.totalAmount ?? 0;
+    const period = `${result.period_start}__${result.period_end}`;
+    const filename = `das_${result.company_id}_${period}.pdf`;
+
+    const report = {
+      date_from: result.period_start,
+      date_to: result.period_end,
+      revenues: [{ code: 'DAS', name: 'DAS Simples Nacional', balance: total }],
+      expenses: [],
+      gross_revenue: result.revenues ?? 0,
+      total_expenses: 0,
+      net_income: total,
+    } as any;
+
+    const buffer = exportIncomeStatementToPdf(report);
+    return { filename, buffer };
   }
 
   static async list(companyId: string, filters?: {

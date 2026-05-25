@@ -69,6 +69,21 @@ export async function validateTenantAccess(
     // Extrair company_id do path parameter (:companyId)
     const pathCompanyId = req.params.companyId;
 
+    // Admin bypass: role 'admin' acessa qualquer empresa sem checar company_users
+    if (req.user.role === 'admin') {
+      const targetCompanyId = req.params.companyId || req.user.companyId;
+      req.tenant = {
+        companyId: targetCompanyId,
+        userId: req.user.id,
+        role: 'admin',
+        permissions: ['read', 'write', 'delete', 'admin'],
+        issuedAt: req.tokenMetadata?.issuedAt || Math.floor(Date.now() / 1000),
+        expiresAt: req.tokenMetadata?.expiresAt || Math.floor(Date.now() / 1000) + 3600,
+      };
+      next();
+      return;
+    }
+
     // Se houver um companyId no path, é uma requisição específica de tenant
     if (pathCompanyId) {
       await validatePathCompanyAccess(req, res, next, pathCompanyId);
@@ -146,9 +161,10 @@ async function validatePathCompanyAccess(
     // Parse permissions (stored as JSON in DB)
     let permissions: string[] = [];
     try {
-      permissions = typeof userCompany.permissions === 'string'
-        ? JSON.parse(userCompany.permissions)
-        : userCompany.permissions || [];
+      permissions =
+        typeof userCompany.permissions === 'string'
+          ? JSON.parse(userCompany.permissions)
+          : userCompany.permissions || [];
     } catch (e) {
       permissions = [];
     }
@@ -201,9 +217,10 @@ async function validatePathCompanyAccess(
   // Parse permissions
   let permissions: string[] = [];
   try {
-    permissions = typeof userCompany.permissions === 'string'
-      ? JSON.parse(userCompany.permissions)
-      : userCompany.permissions || [];
+    permissions =
+      typeof userCompany.permissions === 'string'
+        ? JSON.parse(userCompany.permissions)
+        : userCompany.permissions || [];
   } catch (e) {
     permissions = [];
   }
@@ -281,9 +298,10 @@ async function validateJWTCompanyAccess(
   // Parse permissions
   let permissions: string[] = [];
   try {
-    permissions = typeof userCompany.permissions === 'string'
-      ? JSON.parse(userCompany.permissions)
-      : userCompany.permissions || [];
+    permissions =
+      typeof userCompany.permissions === 'string'
+        ? JSON.parse(userCompany.permissions)
+        : userCompany.permissions || [];
   } catch (e) {
     permissions = [];
   }
@@ -331,9 +349,10 @@ export async function checkPermission(
 
     let permissions: string[] = [];
     try {
-      permissions = typeof userCompany.permissions === 'string'
-        ? JSON.parse(userCompany.permissions)
-        : userCompany.permissions || [];
+      permissions =
+        typeof userCompany.permissions === 'string'
+          ? JSON.parse(userCompany.permissions)
+          : userCompany.permissions || [];
     } catch (e) {
       return false;
     }
@@ -520,3 +539,5 @@ export async function logTenantAccess(
     });
   }
 }
+
+export default validateTenantAccess;

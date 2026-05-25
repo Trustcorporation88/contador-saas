@@ -5,7 +5,11 @@
 
 import { Request, Response } from 'express';
 import { DocumentoFiscalService } from '../services/documentoFiscalService';
-import { CreateDocumentoFiscalDTO, FiltrosDocumentiFiscal } from '../models/tipos/DocumentoFiscalTypes';
+import {
+  CreateDocumentoFiscalDTO,
+  FiltrosDocumentiFiscal,
+} from '../models/tipos/DocumentoFiscalTypes';
+import { logger } from '../middleware/requestLogger';
 
 export class DocumentoFiscalController {
   /**
@@ -14,8 +18,6 @@ export class DocumentoFiscalController {
    */
   static async criar(req: Request, res: Response): Promise<void> {
     try {
-      console.log('[DOCUMENTO_CONTROLLER] POST /documentos - Entrada');
-
       const companyId = req.user?.companyId;
       const userId = req.user?.id;
 
@@ -30,7 +32,6 @@ export class DocumentoFiscalController {
 
       const data = req.body as CreateDocumentoFiscalDTO;
 
-      // Validações básicas
       if (!data.tipo || !data.numero || !data.serie || !data.descricao) {
         res.status(400).json({
           success: false,
@@ -56,9 +57,10 @@ export class DocumentoFiscalController {
         return;
       }
 
+      logger.info('Documento fiscal criado', { companyId, userId });
       res.status(201).json(resultado);
     } catch (error) {
-      console.error('[DOCUMENTO_CONTROLLER] Erro:', error);
+      logger.error('Erro ao criar documento fiscal', { error: (error as Error).message });
       res.status(500).json({
         success: false,
         error: 'Erro ao criar documento',
@@ -73,8 +75,6 @@ export class DocumentoFiscalController {
    */
   static async listar(req: Request, res: Response): Promise<void> {
     try {
-      console.log('[DOCUMENTO_CONTROLLER] GET /documentos - Entrada');
-
       const companyId = req.user?.companyId;
 
       if (!companyId) {
@@ -86,7 +86,6 @@ export class DocumentoFiscalController {
         return;
       }
 
-      // Extrair filtros da query string
       const filters: FiltrosDocumentiFiscal = {
         tipo: req.query.tipo as any,
         status: req.query.status as any,
@@ -104,10 +103,9 @@ export class DocumentoFiscalController {
       };
 
       const resultado = await DocumentoFiscalService.list(companyId, filters);
-
       res.json(resultado);
     } catch (error) {
-      console.error('[DOCUMENTO_CONTROLLER] Erro:', error);
+      logger.error('Erro ao listar documentos fiscais', { error: (error as Error).message });
       res.status(500).json({
         success: false,
         error: 'Erro ao listar documentos',
@@ -122,8 +120,6 @@ export class DocumentoFiscalController {
    */
   static async obter(req: Request, res: Response): Promise<void> {
     try {
-      console.log('[DOCUMENTO_CONTROLLER] GET /documentos/:id - Entrada');
-
       const companyId = req.user?.companyId;
       const { id } = req.params;
 
@@ -147,12 +143,9 @@ export class DocumentoFiscalController {
         return;
       }
 
-      res.json({
-        success: true,
-        data: documento,
-      });
+      res.json({ success: true, data: documento });
     } catch (error) {
-      console.error('[DOCUMENTO_CONTROLLER] Erro:', error);
+      logger.error('Erro ao obter documento fiscal', { error: (error as Error).message });
       res.status(500).json({
         success: false,
         error: 'Erro ao obter documento',
@@ -167,8 +160,6 @@ export class DocumentoFiscalController {
    */
   static async atualizar(req: Request, res: Response): Promise<void> {
     try {
-      console.log('[DOCUMENTO_CONTROLLER] PUT /documentos/:id - Entrada');
-
       const companyId = req.user?.companyId;
       const userId = req.user?.id;
       const { id } = req.params;
@@ -191,7 +182,7 @@ export class DocumentoFiscalController {
 
       res.json(resultado);
     } catch (error) {
-      console.error('[DOCUMENTO_CONTROLLER] Erro:', error);
+      logger.error('Erro ao atualizar documento fiscal', { error: (error as Error).message });
       res.status(500).json({
         success: false,
         error: 'Erro ao atualizar documento',
@@ -202,12 +193,10 @@ export class DocumentoFiscalController {
 
   /**
    * POST /api/v1/documentos/:id/registrar
-   * Registrar documento (mudar de rascunho para registrado)
+   * Registrar documento (rascunho → registrado)
    */
   static async registrar(req: Request, res: Response): Promise<void> {
     try {
-      console.log('[DOCUMENTO_CONTROLLER] POST /documentos/:id/registrar - Entrada');
-
       const companyId = req.user?.companyId;
       const { id } = req.params;
 
@@ -229,7 +218,7 @@ export class DocumentoFiscalController {
 
       res.json(resultado);
     } catch (error) {
-      console.error('[DOCUMENTO_CONTROLLER] Erro:', error);
+      logger.error('Erro ao registrar documento fiscal', { error: (error as Error).message });
       res.status(500).json({
         success: false,
         error: 'Erro ao registrar documento',
@@ -244,8 +233,6 @@ export class DocumentoFiscalController {
    */
   static async cancelar(req: Request, res: Response): Promise<void> {
     try {
-      console.log('[DOCUMENTO_CONTROLLER] DELETE /documentos/:id - Entrada');
-
       const companyId = req.user?.companyId;
       const { id } = req.params;
 
@@ -267,7 +254,7 @@ export class DocumentoFiscalController {
 
       res.json(resultado);
     } catch (error) {
-      console.error('[DOCUMENTO_CONTROLLER] Erro:', error);
+      logger.error('Erro ao cancelar documento fiscal', { error: (error as Error).message });
       res.status(500).json({
         success: false,
         error: 'Erro ao cancelar documento',
@@ -282,8 +269,6 @@ export class DocumentoFiscalController {
    */
   static async getEstatisticas(req: Request, res: Response): Promise<void> {
     try {
-      console.log('[DOCUMENTO_CONTROLLER] GET /documentos/stats/estatisticas - Entrada');
-
       const companyId = req.user?.companyId;
 
       if (!companyId) {
@@ -296,13 +281,9 @@ export class DocumentoFiscalController {
       }
 
       const stats = await DocumentoFiscalService.getEstatisticas(companyId);
-
-      res.json({
-        success: true,
-        data: stats,
-      });
+      res.json({ success: true, data: stats });
     } catch (error) {
-      console.error('[DOCUMENTO_CONTROLLER] Erro:', error);
+      logger.error('Erro ao obter estatísticas de documentos', { error: (error as Error).message });
       res.status(500).json({
         success: false,
         error: 'Erro ao obter estatísticas',

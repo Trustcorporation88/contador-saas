@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { AccountController } from '../controllers/accountController';
 import { authenticateToken } from '../middleware/auth';
+import { validateTenantAccess } from '../middleware/multiTenant';
 
 /**
  * Chart of Accounts routes
@@ -22,7 +23,7 @@ const router = Router({ mergeParams: true });
  * Middleware de autenticação
  * Todos os endpoints requerem JWT válido
  */
-router.use(authenticateToken);
+router.use(authenticateToken, validateTenantAccess);
 
 /**
  * GET /companies/:companyId/accounts

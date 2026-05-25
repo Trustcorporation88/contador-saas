@@ -5,6 +5,7 @@ import { initializeDatabase } from './config/database';
 import { logger } from './middleware/requestLogger';
 import { BackupService } from './services/backupService';
 import authService from './services/authService';
+import redisClient from './services/cache/redisClient';
 
 /**
  * Server entry point
@@ -28,6 +29,12 @@ async function startServer(): Promise<void> {
 
     await authService.bootstrapAdminUser();
     console.log('✓ Authentication bootstrap completed');
+
+    // Inicializar Redis se cache habilitado
+    if (envConfig.cache.enabled) {
+      redisClient.connect();
+      console.log('✓ Redis connecting...');
+    }
 
     // Start HTTP server
     const server = app.listen(PORT, HOST, () => {
@@ -76,4 +83,3 @@ async function startServer(): Promise<void> {
 
 // Start the server
 startServer();
-

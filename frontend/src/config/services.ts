@@ -83,6 +83,11 @@ export const SERVICES: Service[] = [
       { label: 'Emitidas este mês', value: '156' },
       { label: 'Faturamento', value: 'R$ 245.000', trend: 'up', trendValue: '+12%' },
     ],
+    help: {
+      summary: 'Use este serviço para registrar notas emitidas e validar dados fiscais antes da transmissão.',
+      requiredInputs: ['CNPJ do emitente', 'cliente/tomador', 'itens/serviços', 'valores e tributos'],
+      examples: ['NF de venda de serviço', 'NF de revenda com tributação do Simples'],
+    },
   },
   {
     id: 'sped-fiscal',
@@ -102,10 +107,17 @@ export const SERVICES: Service[] = [
     route: '/impostos/das',
     status: 'warning',
     badge: 'Vence em 3 dias',
+    automated: true,
     metrics: [
       { label: 'Valor estimado', value: 'R$ 8.450' },
       { label: 'Vencimento', value: '25/05/2026' },
     ],
+    help: {
+      summary: 'Centraliza a conferência do faturamento do mês e dispara a geração automatizada da guia DAS.',
+      requiredInputs: ['receita bruta do período', 'notas fiscais emitidas', 'eventuais ajustes tributários'],
+      examples: ['Receita do mês: R$ 82.500', 'Segregação por serviço e comércio'],
+      automation: 'Após conferência dos dados, o sistema deve calcular, gerar a guia e alertar vencimento automaticamente.',
+    },
   },
   {
     id: 'impostos-apurar',
@@ -123,6 +135,11 @@ export const SERVICES: Service[] = [
     category: 'fiscal',
     route: '/documentos/obrigacoes',
     badge: 3,
+    help: {
+      summary: 'Mostra as entregas mensais e anuais com checklist do que falta imputar.',
+      requiredInputs: ['competência', 'dados fiscais consolidados', 'eventuais recibos/protocolos'],
+      examples: ['DCTFWeb mensal', 'DEFIS anual do Simples Nacional'],
+    },
   },
 
   // ===== FINANCEIRO =====
@@ -138,6 +155,11 @@ export const SERVICES: Service[] = [
       { label: 'A receber', value: 'R$ 45.200' },
       { label: 'Vencidas', value: 'R$ 3.100', trend: 'down' },
     ],
+    help: {
+      summary: 'Cadastre títulos, parcelas e previsões de entrada para alimentar caixa e conciliação.',
+      requiredInputs: ['cliente', 'valor', 'data de vencimento', 'categoria da receita'],
+      examples: ['Mensalidade de cliente', 'Recebimento por boleto ou Pix'],
+    },
   },
   {
     id: 'contas-pagar',
@@ -151,6 +173,11 @@ export const SERVICES: Service[] = [
       { label: 'A pagar', value: 'R$ 23.800' },
       { label: 'Vence hoje', value: 'R$ 1.200' },
     ],
+    help: {
+      summary: 'Registre despesas e contas recorrentes para organizar obrigações e saídas financeiras.',
+      requiredInputs: ['fornecedor', 'valor', 'vencimento', 'centro de custo'],
+      examples: ['Aluguel', 'Honorários', 'Conta de software mensal'],
+    },
   },
   {
     id: 'fluxo-caixa',
@@ -172,6 +199,13 @@ export const SERVICES: Service[] = [
     category: 'financeiro',
     route: '/financeiro/conciliacao',
     badge: 'Pendente',
+    automated: true,
+    help: {
+      summary: 'Importa extratos e sugere vínculos automáticos com receitas, despesas e transferências.',
+      requiredInputs: ['conta bancária', 'período do extrato', 'regras de conciliação'],
+      examples: ['Arquivo OFX', 'Integração bancária via Open Finance'],
+      automation: 'Sugestões automáticas por histórico, valor, CNPJ e descrição do lançamento.',
+    },
   },
   {
     id: 'cartoes-credito',
@@ -188,6 +222,13 @@ export const SERVICES: Service[] = [
     icon: ArrowDownRight,
     category: 'financeiro',
     route: '/open-finance',
+    automated: true,
+    help: {
+      summary: 'Conecte as contas bancárias da empresa para sincronização contínua de saldos e movimentações.',
+      requiredInputs: ['instituição financeira', 'conta autorizada', 'consentimento de acesso'],
+      examples: ['Banco Inter PJ', 'Conta corrente operacional'],
+      automation: 'Sincronização automática de extratos para alimentar conciliação e dashboards.',
+    },
   },
 
   // ===== CONTÁBIL =====

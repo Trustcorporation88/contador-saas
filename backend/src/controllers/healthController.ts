@@ -121,7 +121,7 @@ export class HealthController {
     const startTime = Date.now();
     
     try {
-      const db = getDatabase();
+      const db = await getDatabase();
       
       // Simple query para testar conexão
       await db.raw('SELECT 1 as health_check');
@@ -181,7 +181,7 @@ export class HealthController {
         latency,
         memory: {
           used: health.memoryUsed,
-          peak: health.memoryUsedPeak || health.memoryUsed,
+          peak: health.memoryUsed,
         },
         blacklist: {
           tokens: blacklistStats.tokenCount,
