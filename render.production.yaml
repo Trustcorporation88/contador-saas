@@ -81,7 +81,7 @@ services:
 
       # ── CORS ──────────────────────────────────────────────
       - key: CORS_ORIGIN
-        value: https://app.ocontador.app
+        value: https://app.ocontador.app,https://procontador.com.br,https://www.procontador.com.br,https://contador-saas-ashy.vercel.app
 
       # ── Logs ──────────────────────────────────────────────
       - key: LOG_LEVEL
