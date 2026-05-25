@@ -1,3 +1,7 @@
+/**
+ * Server entry point — v2.0.1
+ * Auto-bootstraps admin user on startup via ADMIN_BOOTSTRAP_EMAIL / ADMIN_BOOTSTRAP_PASSWORD env vars.
+ */
 import app from './app';
 import { envConfig } from './config/env';
 import { validateEnvironment } from './config/validateEnv';
