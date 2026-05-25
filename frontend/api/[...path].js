@@ -1,23 +1,5 @@
 const UPSTREAM_BASE_URL = 'https://contador-backend-staging.onrender.com';
 
-const REQUEST_HEADERS_TO_DROP = [
-  'host',
-  'origin',
-  'referer',
-  'content-length',
-  'x-forwarded-for',
-  'x-forwarded-host',
-  'x-forwarded-port',
-  'x-forwarded-proto',
-];
-
-const RESPONSE_HEADERS_TO_DROP = [
-  'access-control-allow-origin',
-  'access-control-allow-credentials',
-  'access-control-allow-methods',
-  'access-control-allow-headers',
-];
-
 export const config = {
   runtime: 'edge',
 };
@@ -27,27 +9,53 @@ export default async function handler(request) {
   const upstreamPath = requestUrl.pathname.replace(/^\/api/, '');
   const upstreamUrl = new URL(`/api${upstreamPath}${requestUrl.search}`, UPSTREAM_BASE_URL);
 
-  const headers = new Headers(request.headers);
-  for (const header of REQUEST_HEADERS_TO_DROP) {
-    headers.delete(header);
+  // Build clean headers for upstream - keep content-type, authorization, accept
+  const upstreamHeaders = new Headers();
+  const passthroughHeaders = [
+    'content-type',
+    'authorization',
+    'accept',
+    'accept-language',
+    'accept-encoding',
+    'x-tenant-id',
+    'x-request-id',
+    'user-agent',
+  ];
+  for (const name of passthroughHeaders) {
+    const value = request.headers.get(name);
+    if (value) upstreamHeaders.set(name, value);
   }
-  headers.set('x-proxied-by', 'vercel-edge-proxy');
 
-  const upstreamResponse = await fetch(upstreamUrl, {
+  const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
+  const body = hasBody ? await request.arrayBuffer() : undefined;
+
+  if (body !== undefined && body.byteLength > 0) {
+    upstreamHeaders.set('content-length', String(body.byteLength));
+  }
+
+  const upstreamResponse = await fetch(upstreamUrl.toString(), {
     method: request.method,
-    headers,
-    body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,
+    headers: upstreamHeaders,
+    body: body && body.byteLength > 0 ? body : undefined,
     redirect: 'manual',
   });
 
-  const responseHeaders = new Headers(upstreamResponse.headers);
-  for (const header of RESPONSE_HEADERS_TO_DROP) {
-    responseHeaders.delete(header);
+  // Forward response as-is (Vercel serves it same-origin so CORS not needed)
+  const responseHeaders = new Headers();
+  const passthroughResponseHeaders = [
+    'content-type',
+    'content-length',
+    'cache-control',
+    'set-cookie',
+    'x-request-id',
+  ];
+  for (const name of passthroughResponseHeaders) {
+    const value = upstreamResponse.headers.get(name);
+    if (value) responseHeaders.set(name, value);
   }
 
   return new Response(upstreamResponse.body, {
     status: upstreamResponse.status,
-    statusText: upstreamResponse.statusText,
     headers: responseHeaders,
   });
 }
