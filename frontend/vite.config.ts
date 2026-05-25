@@ -15,9 +15,10 @@ export default defineConfig({
   },
   define: {
     'import.meta.env.VITE_API_URL': JSON.stringify(
-      process.env.VITE_API_URL || process.env.NODE_ENV === 'production'
-        ? 'https://contador-backend.onrender.com'
-        : 'http://localhost:3000'
+      process.env.VITE_API_URL ??
+        (process.env.NODE_ENV === 'production'
+          ? 'https://contador-backend-staging.onrender.com'
+          : 'http://localhost:3000')
     ),
   },
   server: {

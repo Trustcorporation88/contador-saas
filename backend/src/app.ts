@@ -22,10 +22,23 @@ app.disable('x-powered-by');
 app.set('trust proxy', 1);
 
 const mutatingMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-const allowedOrigins = envConfig.corsOrigin
-  .split(',')
-  .map((item) => item.trim())
-  .filter(Boolean);
+const fallbackOrigins = [
+  'https://procontador.com.br',
+  'https://www.procontador.com.br',
+  'https://contador-saas-ashy.vercel.app',
+  'https://app.ocontador.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+];
+const allowedOrigins = Array.from(
+  new Set(
+    envConfig.corsOrigin
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .concat(fallbackOrigins)
+  )
+);
 
 const sanitizeString = (value: string): string => value.replace(/<[^>]*>/g, '').trim();
 
