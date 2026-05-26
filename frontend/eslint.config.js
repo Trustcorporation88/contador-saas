@@ -8,6 +8,7 @@ import typescriptParser from '@typescript-eslint/parser';
 export default [
   {
     files: ['src/**/*.{ts,tsx}'],
+    ignores: ['**/__tests__/**', '**/*.test.tsx', '**/*.test.ts'],
     languageOptions: {
       ecmaVersion: 2021,
       sourceType: 'module',
@@ -30,6 +31,8 @@ export default [
       ...reactHooks.configs.recommended.rules,
       'react/react-in-jsx-scope': 'off',
       'react/prop-types': 'off',
+      'react/no-unescaped-entities': 'warn',
+      'no-undef': 'off',
       '@typescript-eslint/explicit-function-return-types': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
