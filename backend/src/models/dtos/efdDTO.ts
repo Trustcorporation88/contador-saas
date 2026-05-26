@@ -60,7 +60,7 @@ export interface EFDValidationError {
 
 export interface EFDRecord {
   type: string; // E100, E110, E200, E990, etc
-  fields: Record<string, string | number>;
+  fields: Record<string, string | number | boolean>;
   sequence: number;
 }
 

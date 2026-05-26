@@ -165,6 +165,7 @@ export class EFDSchedulerService {
       const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000);
 
       // Log to database
+      const db = await getDatabase();
       await db('efd_audit_log').insert({
         id: crypto.randomUUID(),
         action: 'auto_generate_error',

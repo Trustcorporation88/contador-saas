@@ -692,7 +692,7 @@ export class EFDBuilderService {
         total_credit: d.total_credit || 0,
         metadata: d.metadata || {},
       })),
-      total: total?.count || 0,
+      total: typeof total?.count === 'number' ? total.count : parseInt(String(total?.count || 0), 10),
     };
   }
 

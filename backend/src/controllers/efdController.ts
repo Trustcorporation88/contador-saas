@@ -5,7 +5,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { EFDBuilderService } from '../services/efdBuilderService';
-import { CreateEFDGenerationDTO, ListEFDFilters, EFDDownloadOptions } from '../models/dtos/efdDTO';
+import { CreateEFDGenerationDTO, ListEFDFilters, EFDDownloadOptions, EFDStatus } from '../models/dtos/efdDTO';
 import { getDatabase } from '../config/database';
 
 export class EFDController {
@@ -84,7 +84,7 @@ export class EFDController {
       const { status, month, year, page = 1, limit = 20 } = req.query;
 
       const filters: ListEFDFilters = {
-        status: status as string,
+        status: status ? (status as EFDStatus) : undefined,
         month: month ? parseInt(month as string) : undefined,
         year: year ? parseInt(year as string) : undefined,
       };

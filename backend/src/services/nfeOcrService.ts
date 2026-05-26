@@ -3,7 +3,7 @@
  * 
  * Suporta:
  *  - PDF parsing com pdf-parse
- *  - OCR de imagens com Tesseract.js
+ *  - OCR de imagens com Tesseract.js (desabilitado por enquanto)
  *  - Extração de campos estruturados (CNPJ, NF, valor, itens)
  *  - Validação de chave de acesso (44 dígitos)
  *  - Geração de preview de lançamento contábil
@@ -13,7 +13,7 @@ import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import pdfParse from 'pdf-parse';
-import * as Tesseract from 'tesseract.js';
+// import * as Tesseract from 'tesseract.js'; // TODO: Install tesseract.js separately
 import { getDatabase } from '../config/database';
 import { logger } from '../middleware/requestLogger';
 import {
@@ -141,7 +141,7 @@ export class NfeOcrService {
   private static async extractTextFromPdf(filePath: string): Promise<string> {
     try {
       const dataBuffer = fs.readFileSync(filePath);
-      const pdfData = await pdfParse(dataBuffer);
+      const pdfData = await (pdfParse as any)(dataBuffer);
       return pdfData.text || '';
     } catch (error) {
       logger.error('PDF parsing error', { filePath, error: (error as Error).message });
