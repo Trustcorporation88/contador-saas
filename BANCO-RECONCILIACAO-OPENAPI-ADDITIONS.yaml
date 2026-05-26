@@ -1,0 +1,556 @@
+# =====================================================
+# BANK RECONCILIATION OPENAPI SCHEMA ADDITIONS
+# =====================================================
+# Add these sections to openapi.yaml
+
+# =====================================================
+# 1. Add to components/schemas (before "responses" section)
+# =====================================================
+
+BankReconciliationUpload:
+  type: object
+  required:
+    - id
+    - company_id
+    - file_name
+    - bank_name
+    - transaction_count
+    - status
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: ID único do upload
+      example: "550e8400-e29b-41d4-a716-446655440010"
+    company_id:
+      type: string
+      format: uuid
+      description: ID da empresa
+      example: "550e8400-e29b-41d4-a716-446655440001"
+    file_name:
+      type: string
+      maxLength: 255
+      description: Nome do arquivo original
+      example: "extrato_2026_05.csv"
+    bank_name:
+      type: string
+      maxLength: 100
+      description: Banco identificado automaticamente
+      example: "Banco do Brasil"
+    transaction_count:
+      type: integer
+      description: Total de transações extraídas
+      example: 45
+    status:
+      type: string
+      enum: [uploaded, processed, reconciled, failed]
+      description: Status do processamento
+      example: "processed"
+    uploaded_at:
+      type: string
+      format: date-time
+      description: Data do upload
+      example: "2026-05-17T10:30:00Z"
+    processed_at:
+      type: string
+      format: date-time
+      nullable: true
+      description: Data do processamento
+      example: "2026-05-17T10:31:00Z"
+
+BankTransaction:
+  type: object
+  required:
+    - id
+    - transaction_date
+    - description
+    - amount
+    - type
+  properties:
+    id:
+      type: string
+      format: uuid
+      example: "550e8400-e29b-41d4-a716-446655440011"
+    transaction_date:
+      type: string
+      format: date
+      description: Data da transação
+      example: "2026-05-17"
+    description:
+      type: string
+      maxLength: 500
+      description: Descrição da transação
+      example: "PAGAMENTO FORNECEDOR ABC"
+    amount:
+      type: number
+      format: double
+      minimum: 0
+      description: Valor absoluto
+      example: 1500.50
+    type:
+      type: string
+      enum: [debit, credit]
+      description: Tipo de transação
+      example: "debit"
+    bank_balance:
+      type: number
+      format: double
+      nullable: true
+      description: Saldo em conta após a transação
+      example: 25000.00
+
+ReconciliationSuggestion:
+  type: object
+  required:
+    - bank_transaction_id
+    - journal_entry_id
+    - confidence
+    - match_type
+  properties:
+    bank_transaction_id:
+      type: string
+      format: uuid
+      description: ID da transação bancária
+      example: "550e8400-e29b-41d4-a716-446655440011"
+    bank_description:
+      type: string
+      description: Descrição da transação bancária
+      example: "PAGAMENTO FORNECEDOR"
+    bank_amount:
+      type: number
+      format: double
+      description: Valor bancário
+      example: 1500.50
+    bank_date:
+      type: string
+      format: date
+      description: Data bancária
+      example: "2026-05-17"
+    bank_type:
+      type: string
+      enum: [debit, credit]
+      example: "debit"
+    journal_entry_id:
+      type: string
+      format: uuid
+      nullable: true
+      description: ID do lançamento contábil sugerido
+      example: "550e8400-e29b-41d4-a716-446655440012"
+    journal_description:
+      type: string
+      description: Descrição do lançamento contábil
+      example: "Compra de materiais - Fornecedor ABC"
+    journal_amount:
+      type: number
+      format: double
+      description: Valor do lançamento
+      example: 1500.50
+    journal_date:
+      type: string
+      format: date
+      description: Data do lançamento
+      example: "2026-05-17"
+    confidence:
+      type: number
+      format: double
+      minimum: 0
+      maximum: 1
+      description: Score de confiança (0-1)
+      example: 0.95
+    confidence_percentage:
+      type: string
+      description: Confiança em formato percentual
+      example: "95%"
+    description_score:
+      type: number
+      format: double
+      description: Score da descrição (0-1)
+      example: 0.92
+    amount_score:
+      type: number
+      format: double
+      description: Score do valor (0-1)
+      example: 1.0
+    date_score:
+      type: number
+      format: double
+      description: Score da data (0-1)
+      example: 1.0
+    match_type:
+      type: string
+      enum: [automatic, manual, unmatched]
+      description: Tipo de match
+      example: "automatic"
+
+GetSuggestionsResponse:
+  type: object
+  required:
+    - upload_id
+    - total_transactions
+    - matched_count
+    - unmatched_count
+    - suggestions
+  properties:
+    upload_id:
+      type: string
+      format: uuid
+    total_transactions:
+      type: integer
+      example: 45
+    matched_count:
+      type: integer
+      description: Transações com sugestões
+      example: 42
+    unmatched_count:
+      type: integer
+      description: Transações sem sugestões
+      example: 3
+    confidence_threshold:
+      type: number
+      format: double
+      description: Threshold mínimo aplicado
+      example: 0.7
+    suggestions:
+      type: array
+      items:
+        $ref: '#/components/schemas/ReconciliationSuggestion'
+
+ExecuteReconciliationResponse:
+  type: object
+  required:
+    - upload_id
+    - total_processed
+    - reconciled_count
+    - unmatched_count
+    - status
+  properties:
+    upload_id:
+      type: string
+      format: uuid
+    total_processed:
+      type: integer
+      description: Total de transações processadas
+      example: 45
+    reconciled_count:
+      type: integer
+      description: Transações reconciliadas
+      example: 42
+    unmatched_count:
+      type: integer
+      description: Transações sem reconciliação
+      example: 3
+    status:
+      type: string
+      enum: [reconciled]
+      example: "reconciled"
+
+# =====================================================
+# 2. Add to paths
+# =====================================================
+
+/companies/{companyId}/reconciliation:
+  get:
+    tags:
+      - reconciliation
+    summary: Listar uploads de reconciliação
+    description: Lista todos os uploads de extratos bancários com paginação
+    operationId: listReconciliationUploads
+    parameters:
+      - in: path
+        name: companyId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: page
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum: [uploaded, processed, reconciled, failed]
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: Lista de uploads
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                uploads:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/BankReconciliationUpload'
+                pagination:
+                  $ref: '#/components/schemas/Pagination'
+      '401':
+        $ref: '#/components/responses/UnauthorizedError'
+      '500':
+        $ref: '#/components/responses/InternalServerError'
+
+  post:
+    tags:
+      - reconciliation
+    summary: Upload de extrato bancário
+    description: |
+      Faz upload de arquivo CSV contendo extrato bancário.
+      Sistema identifica automaticamente o banco e faz parsing das transações.
+      
+      Formato esperado:
+      - Separador: ; ou ,
+      - Colunas: data, descrição, débito, crédito, saldo
+      - Datas: DD/MM/YYYY
+      - Valores: Pode usar , ou . como decimal
+      
+      Bancos suportados:
+      - Banco do Brasil
+      - Caixa Econômica
+      - Itaú
+      - Bradesco
+      - Santander
+      - CSV genérico
+    operationId: uploadBankStatement
+    parameters:
+      - in: path
+        name: companyId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required:
+              - file
+            properties:
+              file:
+                type: string
+                format: binary
+                description: Arquivo CSV (máximo 10MB)
+    security:
+      - bearerAuth: []
+    responses:
+      '201':
+        description: Upload realizado com sucesso
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/BankReconciliationUpload'
+                - type: object
+                  properties:
+                    warnings:
+                      type: array
+                      items:
+                        type: string
+                      description: Avisos de parsing
+                      example: ["Linha 5: valor inválido"]
+      '400':
+        description: Arquivo inválido ou mal formatado
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Error'
+      '401':
+        $ref: '#/components/responses/UnauthorizedError'
+      '422':
+        description: Nenhuma transação encontrada
+      '500':
+        $ref: '#/components/responses/InternalServerError'
+
+/companies/{companyId}/reconciliation/{uploadId}:
+  get:
+    tags:
+      - reconciliation
+    summary: Obter detalhes do upload
+    description: Retorna informações detalhadas do upload incluindo transações
+    operationId: getReconciliationUpload
+    parameters:
+      - in: path
+        name: companyId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: uploadId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: Detalhes do upload
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                upload:
+                  $ref: '#/components/schemas/BankReconciliationUpload'
+                transactions:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/BankTransaction'
+                summary:
+                  type: object
+                  properties:
+                    total:
+                      type: integer
+                    debits:
+                      type: integer
+                    credits:
+                      type: integer
+      '401':
+        $ref: '#/components/responses/UnauthorizedError'
+      '404':
+        $ref: '#/components/responses/NotFoundError'
+      '500':
+        $ref: '#/components/responses/InternalServerError'
+
+/companies/{companyId}/reconciliation/{uploadId}/suggestions:
+  get:
+    tags:
+      - reconciliation
+    summary: Gerar sugestões de matching
+    description: |
+      Gera sugestões de matching usando IA (fuzzy matching com Levenshtein distance).
+      
+      Algoritmo de scoring:
+      - Descrição: 40% (Levenshtein distance normalizado)
+      - Valor: 40% (exato ou similar)
+      - Data: 20% (±1 dia = 1.0, ±2 dias = 0.7, etc)
+      
+      Score final = descrição*0.4 + valor*0.4 + data*0.2
+      
+      Match types:
+      - automatic: score > 95%
+      - manual: score 70-95% (requer confirmação do usuário)
+      - unmatched: score < 70% (sem sugestão)
+    operationId: getReconciliationSuggestions
+    parameters:
+      - in: path
+        name: companyId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: uploadId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: min_confidence
+        schema:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          default: 0.7
+        description: Filtro mínimo de confiança
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: Sugestões de matching
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetSuggestionsResponse'
+      '401':
+        $ref: '#/components/responses/UnauthorizedError'
+      '404':
+        $ref: '#/components/responses/NotFoundError'
+      '500':
+        $ref: '#/components/responses/InternalServerError'
+
+/companies/{companyId}/reconciliation/{uploadId}/execute:
+  post:
+    tags:
+      - reconciliation
+    summary: Executar reconciliação
+    description: |
+      Executa a reconciliação: aceita sugestões e registra os matches.
+      Cria registros em reconciliation_matches e atualiza status do upload.
+    operationId: executeReconciliation
+    parameters:
+      - in: path
+        name: companyId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: uploadId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - accepted_suggestions
+            properties:
+              accepted_suggestions:
+                type: array
+                description: Sugestões aceitas pelo usuário
+                items:
+                  type: object
+                  required:
+                    - bank_transaction_id
+                    - journal_entry_id
+                  properties:
+                    bank_transaction_id:
+                      type: string
+                      format: uuid
+                    journal_entry_id:
+                      type: string
+                      format: uuid
+                example:
+                  - bank_transaction_id: "550e8400-e29b-41d4-a716-446655440011"
+                    journal_entry_id: "550e8400-e29b-41d4-a716-446655440012"
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: Reconciliação executada com sucesso
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteReconciliationResponse'
+      '400':
+        description: Dados inválidos
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Error'
+      '401':
+        $ref: '#/components/responses/UnauthorizedError'
+      '404':
+        $ref: '#/components/responses/NotFoundError'
+      '500':
+        $ref: '#/components/responses/InternalServerError'
