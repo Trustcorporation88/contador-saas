@@ -290,6 +290,156 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           console.log('✓ 004_create_contas_pagar_tables completed');
         },
       },
+      {
+        name: '005_create_bank_reconciliation_tables',
+        up: async (db) => {
+          const exists = await db.schema.hasTable('bank_reconciliation_uploads');
+          if (exists) {
+            console.log('[MIGRATIONS] Skipping 005_create_bank_reconciliation_tables (already exists)');
+            return;
+          }
+
+          console.log('[MIGRATIONS] Running 005_create_bank_reconciliation_tables...');
+
+          // bank_reconciliation_uploads table
+          await db.schema.createTable('bank_reconciliation_uploads', (table) => {
+            table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+            table.uuid('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+            table.string('file_name', 255).notNullable();
+            table.string('bank_name', 100);
+            table.integer('transaction_count').defaultTo(0);
+            table.enum('status', ['uploaded', 'processed', 'reconciled', 'failed']).defaultTo('uploaded');
+            table.timestamp('uploaded_at').defaultTo(db.fn.now());
+            table.timestamp('processed_at').nullable();
+            table.uuid('created_by').nullable().references('id').inTable('users').onDelete('SET NULL');
+            table.text('notes');
+            table.index(['company_id']);
+            table.index(['status']);
+            table.index(['created_by']);
+            table.index(['uploaded_at']);
+          });
+
+          // bank_transactions table
+          await db.schema.createTable('bank_transactions', (table) => {
+            table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+            table.uuid('upload_id').notNullable().references('id').inTable('bank_reconciliation_uploads').onDelete('CASCADE');
+            table.date('transaction_date').notNullable();
+            table.string('description', 500).notNullable();
+            table.decimal('amount', 15, 2).notNullable();
+            table.enum('type', ['debit', 'credit']).notNullable();
+            table.decimal('bank_balance', 15, 2).nullable();
+            table.string('document_number', 50).nullable();
+            table.string('bank_branch_code', 10).nullable();
+            table.string('bank_account_number', 20).nullable();
+            table.text('raw_data').nullable();
+            table.index(['upload_id']);
+            table.index(['transaction_date']);
+            table.index(['description']);
+          });
+
+          // reconciliation_matches table
+          await db.schema.createTable('reconciliation_matches', (table) => {
+            table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+            table.uuid('upload_id').notNullable().references('id').inTable('bank_reconciliation_uploads').onDelete('CASCADE');
+            table.uuid('bank_transaction_id').notNullable().references('id').inTable('bank_transactions').onDelete('CASCADE');
+            table.uuid('journal_entry_id').nullable().references('id').inTable('journal_entries').onDelete('SET NULL');
+            table.decimal('confidence', 5, 4).notNullable().defaultTo(0);
+            table.enum('match_type', ['automatic', 'manual', 'unmatched']).notNullable();
+            table.decimal('description_score', 5, 4).nullable();
+            table.decimal('amount_score', 5, 4).nullable();
+            table.decimal('date_score', 5, 4).nullable();
+            table.timestamp('matched_at').nullable();
+            table.uuid('matched_by').nullable().references('id').inTable('users').onDelete('SET NULL');
+            table.text('notes').nullable();
+            table.boolean('is_reconciled').defaultTo(false);
+            table.index(['upload_id']);
+            table.index(['bank_transaction_id']);
+            table.index(['journal_entry_id']);
+            table.index(['confidence']);
+            table.index(['is_reconciled']);
+          });
+
+          // reconciliation_history table
+          await db.schema.createTable('reconciliation_history', (table) => {
+            table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+            table.uuid('upload_id').notNullable().references('id').inTable('bank_reconciliation_uploads').onDelete('CASCADE');
+            table.enum('action', ['accepted', 'rejected', 'auto_reconciled']).notNullable();
+            table.uuid('bank_transaction_id').notNullable().references('id').inTable('bank_transactions').onDelete('CASCADE');
+            table.uuid('journal_entry_id').nullable().references('id').inTable('journal_entries').onDelete('SET NULL');
+            table.timestamp('executed_at').defaultTo(db.fn.now());
+            table.uuid('executed_by').nullable().references('id').inTable('users').onDelete('SET NULL');
+            table.text('notes').nullable();
+            table.index(['upload_id']);
+            table.index(['executed_by']);
+            table.index(['executed_at']);
+          });
+
+          console.log('✓ 005_create_bank_reconciliation_tables completed');
+        },
+      },
+      {
+        name: '006_create_nfe_ocr_tables',
+        up: async (db) => {
+          const exists = await db.schema.hasTable('nfe_uploads');
+          if (exists) {
+            console.log('[MIGRATIONS] Skipping 006_create_nfe_ocr_tables (already exists)');
+            return;
+          }
+
+          console.log('[MIGRATIONS] Running 006_create_nfe_ocr_tables...');
+
+          // nfe_uploads table
+          await db.schema.createTable('nfe_uploads', (table) => {
+            table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+            table.uuid('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+            table.string('file_name', 255).notNullable();
+            table.string('mime_type', 100);
+            table.integer('file_size');
+            table.enum('status', ['processing', 'success', 'failed', 'invalid']).defaultTo('processing');
+            table.text('error_message').nullable();
+            table.timestamp('uploaded_at').defaultTo(db.fn.now());
+            table.timestamp('processed_at').nullable();
+            table.uuid('created_by').nullable().references('id').inTable('users').onDelete('SET NULL');
+            table.index(['company_id']);
+            table.index(['status']);
+            table.index(['created_by']);
+          });
+
+          // nfe_registry table - OCR extracted data
+          await db.schema.createTable('nfe_registry', (table) => {
+            table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+            table.uuid('upload_id').notNullable().references('id').inTable('nfe_uploads').onDelete('CASCADE');
+            table.string('invoice_key', 50).nullable();
+            table.string('access_key', 50).nullable();
+            table.date('issue_date').nullable();
+            table.date('due_date').nullable();
+            table.decimal('total_amount', 15, 2).nullable();
+            table.decimal('taxes_total', 15, 2).defaultTo(0);
+            table.string('issuer_name', 255).nullable();
+            table.string('issuer_cnpj', 14).nullable();
+            table.string('receiver_name', 255).nullable();
+            table.string('receiver_cnpj', 14).nullable();
+            table.enum('type', ['entrada', 'saida']).defaultTo('entrada');
+            table.text('description').nullable();
+            table.text('items_json').nullable();
+            table.text('raw_ocr_data').nullable();
+            table.string('suggested_account', 50).nullable();
+            table.enum('validation_status', ['pending', 'validated', 'rejected']).defaultTo('pending');
+            table.text('validation_notes').nullable();
+            table.boolean('journal_created').defaultTo(false);
+            table.uuid('journal_entry_id').nullable().references('id').inTable('journal_entries').onDelete('SET NULL');
+            table.timestamp('created_at').defaultTo(db.fn.now());
+            table.timestamp('updated_at').defaultTo(db.fn.now());
+            table.index(['upload_id']);
+            table.index(['invoice_key']);
+            table.index(['issuer_cnpj']);
+            table.index(['validation_status']);
+            table.index(['journal_created']);
+          });
+
+          console.log('✓ 006_create_nfe_ocr_tables completed');
+        },
+      },
     ];
 
     // Execute migrations that haven't been run yet
