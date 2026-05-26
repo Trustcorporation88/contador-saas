@@ -301,7 +301,6 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
 
           console.log('[MIGRATIONS] Running 005_create_bank_reconciliation_tables...');
 
-          // bank_reconciliation_uploads table
           await db.schema.createTable('bank_reconciliation_uploads', (table) => {
             table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
             table.uuid('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
@@ -319,7 +318,6 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
             table.index(['uploaded_at']);
           });
 
-          // bank_transactions table
           await db.schema.createTable('bank_transactions', (table) => {
             table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
             table.uuid('upload_id').notNullable().references('id').inTable('bank_reconciliation_uploads').onDelete('CASCADE');
@@ -337,7 +335,6 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
             table.index(['description']);
           });
 
-          // reconciliation_matches table
           await db.schema.createTable('reconciliation_matches', (table) => {
             table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
             table.uuid('upload_id').notNullable().references('id').inTable('bank_reconciliation_uploads').onDelete('CASCADE');
@@ -359,7 +356,6 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
             table.index(['is_reconciled']);
           });
 
-          // reconciliation_history table
           await db.schema.createTable('reconciliation_history', (table) => {
             table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
             table.uuid('upload_id').notNullable().references('id').inTable('bank_reconciliation_uploads').onDelete('CASCADE');
@@ -388,7 +384,6 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
 
           console.log('[MIGRATIONS] Running 006_create_nfe_ocr_tables...');
 
-          // nfe_uploads table
           await db.schema.createTable('nfe_uploads', (table) => {
             table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
             table.uuid('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
@@ -405,7 +400,6 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
             table.index(['created_by']);
           });
 
-          // nfe_registry table - OCR extracted data
           await db.schema.createTable('nfe_registry', (table) => {
             table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
             table.uuid('upload_id').notNullable().references('id').inTable('nfe_uploads').onDelete('CASCADE');
@@ -438,6 +432,56 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           });
 
           console.log('✓ 006_create_nfe_ocr_tables completed');
+        },
+      },
+      {
+        name: '007_create_recurring_transactions_tables',
+        up: async (db) => {
+          const exists = await db.schema.hasTable('recurring_transactions');
+          if (exists) {
+            console.log('[MIGRATIONS] Skipping 007_create_recurring_transactions_tables (already exists)');
+            return;
+          }
+
+          console.log('[MIGRATIONS] Running 007_create_recurring_transactions_tables...');
+
+          await db.schema.createTable('recurring_transactions', (table) => {
+            table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+            table.uuid('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+            table.string('description', 255).notNullable();
+            table.decimal('amount', 15, 2).notNullable();
+            table.uuid('debit_account_id').notNullable().references('id').inTable('accounts');
+            table.uuid('credit_account_id').notNullable().references('id').inTable('accounts');
+            table.string('frequency', 50).notNullable();
+            table.date('start_date').notNullable();
+            table.date('end_date').nullable();
+            table.boolean('is_active').defaultTo(true);
+            table.date('next_execution_date').nullable();
+            table.uuid('created_by_id').nullable().references('id').inTable('users');
+            table.timestamp('created_at').defaultTo(db.fn.now());
+            table.timestamp('updated_at').defaultTo(db.fn.now());
+            table.index(['company_id', 'is_active']);
+            table.index(['next_execution_date', 'is_active']);
+            table.index(['frequency']);
+          });
+
+          await db.schema.createTable('recurring_transaction_executions', (table) => {
+            table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+            table.uuid('recurring_transaction_id').notNullable().references('id').inTable('recurring_transactions').onDelete('CASCADE');
+            table.date('execution_date').notNullable();
+            table.uuid('journal_entry_id').nullable().references('id').inTable('journal_entries');
+            table.string('status', 50).notNullable();
+            table.text('error_message').nullable();
+            table.integer('retry_count').defaultTo(0);
+            table.timestamp('executed_at').nullable();
+            table.timestamp('created_at').defaultTo(db.fn.now());
+            table.index(['recurring_transaction_id']);
+            table.index(['status']);
+            table.index(['execution_date']);
+            table.index(['created_at']);
+          });
+
+          console.log('✓ 007_create_recurring_transactions_tables completed');
         },
       },
     ];

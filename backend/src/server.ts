@@ -91,8 +91,21 @@ async function startServer(): Promise<void> {
           }
         });
         
-        console.log('[DAS] ✓ DAS Scheduler initialized with 3 cron jobs');
-      }
+          // Executar lançamentos recorrentes - 05:00 UTC diariamente
+          cron.schedule('5 0 * * *', async () => {
+            console.log('[CRON] Executando lançamentos recorrentes...');
+            try {
+              const { RecurringTransactionService } = await import('./services/recurringTransactionService');
+              const report = await RecurringTransactionService.executeRecurringTransactions();
+              logger.info('[CRON] Recurring transactions execution completed', report);
+              console.log(`[CRON] Recorrências: ${report.success} sucesso, ${report.failed} falhas`);
+            } catch (error) {
+              logger.error('Recurring Transaction Scheduler: execution failed', { error });
+            }
+          });
+        
+          console.log('[DAS] ✓ DAS Scheduler initialized with 4 cron jobs (including recurring transactions)');
+        }
     });
 
     // Graceful shutdown
