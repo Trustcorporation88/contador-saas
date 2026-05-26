@@ -7,6 +7,8 @@ import reportsRoutes from './reports';
 import taxesRoutes from './taxes';
 import nfeRoutes from './nfe';
 import dasRoutes from './das';
+import reconciliationRoutes from './reconciliation';
+import nfeOcrRoutes from './nfeOcr';
 
 /**
  * Companies API Routes
@@ -107,5 +109,7 @@ router.use('/:companyId/reports', reportsRoutes);
 router.use('/:companyId/taxes', taxesRoutes);
 router.use('/:companyId/nfe', nfeRoutes);
 router.use('/:companyId/das', dasRoutes);
+router.use('/:companyId/reconciliation', reconciliationRoutes);
+router.use('/:companyId/nfe', nfeOcrRoutes);
 
 export default router;
