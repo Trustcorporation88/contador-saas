@@ -58,7 +58,7 @@ const ServicesCatalogPage = lazy(
 const ServiceDetailPage = lazy(
   () => import("../pages/ServiceDetail/ServiceDetailPage"),
 );
-// Módulos inovadores
+// Mï¿½dulos inovadores
 const SaudePage = lazy(() => import("../pages/Saude/SaudePage"));
 const SimuladorPage = lazy(() => import("../pages/Simulador/SimuladorPage"));
 const BenchmarkPage = lazy(() => import("../pages/Benchmark/BenchmarkPage"));
@@ -71,6 +71,7 @@ const OpenFinancePage = lazy(
 const CopilotoPage = lazy(() => import("../pages/Copiloto/CopilotoPage"));
 const ProvaHashPage = lazy(() => import("../pages/ProvaHash/ProvaHashPage"));
 const DASPage = lazy(() => import("../pages/DAS/DASPage"));
+const ServicesHubPage = lazy(() => import("../pages/ServicesHub"));
 
 // --- Route guard -------------------------------------------------------------
 
@@ -100,7 +101,7 @@ function RoleRoute({
   return children;
 }
 
-// --- Placeholder lazy pages (implementados nas tasks 3.3–3.13) ---------------
+// --- Placeholder lazy pages (implementados nas tasks 3.3ï¿½3.13) ---------------
 
 const Placeholder: React.FC<{ title: string; task: string }> = ({
   title,
@@ -171,6 +172,16 @@ const router = createBrowserRouter([
               <RoleRoute allowedPath="/servicos">
                 <Suspense fallback={<LoadingScreen />}>
                   <ServicesCatalogPage />
+                </Suspense>
+              </RoleRoute>
+            ),
+          },
+          {
+            path: "servicos/hub",
+            element: (
+              <RoleRoute allowedPath="/servicos">
+                <Suspense fallback={<LoadingScreen />}>
+                  <ServicesHubPage />
                 </Suspense>
               </RoleRoute>
             ),
@@ -355,7 +366,7 @@ const router = createBrowserRouter([
               </RoleRoute>
             ),
           },
-          // -- Módulos inovadores --------------------------------------------
+          // -- Mï¿½dulos inovadores --------------------------------------------
           {
             path: "saude",
             element: (

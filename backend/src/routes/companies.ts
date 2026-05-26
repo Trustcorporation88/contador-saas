@@ -9,6 +9,7 @@ import nfeRoutes from './nfe';
 import dasRoutes from './das';
 import reconciliationRoutes from './reconciliation';
 import nfeOcrRoutes from './nfeOcr';
+import efdRoutes from './efd';
 
 /**
  * Companies API Routes
@@ -111,5 +112,6 @@ router.use('/:companyId/nfe', nfeRoutes);
 router.use('/:companyId/das', dasRoutes);
 router.use('/:companyId/reconciliation', reconciliationRoutes);
 router.use('/:companyId/nfe', nfeOcrRoutes);
+router.use('/:companyId/efd', efdRoutes);
 
 export default router;
