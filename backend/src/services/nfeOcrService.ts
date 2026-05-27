@@ -12,8 +12,6 @@
 import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
-import pdfParse from 'pdf-parse';
-// import * as Tesseract from 'tesseract.js'; // TODO: Install tesseract.js separately
 import { getDatabase } from '../config/database';
 import { logger } from '../middleware/requestLogger';
 import {
@@ -140,6 +138,7 @@ export class NfeOcrService {
    */
   private static async extractTextFromPdf(filePath: string): Promise<string> {
     try {
+      const pdfParse = (await import('pdf-parse')).default;
       const dataBuffer = fs.readFileSync(filePath);
       const pdfData = await (pdfParse as any)(dataBuffer);
       return pdfData.text || '';
