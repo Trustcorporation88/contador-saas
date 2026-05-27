@@ -21,7 +21,7 @@ const isHostedFrontend =
 // For Vercel and procontador.com.br: use production backend directly
 // For local: use dev backend
 const BASE_URL = (isVercelProduction || isHostedFrontend)
-  ? 'https://contador-backend-production.onrender.com'
+  ? (import.meta.env.VITE_API_URL || 'https://api.procontador.com.br')
   : import.meta.env.VITE_API_URL || baseUrlFromLegacy || 'http://localhost:3000';
 
 export const api = axios.create({
