@@ -9,8 +9,6 @@
  *  - Geração de preview de lançamento contábil
  */
 
-import fs from 'fs';
-import path from 'path';
 import { randomUUID } from 'crypto';
 import { getDatabase } from '../config/database';
 import { logger } from '../middleware/requestLogger';
@@ -136,10 +134,9 @@ export class NfeOcrService {
   /**
    * Extract text from PDF using pdf-parse
    */
-  private static async extractTextFromPdf(filePath: string): Promise<string> {
+  private static async extractTextFromPdf(dataBuffer: Buffer): Promise<string> {
     try {
       const pdfParse = (await import('pdf-parse')).default;
-      const dataBuffer = fs.readFileSync(filePath);
       const pdfData = await (pdfParse as any)(dataBuffer);
       return pdfData.text || '';
     } catch (error) {
@@ -244,11 +241,10 @@ export class NfeOcrService {
     file: Express.Multer.File,
   ): Promise<NfeUploadResponse> {
     const uploadId = randomUUID();
-    const filePath = file.path;
     const fileType = file.mimetype.includes('pdf') ? 'pdf' : 'image';
+    const dataBuffer = file.buffer;
 
     try {
-      // Step 1: Extract text from file
       logger.info('Processing NF-e upload', { 
         uploadId, 
         fileName: file.originalname, 
@@ -258,9 +254,9 @@ export class NfeOcrService {
 
       let extractedText: string;
       if (fileType === 'pdf') {
-        extractedText = await this.extractTextFromPdf(filePath);
+        extractedText = await this.extractTextFromPdf(dataBuffer);
       } else {
-        extractedText = await this.extractTextFromImage(filePath);
+        extractedText = await this.extractTextFromImage(dataBuffer);
       }
 
       // Step 2: Parse extracted text to structured data
@@ -283,7 +279,7 @@ export class NfeOcrService {
         id: uploadId,
         company_id: companyId,
         file_name: file.originalname,
-        file_path: filePath,
+        file_path: file.originalname,
         file_type: fileType,
         file_size: file.size,
         ocr_data: ocrData,
@@ -332,13 +328,6 @@ export class NfeOcrService {
       });
 
       throw error;
-    } finally {
-      // Clean up temp file
-      try {
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      } catch (e) {
-        logger.warn('Failed to delete temp file', { filePath });
-      }
     }
   }
 

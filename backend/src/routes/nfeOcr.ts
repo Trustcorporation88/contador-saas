@@ -11,17 +11,13 @@
 
 import { Router } from 'express';
 import multer from 'multer';
-import path from 'path';
 import { NfeOcrController } from '../controllers/nfeOcrController';
 
 const router = Router({ mergeParams: true });
 
-// Configure multer for file uploads
 const upload = multer({
-  dest: path.join(process.cwd(), 'tmp', 'nfe-uploads'),
-  limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB
-  },
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedMimes = ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff'];
     if (allowedMimes.includes(file.mimetype)) {
