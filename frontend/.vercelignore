@@ -5,14 +5,9 @@
 node_modules
 .git
 dist-electron
-src
 tests
 vite-preview.err.log
 vite-preview.out.log
-tsconfig.json
-tailwind.config.ts
-postcss.config.mjs
 playwright.config.ts
 playwright.release.config.ts
 eslint.config.js
-package-lock.json
