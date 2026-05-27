@@ -4,18 +4,16 @@ const UPSTREAM_BASE_URL = process.env.VERCEL_ENV === 'production'
   : 'https://contador-backend-staging.onrender.com';  // Staging backend
 
 export const config = {
-  runtime: 'nodejs',
+  runtime: 'edge',
 };
 
-export default async function handler(req, res) {
-  const { method, headers, url, body } = req;
-  
-  const requestUrl = new URL(url, `https://${headers.host}`);
+export default async function handler(request) {
+  const requestUrl = new URL(request.url);
   const upstreamPath = requestUrl.pathname.replace(/^\/api/, '');
   const upstreamUrl = new URL(`/api${upstreamPath}${requestUrl.search}`, UPSTREAM_BASE_URL);
 
   // Build clean headers for upstream - keep content-type, authorization, accept
-  const upstreamHeaders = {};
+  const upstreamHeaders = new Headers();
   const passthroughHeaders = [
     'content-type',
     'authorization',
@@ -27,41 +25,40 @@ export default async function handler(req, res) {
     'user-agent',
   ];
   for (const name of passthroughHeaders) {
-    const value = headers[name];
-    if (value) upstreamHeaders[name] = value;
+    const value = request.headers.get(name);
+    if (value) upstreamHeaders.set(name, value);
   }
 
-  try {
-    const upstreamResponse = await fetch(upstreamUrl.toString(), {
-      method,
-      headers: upstreamHeaders,
-      body: method !== 'GET' && method !== 'HEAD' ? body : undefined,
-      redirect: 'manual',
-    });
+  const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
+  const body = hasBody ? await request.arrayBuffer() : undefined;
 
-    // Copy response headers
-    const responseHeaders = {};
-    const passthroughResponseHeaders = [
-      'content-type',
-      'content-length',
-      'cache-control',
-      'set-cookie',
-      'x-request-id',
-    ];
-    for (const name of passthroughResponseHeaders) {
-      const value = upstreamResponse.headers.get(name);
-      if (value) responseHeaders[name] = value;
-    }
-
-    // Set headers and return response
-    Object.entries(responseHeaders).forEach(([key, value]) => {
-      res.setHeader(key, value);
-    });
-
-    res.status(upstreamResponse.status);
-    res.send(await upstreamResponse.text());
-  } catch (error) {
-    console.error('Proxy error:', error);
-    res.status(502).json({ error: 'Bad Gateway' });
+  if (body !== undefined && body.byteLength > 0) {
+    upstreamHeaders.set('content-length', String(body.byteLength));
   }
+
+  const upstreamResponse = await fetch(upstreamUrl.toString(), {
+    method: request.method,
+    headers: upstreamHeaders,
+    body: body && body.byteLength > 0 ? body : undefined,
+    redirect: 'manual',
+  });
+
+  // Forward response as-is (Vercel serves it same-origin so CORS not needed)
+  const responseHeaders = new Headers();
+  const passthroughResponseHeaders = [
+    'content-type',
+    'content-length',
+    'cache-control',
+    'set-cookie',
+    'x-request-id',
+  ];
+  for (const name of passthroughResponseHeaders) {
+    const value = upstreamResponse.headers.get(name);
+    if (value) responseHeaders.set(name, value);
+  }
+
+  return new Response(upstreamResponse.body, {
+    status: upstreamResponse.status,
+    headers: responseHeaders,
+  });
 }
