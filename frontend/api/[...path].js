@@ -1,7 +1,8 @@
-// Use production backend if available, fallback to staging for development
-const UPSTREAM_BASE_URL = process.env.VERCEL_ENV === 'production' 
-  ? 'https://contador-backend-production.onrender.com'  // Production backend
-  : 'https://contador-backend-staging.onrender.com';  // Staging backend
+const UPSTREAM_BASE_URL = 
+  process.env.BACKEND_URL ||
+  (process.env.VERCEL_ENV === 'production'
+    ? 'https://contador-backend.onrender.com'
+    : 'https://contador-backend-staging.onrender.com');
 
 export const config = {
   runtime: 'edge',

@@ -6,23 +6,19 @@ import { useAuthStore } from '../store/authStore';
 import { PUBLIC_ACCESS_ENABLED } from './publicAccess';
 import { createDemoAdapter } from './demoApi';
 
-const baseUrlFromLegacy = import.meta.env.VITE_API_BASE_URL
-  ? String(import.meta.env.VITE_API_BASE_URL).replace(/\/api\/v1\/?$/, '')
-  : '';
-
-const isVercelProduction = 
-  typeof window !== 'undefined' && 
+const isVercelProduction =
+  typeof window !== 'undefined' &&
   /\.vercel\.app$/i.test(window.location.hostname);
 
 const isHostedFrontend =
   typeof window !== 'undefined' &&
   /(^|\.)procontador\.com\.br$/i.test(window.location.hostname);
 
-// For Vercel and procontador.com.br: use production backend directly
-// For local: use dev backend
-const BASE_URL = (isVercelProduction || isHostedFrontend)
-  ? (import.meta.env.VITE_API_URL || 'https://api.procontador.com.br')
-  : import.meta.env.VITE_API_URL || baseUrlFromLegacy || 'http://localhost:3000';
+const isProduction = isVercelProduction || isHostedFrontend;
+
+const BASE_URL = isProduction
+  ? ''
+  : import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export const api = axios.create({
   baseURL: `${BASE_URL}/api/v1`,
