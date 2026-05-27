@@ -158,6 +158,7 @@ export class AuthService {
 
       const passwordHash = await bcrypt.hash(adminPassword, envConfig.bcryptRounds);
       const payload: Record<string, unknown> = {
+        id: crypto.randomUUID(),
         email: adminEmail,
         role: 'admin',
         company_id: bootstrapCompany.id,
