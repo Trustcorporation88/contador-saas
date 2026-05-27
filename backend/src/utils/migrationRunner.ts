@@ -35,44 +35,51 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
       {
         name: '001_create_auth_tables',
         up: async (db) => {
-          const exists = await db.schema.hasTable('users');
-          if (exists) {
+          const usersExists = await db.schema.hasTable('users');
+          const companiesExists = await db.schema.hasTable('companies');
+
+          if (usersExists && companiesExists) {
             console.log('[MIGRATIONS] Skipping 001_create_auth_tables (already exists)');
             return;
           }
 
-          console.log('[MIGRATIONS] Running 001_create_auth_tables...');
-          await db.schema.createTable('users', (table) => {
-            table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
-            table.uuid('company_id').notNullable();
-            table.string('email', 255).notNullable().unique();
-            table.string('password_hash', 255).notNullable();
-            table.string('full_name', 255);
-            table.string('role', 50).defaultTo('user');
-            table.boolean('is_active').defaultTo(true);
-            table.timestamp('created_at').defaultTo(db.fn.now());
-            table.timestamp('updated_at').defaultTo(db.fn.now());
-            table.index(['company_id']);
-            table.index(['email']);
-          });
+          if (!usersExists) {
+            console.log('[MIGRATIONS] Creating users table...');
+            await db.schema.createTable('users', (table) => {
+              table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+              table.uuid('company_id').notNullable();
+              table.string('email', 255).notNullable().unique();
+              table.string('password_hash', 255).notNullable();
+              table.string('full_name', 255);
+              table.string('role', 50).defaultTo('user');
+              table.boolean('is_active').defaultTo(true);
+              table.timestamp('created_at').defaultTo(db.fn.now());
+              table.timestamp('updated_at').defaultTo(db.fn.now());
+              table.index(['company_id']);
+              table.index(['email']);
+            });
+          }
 
-          await db.schema.createTable('companies', (table) => {
-            table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
-            table.string('cnpj', 14).unique().notNullable();
-            table.string('legal_name', 255).notNullable();
-            table.string('trade_name', 255);
-            table.string('email', 255);
-            table.string('phone', 20);
-            table.string('address', 255);
-            table.string('city', 100);
-            table.string('state', 2);
-            table.string('postal_code', 10);
-            table.string('status', 50).defaultTo('active');
-            table.boolean('is_active').defaultTo(true);
-            table.timestamp('created_at').defaultTo(db.fn.now());
-            table.timestamp('updated_at').defaultTo(db.fn.now());
-            table.index(['cnpj']);
-          });
+          if (!companiesExists) {
+            console.log('[MIGRATIONS] Creating companies table...');
+            await db.schema.createTable('companies', (table) => {
+              table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+              table.string('cnpj', 14).unique().notNullable();
+              table.string('legal_name', 255).notNullable();
+              table.string('trade_name', 255);
+              table.string('email', 255);
+              table.string('phone', 20);
+              table.string('address', 255);
+              table.string('city', 100);
+              table.string('state', 2);
+              table.string('postal_code', 10);
+              table.string('status', 50).defaultTo('active');
+              table.boolean('is_active').defaultTo(true);
+              table.timestamp('created_at').defaultTo(db.fn.now());
+              table.timestamp('updated_at').defaultTo(db.fn.now());
+              table.index(['cnpj']);
+            });
+          }
 
           console.log('✓ 001_create_auth_tables completed');
         },
@@ -486,10 +493,9 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
       },
     ];
 
-    // Execute migrations that haven't been run yet
     for (const migration of migrations) {
+      await migration.up(db);
       if (!executedMigrations.has(migration.name)) {
-        await migration.up(db);
         await db('migrations_executed').insert({ migration_name: migration.name });
         executedMigrations.add(migration.name);
         console.log(`✓ Migration ${migration.name} executed and tracked`);
