@@ -27,7 +27,7 @@ const isHostedFrontend =
 const isProduction = isVercelProduction || isHostedFrontend;
 
 const BASE_URL = isProduction
-  ? ''
+  ? 'https://contador-backend-staging.onrender.com'
   : import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export const api = axios.create({
