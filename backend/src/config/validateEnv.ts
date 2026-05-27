@@ -185,7 +185,6 @@ export function validateEnvironmentSecurity(): void {
 export function validateRequiredEnvVars(): void {
   const required = [
     'DATABASE_URL',
-    'DATABASE_PASSWORD',
     'JWT_SECRET',
   ];
 
