@@ -6,6 +6,16 @@ import { useAuthStore } from '../store/authStore';
 import { PUBLIC_ACCESS_ENABLED } from './publicAccess';
 import { createDemoAdapter } from './demoApi';
 
+function normalizeError(err: AxiosError): Error {
+  const data = err.response?.data as Record<string, unknown> | undefined;
+  const msg =
+    (typeof data?.message === 'string' && data.message) ||
+    (typeof data?.error === 'string' && data.error) ||
+    err.message ||
+    'Erro de conexao com o servidor';
+  return new Error(msg);
+}
+
 const isVercelProduction =
   typeof window !== 'undefined' &&
   /\.vercel\.app$/i.test(window.location.hostname);
@@ -58,7 +68,7 @@ api.interceptors.response.use(
         if (!PUBLIC_ACCESS_ENABLED) {
           useAuthStore.getState().logout();
         }
-        return Promise.reject(error);
+        return Promise.reject(normalizeError(error));
       }
 
       try {
@@ -77,11 +87,11 @@ api.interceptors.response.use(
         if (!PUBLIC_ACCESS_ENABLED) {
           useAuthStore.getState().logout();
         }
-        return Promise.reject(error);
+        return Promise.reject(normalizeError(error));
       }
     }
 
-    return Promise.reject(error);
+    return Promise.reject(normalizeError(error));
   }
 );
 
