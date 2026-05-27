@@ -154,8 +154,15 @@ export class NfeOcrService {
 
   /**
    * Extract text from image using Tesseract.js (Portuguese language)
+   * TODO: Install tesseract.js and enable this feature
    */
   private static async extractTextFromImage(filePath: string): Promise<string> {
+    // Tesseract.js is not installed yet - returning empty string
+    // TODO: Implement after tesseract.js is added to dependencies
+    logger.warn('OCR not available - tesseract.js not installed', { filePath });
+    return '';
+    /*
+    /*
     try {
       logger.info('Starting OCR processing', { filePath });
       
@@ -176,6 +183,7 @@ export class NfeOcrService {
         { status: 400 }
       );
     }
+    */
   }
 
   /**
