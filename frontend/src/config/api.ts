@@ -10,12 +10,21 @@ const baseUrlFromLegacy = import.meta.env.VITE_API_BASE_URL
   ? String(import.meta.env.VITE_API_BASE_URL).replace(/\/api\/v1\/?$/, '')
   : '';
 
+const isVercelProduction = 
+  typeof window !== 'undefined' && 
+  /\.vercel\.app$/i.test(window.location.hostname);
+
 const isHostedFrontend =
   typeof window !== 'undefined' &&
   /(^|\.)procontador\.com\.br$/i.test(window.location.hostname);
 
-const BASE_URL = isHostedFrontend
-  ? ''
+// For Vercel: use relative /api path (proxied via [..path].js)
+// For procontador.com.br: use production backend directly
+// For local: use dev backend
+const BASE_URL = isVercelProduction
+  ? ''  // Use relative path - proxy via /api/[...path].js
+  : isHostedFrontend
+  ? 'https://contador-backend-production.onrender.com'
   : import.meta.env.VITE_API_URL || baseUrlFromLegacy || 'http://localhost:3000';
 
 export const api = axios.create({
