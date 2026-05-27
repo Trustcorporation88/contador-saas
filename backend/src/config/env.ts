@@ -118,7 +118,11 @@ const envSchema = joi.object({
   DATABASE_PORT: joi.number().default(5432),
   DATABASE_NAME: joi.string().default('contador_db'),
   DATABASE_USER: joi.string().default('contador_user'),
-  DATABASE_PASSWORD: joi.string().required(),
+  DATABASE_PASSWORD: joi.string().when('DATABASE_URL', {
+    is: joi.string().exist(),
+    then: joi.string().optional().default(''),
+    otherwise: joi.string().required(),
+  }),
   DATABASE_POOL_MIN: joi.number().default(2),
   DATABASE_POOL_MAX: joi.number().default(10),
   DATABASE_IDLE_TIMEOUT_MILLIS: joi.number().default(30000),
