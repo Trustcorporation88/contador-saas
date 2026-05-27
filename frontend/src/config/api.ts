@@ -18,12 +18,9 @@ const isHostedFrontend =
   typeof window !== 'undefined' &&
   /(^|\.)procontador\.com\.br$/i.test(window.location.hostname);
 
-// For Vercel: use relative /api path (proxied via [..path].js)
-// For procontador.com.br: use production backend directly
+// For Vercel and procontador.com.br: use production backend directly
 // For local: use dev backend
-const BASE_URL = isVercelProduction
-  ? ''  // Use relative path - proxy via /api/[...path].js
-  : isHostedFrontend
+const BASE_URL = (isVercelProduction || isHostedFrontend)
   ? 'https://contador-backend-production.onrender.com'
   : import.meta.env.VITE_API_URL || baseUrlFromLegacy || 'http://localhost:3000';
 
