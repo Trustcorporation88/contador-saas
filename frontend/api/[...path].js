@@ -1,8 +1,6 @@
-const UPSTREAM_BASE_URL = 
+const UPSTREAM_BASE_URL =
   process.env.BACKEND_URL ||
-  (process.env.VERCEL_ENV === 'production'
-    ? 'https://contador-backend.onrender.com'
-    : 'https://contador-backend-staging.onrender.com');
+  'https://contador-backend-staging.onrender.com';
 
 export const config = {
   runtime: 'edge',
