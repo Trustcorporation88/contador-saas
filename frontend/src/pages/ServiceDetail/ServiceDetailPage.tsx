@@ -10,6 +10,7 @@ import {
   Sparkles,
   ChevronRight,
   PlayCircle,
+  MessageCircle,
 } from "lucide-react";
 import { getServiceById } from "../../config/services";
 import {
@@ -23,14 +24,16 @@ import {
 } from "../../components/ServiceWizard/ServiceWizard";
 import { useFirstUse } from "../../hooks/useFirstUse";
 import { QuickTip, FAQ, InlineHelp } from "../../components/HelpCenter";
+import { ServiceChat } from "../../components/ServiceChat/ServiceChat";
 import { cn } from "../../utils/cn";
 
-type TabId = "about" | "variables" | "howto";
+type TabId = "about" | "variables" | "howto" | "chat";
 
 const TABS: { id: TabId; label: string; icon: typeof CheckCircle2 }[] = [
   { id: "about", label: "O que é?", icon: Lightbulb },
   { id: "variables", label: "O que preciso?", icon: CheckCircle2 },
   { id: "howto", label: "Como usar?", icon: PlayCircle },
+  { id: "chat", label: "Tirar dúvidas", icon: MessageCircle },
 ];
 
 /**
@@ -198,6 +201,14 @@ const ServiceDetailPage: FC = () => {
             Ir ao formulário
             <ArrowRight className="h-4 w-4" />
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("chat")}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+          >
+            <MessageCircle className="h-4 w-4 text-primary-500" />
+            Tirar dúvidas com IA
+          </button>
           <Link
             to="/servicos"
             className="ml-auto inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
@@ -223,58 +234,85 @@ const ServiceDetailPage: FC = () => {
         </InlineHelp>
       )}
 
-      {/* ─── Tabs ───────────────────────────────────────────────────── */}
-      {(helpV2 || helpV1) && (
-        <>
-          <div
-            role="tablist"
-            aria-label="Detalhes do serviço"
-            className="flex gap-1 overflow-x-auto rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800/50"
-          >
-            {TABS.map((tab) => {
-              const TabIcon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  role="tab"
-                  aria-selected={isActive}
-                  aria-controls={`panel-${tab.id}`}
-                  id={`tab-${tab.id}`}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    "flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-white text-primary-700 shadow-sm dark:bg-gray-900 dark:text-primary-300"
-                      : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200",
-                  )}
-                >
-                  <TabIcon className="h-4 w-4" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
+      {/* Tabs */}
+      <div
+        role="tablist"
+        aria-label="Detalhes do serviço"
+        className="flex gap-1 overflow-x-auto rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800/50"
+      >
+        {TABS.map((tab) => {
+          const TabIcon = tab.icon;
+          const isActive = activeTab === tab.id;
+          if (tab.id !== "chat" && !helpV2 && !helpV1) return null;
+          return (
+            <button
+              key={tab.id}
+              role="tab"
+              aria-selected={isActive}
+              aria-controls={`panel-${tab.id}`}
+              id={`tab-${tab.id}`}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-colors",
+                isActive
+                  ? "bg-white text-primary-700 shadow-sm dark:bg-gray-900 dark:text-primary-300"
+                  : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200",
+                tab.id === "chat" && !isActive
+                  ? "border border-dashed border-primary-200 dark:border-primary-800"
+                  : "",
+              )}
+            >
+              <TabIcon className="h-4 w-4" />
+              {tab.label}
+              {tab.id === "chat" && (
+                <span className="ml-1 rounded-full bg-primary-100 px-1.5 py-0.5 text-xs font-semibold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
+                  IA
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
 
-          {/* ─── Painéis ───────────────────────────────────────────── */}
-          <div
-            id={`panel-${activeTab}`}
-            role="tabpanel"
-            aria-labelledby={`tab-${activeTab}`}
-            className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-6"
-          >
-            {activeTab === "about" && (
-              <AboutPanel help={helpV2} helpV1={helpV1} />
-            )}
-            {activeTab === "variables" && (
-              <VariablesPanel help={helpV2} helpV1={helpV1} />
-            )}
-            {activeTab === "howto" && (
-              <HowToPanel help={helpV2} helpV1={helpV1} />
-            )}
+      {/* Paineis */}
+      <div
+        id={`panel-${activeTab}`}
+        role="tabpanel"
+        aria-labelledby={`tab-${activeTab}`}
+        className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-6"
+      >
+        {activeTab === "about" && (
+          <AboutPanel help={helpV2} helpV1={helpV1} />
+        )}
+        {activeTab === "variables" && (
+          <VariablesPanel help={helpV2} helpV1={helpV1} />
+        )}
+        {activeTab === "howto" && (
+          <HowToPanel help={helpV2} helpV1={helpV1} />
+        )}
+        {activeTab === "chat" && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <MessageCircle className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+                Tire suas dúvidas sobre {service.title}
+              </h2>
+              <span className="rounded-full bg-primary-100 px-2 py-0.5 text-xs font-semibold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
+                IA
+              </span>
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Pergunte em linguagem natural. A IA responde com base na documentação deste serviço.
+            </p>
+            <ServiceChat
+              serviceName={service.title}
+              serviceDescription={service.description}
+              helpV2={helpV2}
+              helpV1={helpV1}
+            />
           </div>
-        </>
-      )}
+        )}
+      </div>
 
       {/* ─── Wizard ────────────────────────────────────────────────── */}
       {wizardSteps.length > 0 && (
