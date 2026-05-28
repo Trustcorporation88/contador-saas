@@ -26,9 +26,7 @@ const isHostedFrontend =
 
 const isProduction = isVercelProduction || isHostedFrontend;
 
-const BASE_URL = isProduction
-  ? 'https://contador-backend-staging.onrender.com'
-  : import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const BASE_URL = isProduction ? '' : (import.meta.env.VITE_API_URL || 'http://localhost:3000');
 
 export const api = axios.create({
   baseURL: `${BASE_URL}/api/v1`,
@@ -96,3 +94,5 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+

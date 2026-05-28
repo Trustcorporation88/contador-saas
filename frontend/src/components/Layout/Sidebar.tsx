@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { useAuthStore } from '../../store/authStore';
@@ -43,18 +43,18 @@ const navItems: NavItem[] = [
   { label: 'Cliente',            icon: Users,           path: '/cliente'                },
   { label: 'Empresas',           icon: Building2,       path: '/empresas'               },
   { label: 'Plano de Contas',    icon: BookOpen,        path: '/contas'                 },
-  { label: 'LanÃ§amentos',        icon: FileText,        path: '/lancamentos'            },
+  { label: 'Lançamentos',        icon: FileText,        path: '/lancamentos'            },
   { label: 'Documentos Fiscais', icon: FileText,        path: '/documentos'             },
   { label: 'Contas a Receber',   icon: FileText,        path: '/contas-receber'         },
   { label: 'Contas a Pagar',     icon: FileText,        path: '/contas-pagar'           },
   {
-    label: 'RelatÃ³rios',
+    label: 'Relatórios',
     icon: BarChart3,
     children: [
       { label: 'Fluxo de Caixa',      path: '/relatorios/fluxo-caixa' },
-      { label: 'BalanÃ§o Patrimonial', path: '/relatorios/balanco' },
+      { label: 'Balanço Patrimonial', path: '/relatorios/balanco' },
       { label: 'DRE',                 path: '/relatorios/dre'     },
-      { label: 'Outros RelatÃ³rios',   path: '/relatorios/outros'  },
+      { label: 'Outros Relatórios',   path: '/relatorios/outros'  },
     ],
   },
   { label: 'Apuração Impostos',  icon: Calculator,  path: '/impostos'      },
@@ -62,14 +62,14 @@ const navItems: NavItem[] = [
   { label: 'Central de Serviços', icon: ClipboardList, path: '/servicos/hub'   },
   { label: 'Guia Operacional',   icon: BookOpen, path: '/servicos'    },
   { label: 'Configurações',      icon: Settings,    path: '/configuracoes' },
-  // â”€â”€ MÃ³dulos inovadores â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  { label: 'SaÃºde Financeira',   icon: HeartPulse,  path: '/saude',        badge: 'âœ¦' },
+  // â”€â”€ Módulos inovadores â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  { label: 'Saúde Financeira',   icon: HeartPulse,  path: '/saude',        badge: 'âœ¦' },
   { label: 'Simulador Fiscal',   icon: Sliders,     path: '/simulador',    badge: 'âœ¦' },
   { label: 'Benchmark Setorial', icon: GitCompareArrows, path: '/benchmark', badge: 'âœ¦' },
   { label: 'Risco Fiscal SPED',  icon: ShieldAlert, path: '/risco-fiscal', badge: 'âœ¦' },
   { label: 'Open Finance',       icon: Landmark,    path: '/open-finance', badge: 'âœ¦' },
   { label: 'Copiloto IA',        icon: Bot,         path: '/copiloto',     badge: 'âœ¦' },
-  { label: 'Prova CriptogrÃ¡fica',icon: Lock,        path: '/prova-hash',   badge: 'âœ¦' },
+  { label: 'Prova Criptográfica',icon: Lock,        path: '/prova-hash',   badge: 'âœ¦' },
 ];
 
 // â”€â”€â”€ Divider between standard and innovative â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -221,7 +221,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       <div className="border-t border-white/10 px-5 py-4">
         <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/45">Workspace</p>
-          <p className="mt-1 text-sm font-semibold text-white">Console ContÃ¡bil</p>
+          <p className="mt-1 text-sm font-semibold text-white">Console Contábil</p>
           <p className="mt-2 text-xs text-white/50">v1.0.0 Â· {new Date().getFullYear()}</p>
         </div>
       </div>
