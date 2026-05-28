@@ -78,3 +78,6 @@ uploads/
 .vercel
 .env*.local
 .env*
+
+backend/.env.local
+frontend/.env.local
