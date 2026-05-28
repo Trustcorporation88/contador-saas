@@ -171,7 +171,7 @@ export function ServiceChat({
           serviceContext,
           historyForApi
         );
-        const reply = aiReply ?? localAnswer(text, helpV2, helpV1);
+        const reply = localAnswer(text, helpV2, helpV1);
         setMessages((prev) => [
           ...prev,
           { role: "assistant", text: reply, ts: Date.now() },
@@ -295,3 +295,4 @@ export function ServiceChat({
 }
 
 export default ServiceChat;
+
