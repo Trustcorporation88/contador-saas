@@ -77,3 +77,4 @@ uploads/
 !plano-contas-padrao.json
 .vercel
 .env*.local
+.env*
