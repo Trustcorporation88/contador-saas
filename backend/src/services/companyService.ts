@@ -52,7 +52,7 @@ export class CompanyService {
 
     // Iniciar transação
     return db.transaction(async (trx) => {
-      const companyId = `company_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const companyId = require("crypto").randomUUID();
       const now = new Date().toISOString();
 
       // Preparar dados da empresa
@@ -82,7 +82,7 @@ export class CompanyService {
 
       // Auto-associar admin se fornecido
       if (adminUserId) {
-        const companyUserId = `cu_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const companyUserId = require("crypto").randomUUID();
         await trx('company_users').insert({
           id: companyUserId,
           user_id: adminUserId,
@@ -401,7 +401,7 @@ export class CompanyService {
       const db = trx || (await getDatabase());
 
       await db('audit_logs').insert({
-        id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: require("crypto").randomUUID(),
         user_id: userId,
         company_id: companyId,
         action,
