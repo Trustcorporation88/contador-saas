@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Building2, ChevronDown, Check, AlertCircle } from "lucide-react";
 import { useAuthStore } from "../../store/authStore";
 import { CompanyService, type APICompany } from "../../services/companyService";
@@ -10,7 +11,9 @@ export default function CompanySelector() {
   const [companies, setCompanies] = useState<APICompany[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ top: 0, right: 0 });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -29,19 +32,44 @@ export default function CompanySelector() {
     return () => { active = false; };
   }, []);
 
+  // Recalcula posição do menu sempre que abrir ou rolar
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const update = () => {
+      const r = triggerRef.current!.getBoundingClientRect();
+      setPos({ top: r.bottom + 8, right: window.innerWidth - r.right });
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [open]);
+
+  // Fecha ao clicar fora
   useEffect(() => {
+    if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (
+        triggerRef.current && !triggerRef.current.contains(t) &&
+        menuRef.current && !menuRef.current.contains(t)
+      ) {
+        setOpen(false);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  }, [open]);
 
   const current = companies.find((c) => c.id === currentCompanyId);
 
   return (
-    <div className="relative" ref={ref}>
+    <>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-2 rounded-2xl border border-white/70 bg-white/85 px-3 py-2.5 text-sm shadow-sm transition hover:border-primary-200 hover:bg-white"
@@ -58,8 +86,12 @@ export default function CompanySelector() {
         <ChevronDown className="h-3.5 w-3.5 text-ink-400" />
       </button>
 
-      {open && (
-        <div className="absolute right-0 top-full z-[100] mt-2 w-80 rounded-[24px] border border-white/80 bg-white/95 py-2 shadow-panel backdrop-blur-xl animate-fade-in">
+      {open && createPortal(
+        <div
+          ref={menuRef}
+          style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 9999 }}
+          className="w-80 rounded-[24px] border border-white/80 bg-white/95 py-2 shadow-panel backdrop-blur-xl animate-fade-in"
+        >
           <div className="border-b border-ink-100 px-4 py-2">
             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-ink-400">Trocar empresa</p>
           </div>
@@ -91,8 +123,9 @@ export default function CompanySelector() {
               );
             })}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }
