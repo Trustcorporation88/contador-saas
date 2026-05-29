@@ -395,19 +395,21 @@ export class CompanyService {
     action: string,
     description: string,
     success: boolean,
-    trx?: any,
+    _trx?: any,
   ): Promise<void> {
     try {
-      const db = trx || (await getDatabase());
+      // Use main DB (not trx) to avoid aborting the transaction on audit errors
+      const db = await getDatabase();
 
       await db('audit_logs').insert({
         id: require("crypto").randomUUID(),
         user_id: userId,
-        company_id: companyId,
         action,
-        description,
-        success,
-        created_at: new Date().toISOString(),
+        entity_type: 'company',
+        entity_id: companyId,
+        new_value: JSON.stringify({ description }),
+        status: success ? 'SUCCESS' : 'FAILED',
+        timestamp: new Date().toISOString(),
       });
     } catch (error) {
       logger.error('Failed to audit action', {
