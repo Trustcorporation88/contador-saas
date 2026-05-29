@@ -119,7 +119,7 @@ export class CopilotoController {
       const result = await DeepSeekService.chat(
         message.trim(),
         context,
-        history.slice(0, -1), // Excluir a mensagem atual (já está no contexto)
+        history.slice(0, -1) as Array<{ role: 'user' | 'assistant'; content: string }>, // Excluir a mensagem atual (já está no contexto)
       );
 
       if (result.fallback) {

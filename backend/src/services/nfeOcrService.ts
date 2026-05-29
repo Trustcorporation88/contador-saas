@@ -140,7 +140,7 @@ export class NfeOcrService {
       const pdfData = await (pdfParse as any)(dataBuffer);
       return pdfData.text || '';
     } catch (error) {
-      logger.error('PDF parsing error', { filePath, error: (error as Error).message });
+      logger.error('PDF parsing error', { error: (error as Error).message });
       throw Object.assign(
         new Error('Falha ao extrair texto do PDF'),
         { status: 400 }
@@ -152,10 +152,10 @@ export class NfeOcrService {
    * Extract text from image using Tesseract.js (Portuguese language)
    * TODO: Install tesseract.js and enable this feature
    */
-  private static async extractTextFromImage(filePath: string): Promise<string> {
+  private static async extractTextFromImage(dataBuffer: Buffer): Promise<string> {
     // Tesseract.js is not installed yet - returning empty string
     // TODO: Implement after tesseract.js is added to dependencies
-    logger.warn('OCR not available - tesseract.js not installed', { filePath });
+    logger.warn('OCR not available - tesseract.js not installed', { size: dataBuffer.length });
     return '';
     /*
     /*
@@ -316,7 +316,7 @@ export class NfeOcrService {
         id: uploadId,
         company_id: companyId,
         file_name: file.originalname,
-        file_path: filePath,
+        file_path: file.originalname,
         file_type: fileType,
         file_size: file.size,
         ocr_data: {},
