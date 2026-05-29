@@ -7,9 +7,9 @@
  * Tax regime enum - Regimes tributários suportados
  */
 export enum TaxRegimeEnum {
-  LUCRO_REAL = 'LUCRO_REAL',
-  LUCRO_PRESUMIDO = 'LUCRO_PRESUMIDO',
-  SIMPLES_NACIONAL = 'SIMPLES_NACIONAL',
+  LUCRO_REAL = 'lucro_real',
+  LUCRO_PRESUMIDO = 'lucro_presumido',
+  SIMPLES_NACIONAL = 'simples_nacional',
 }
 
 /**
