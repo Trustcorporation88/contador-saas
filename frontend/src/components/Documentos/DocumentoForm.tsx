@@ -6,6 +6,7 @@ import { Plus, Search, Trash2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { CompanyService } from '../../services/companyService';
+import { useAuthStore } from '../../store/authStore';
 import type {
   ContraparteTipo,
   DocumentoFiscal,
@@ -68,6 +69,7 @@ interface DocumentoFormProps {
 }
 
 export default function DocumentoForm({ initialData, loading, apiError, onSubmit, onCancel }: DocumentoFormProps) {
+  const currentCompanyId = useAuthStore((s) => s.currentCompanyId);
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupMessage, setLookupMessage] = useState('');
   const form = useForm<FormValues>({
@@ -128,7 +130,9 @@ export default function DocumentoForm({ initialData, loading, apiError, onSubmit
   };
 
   const submit = (values: FormValues) => {
+    if (!currentCompanyId) return;
     onSubmit({
+      company_id: currentCompanyId,
       ...values,
       contraparte_cnpj: values.contraparte_cnpj?.replace(/\D/g, ''),
       valor_total: Number(total.toFixed(2)),
@@ -142,6 +146,11 @@ export default function DocumentoForm({ initialData, loading, apiError, onSubmit
 
   return (
     <form onSubmit={handleSubmit(submit)} className="space-y-5">
+      {!currentCompanyId && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          ⚠ Selecione uma empresa no topo da página para registrar este documento.
+        </div>
+      )}
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="input-label">Tipo</label>
@@ -250,7 +259,7 @@ export default function DocumentoForm({ initialData, loading, apiError, onSubmit
 
       <div className="flex justify-end gap-3">
         <Button type="button" variant="secondary" onClick={onCancel}>Cancelar</Button>
-        <Button type="submit" loading={loading}>{initialData ? 'Salvar alterações' : 'Criar documento'}</Button>
+        <Button type="submit" loading={loading} disabled={!currentCompanyId}>{initialData ? 'Salvar alterações' : 'Criar documento'}</Button>
       </div>
     </form>
   );

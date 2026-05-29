@@ -1,34 +1,33 @@
-import { useLocation, useNavigate } from 'react-router-dom';
-import { LogOut, User as UserIcon, ChevronDown, PanelLeft, Sparkles } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
-import { useAuthStore } from '../../store/authStore';
-import { AuthService } from '../../services/authService';
-import { PUBLIC_ACCESS_ENABLED } from '../../config/publicAccess';
-import { getOperationalStatusMeta, getServiceDefinition } from '../../config/serviceCatalog';
-
-// ─── Breadcrumb map ───────────────────────────────────────────────────────────
+import { useLocation, useNavigate } from "react-router-dom";
+import { LogOut, User as UserIcon, ChevronDown, PanelLeft, Sparkles } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { useAuthStore } from "../../store/authStore";
+import { AuthService } from "../../services/authService";
+import { PUBLIC_ACCESS_ENABLED } from "../../config/publicAccess";
+import { getOperationalStatusMeta, getServiceDefinition } from "../../config/serviceCatalog";
+import CompanySelector from "./CompanySelector";
 
 const PAGE_TITLES: Record<string, string> = {
-  '/dashboard':          'Dashboard',
-  '/cliente':            'Cliente',
-  '/empresas':           'Empresas',
-  '/contas':             'Plano de Contas',
-  '/lancamentos':        'Lançamentos Contábeis',
-  '/relatorios/fluxo-caixa': 'Fluxo de Caixa',
-  '/relatorios/balanco': 'Balanço Patrimonial',
-  '/relatorios/dre':     'DRE',
-  '/relatorios/outros':  'Outros Relatórios',
-  '/impostos':           'Apuração de Impostos',
-  '/auditoria':          'Auditoria & Logs',
-  '/servicos':           'Guia Operacional',
-  '/configuracoes':      'Configurações',
-  '/saude':             'Saúde Financeira',
-  '/simulador':         'Simulador Fiscal',
-  '/benchmark':         'Benchmark Setorial',
-  '/risco-fiscal':      'Risco Fiscal SPED',
-  '/open-finance':      'Open Finance',
-  '/copiloto':          'Copiloto IA',
-  '/prova-hash':        'Prova Criptográfica',
+  "/dashboard": "Dashboard",
+  "/cliente": "Cliente",
+  "/empresas": "Empresas",
+  "/contas": "Plano de Contas",
+  "/lancamentos": "Lançamentos Contábeis",
+  "/relatorios/fluxo-caixa": "Fluxo de Caixa",
+  "/relatorios/balanco": "Balanço Patrimonial",
+  "/relatorios/dre": "DRE",
+  "/relatorios/outros": "Outros Relatórios",
+  "/impostos": "Apuração de Impostos",
+  "/auditoria": "Auditoria & Logs",
+  "/servicos": "Guia Operacional",
+  "/configuracoes": "Configurações",
+  "/saude": "Saúde Financeira",
+  "/simulador": "Simulador Fiscal",
+  "/benchmark": "Benchmark Setorial",
+  "/risco-fiscal": "Risco Fiscal SPED",
+  "/open-finance": "Open Finance",
+  "/copiloto": "Copiloto IA",
+  "/prova-hash": "Prova Criptográfica",
 };
 
 interface HeaderProps {
@@ -36,15 +35,15 @@ interface HeaderProps {
 }
 
 function resolvePageTitle(pathname: string): string {
-  if (pathname.startsWith('/lancamentos/novo')) return 'Novo Lançamento';
-  if (pathname.includes('/editar')) return 'Editar Lançamento';
-  return PAGE_TITLES[pathname] ?? 'Central Operacional';
+  if (pathname.startsWith("/lancamentos/novo")) return "Novo Lançamento";
+  if (pathname.includes("/editar")) return "Editar Lançamento";
+  return PAGE_TITLES[pathname] ?? "Central Operacional";
 }
 
 export default function Header({ onToggleSidebar }: HeaderProps) {
   const location = useLocation();
-  const navigate  = useNavigate();
-  const user      = useAuthStore((s) => s.user);
+  const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
   const storeLogout = useAuthStore((s) => s.logout);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -52,22 +51,21 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
   const handleLogout = async () => {
     await AuthService.logout();
     storeLogout();
-    navigate('/login', { replace: true });
+    navigate("/login", { replace: true });
   };
 
   const pageTitle = resolvePageTitle(location.pathname);
   const service = getServiceDefinition(location.pathname);
   const serviceStatus = service ? getOperationalStatusMeta(service.status) : null;
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
       }
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, []);
 
   return (
@@ -90,13 +88,15 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="hidden rounded-2xl border border-primary-100 bg-primary-50 px-3 py-2 text-right sm:block">
+          <CompanySelector />
+
+          <div className="hidden rounded-2xl border border-primary-100 bg-primary-50 px-3 py-2 text-right xl:block">
             <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-primary-700/70">
               <Sparkles className="h-3.5 w-3.5" />
-              {PUBLIC_ACCESS_ENABLED ? 'Modo demo' : 'Modo real'}
+              {PUBLIC_ACCESS_ENABLED ? "Modo demo" : "Modo real"}
             </div>
             <p className="mt-1 text-sm font-semibold text-ink-800">
-              {serviceStatus ? `${serviceStatus.label} · ${service?.title}` : 'Estrutura contábil ativa'}
+              {serviceStatus ? `${serviceStatus.label} · ${service?.title}` : "Estrutura contábil ativa"}
             </p>
           </div>
 
@@ -106,11 +106,11 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
               className="flex items-center gap-3 rounded-2xl border border-white/70 bg-white/85 px-3 py-2.5 text-sm shadow-sm transition hover:border-primary-200 hover:bg-white"
             >
               <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 text-xs font-bold text-white shadow-glow">
-                {user?.name?.[0]?.toUpperCase() ?? 'U'}
+                {user?.name?.[0]?.toUpperCase() ?? "U"}
               </div>
               <div className="hidden text-left sm:block">
-                <p className="font-semibold leading-tight text-ink-900">{user?.name ?? '—'}</p>
-                <p className="text-xs capitalize text-ink-400">{user?.role ?? ''}</p>
+                <p className="font-semibold leading-tight text-ink-900">{user?.name ?? "—"}</p>
+                <p className="text-xs capitalize text-ink-400">{user?.role ?? ""}</p>
               </div>
               <ChevronDown className="h-3.5 w-3.5 text-ink-400" />
             </button>
@@ -123,10 +123,7 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    navigate('/configuracoes');
-                  }}
+                  onClick={() => { setMenuOpen(false); navigate("/configuracoes"); }}
                   className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-ink-700 transition hover:bg-primary-50"
                 >
                   <UserIcon className="h-4 w-4" />

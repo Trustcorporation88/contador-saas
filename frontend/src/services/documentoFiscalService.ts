@@ -85,6 +85,7 @@ export interface DocumentoFiscalStats {
 }
 
 export interface DocumentoFiscalPayload {
+  company_id?: string;
   tipo: TipoDocumentoFiscal;
   numero: string;
   serie: string;
