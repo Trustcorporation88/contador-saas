@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './CopilotoChat.css';
+import api from '../config/api';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -43,25 +44,18 @@ export const CopilotoChat: React.FC<CopilotoChatProps> = ({
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Criar sessão ao montar
   useEffect(() => {
     const createSession = async () => {
       try {
-        const res = await fetch('http://localhost:3000/api/v1/copiloto/session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ companyName }),
-        });
-        const data = await res.json();
-        setSessionId(data.sessionId);
-      } catch (err) {
-        setError('Erro ao criar sessão');
+        const res = await api.post('/copiloto/session', { companyName });
+        setSessionId(res.data.sessionId);
+      } catch {
+        setError('Erro ao criar sessao');
       }
     };
     createSession();
   }, [companyName]);
 
-  // Auto-scroll para última mensagem
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -75,7 +69,6 @@ export const CopilotoChat: React.FC<CopilotoChatProps> = ({
     setLoading(true);
     setError(null);
 
-    // Adicionar mensagem do usuário localmente
     setMessages(prev => [...prev, {
       role: 'user',
       content: userMessage,
@@ -83,30 +76,23 @@ export const CopilotoChat: React.FC<CopilotoChatProps> = ({
     }]);
 
     try {
-      const res = await fetch('http://localhost:3000/api/v1/copiloto/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId,
-          message: userMessage,
-          context: financialData,
-        }),
+      const res = await api.post('/copiloto/chat', {
+        sessionId,
+        message: userMessage,
+        context: financialData,
       });
 
-      const data = await res.json();
-
-      if (data.fallback) {
-        setError(data.message);
+      if (res.data.fallback) {
+        setError(res.data.message);
         return;
       }
 
-      // Adicionar resposta do assistente
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: data.reply,
+        content: res.data.reply,
         timestamp: new Date(),
       }]);
-    } catch (err) {
+    } catch {
       setError('Erro ao enviar mensagem');
     } finally {
       setLoading(false);
@@ -118,16 +104,13 @@ export const CopilotoChat: React.FC<CopilotoChatProps> = ({
     setExporting(true);
 
     try {
-      const res = await fetch(`http://localhost:3000/api/v1/copiloto/export/${sessionId}/analysis`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ financialData }),
-      });
+      const res = await api.post(
+        `/copiloto/export/${sessionId}/analysis`,
+        { financialData },
+        { responseType: 'blob' }
+      );
 
-      if (!res.ok) throw new Error('Erro ao exportar');
-
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
+      const url = window.URL.createObjectURL(res.data);
       const a = document.createElement('a');
       a.href = url;
       a.download = `analise-${sessionId}.pdf`;
@@ -137,7 +120,7 @@ export const CopilotoChat: React.FC<CopilotoChatProps> = ({
       document.body.removeChild(a);
 
       onExport?.(sessionId);
-    } catch (err) {
+    } catch {
       setError('Erro ao exportar PDF');
     } finally {
       setExporting(false);
@@ -148,7 +131,7 @@ export const CopilotoChat: React.FC<CopilotoChatProps> = ({
     <div className="copiloto-chat">
       <div className="copiloto-header">
         <div>
-          <h2>🤖 Copiloto Contábil</h2>
+          <h2>🤖 Copiloto Contabil</h2>
           <p>{companyName}</p>
         </div>
         {sessionId && (
@@ -166,7 +149,7 @@ export const CopilotoChat: React.FC<CopilotoChatProps> = ({
       <div className="copiloto-messages">
         {messages.length === 0 && (
           <div className="copiloto-empty">
-            <p>Faça uma pergunta sobre a saúde financeira da empresa</p>
+            <p>Faca uma pergunta sobre a saude financeira da empresa</p>
           </div>
         )}
         {messages.map((msg, idx) => (
@@ -206,7 +189,7 @@ export const CopilotoChat: React.FC<CopilotoChatProps> = ({
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Faça uma pergunta..."
+          placeholder="Faca uma pergunta..."
           disabled={loading || !sessionId}
           className="copiloto-input"
         />

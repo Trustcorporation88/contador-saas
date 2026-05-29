@@ -1,13 +1,15 @@
 import { FC, useState, useRef, useEffect, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { HelpCircle, X } from 'lucide-react';
+import { HelpCircle, X, Bot } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../../utils/cn';
+import { CopilotoMiniChat } from '../CopilotoMiniChat';
 
 export interface SmartTooltipContent {
   description: string;
   example?: string;
   helpText?: string;
+  topic?: string;
 }
 
 export interface SmartTooltipProps {
@@ -29,19 +31,18 @@ export const SmartTooltip: FC<SmartTooltipProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [computedPosition, setComputedPosition] = useState(position);
   const [tooltipPos, setTooltipPos] = useState({ top: 0, left: 0 });
   const triggerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
-  // Calcula posição do tooltip em relação à viewport
   useEffect(() => {
     if (!isOpen || !triggerRef.current) return;
 
     const trigger = triggerRef.current;
     const triggerRect = trigger.getBoundingClientRect();
 
-    // Estima tamanho do tooltip
     const estimatedHeight = 200;
     const estimatedWidth = maxWidth;
 
@@ -52,7 +53,6 @@ export const SmartTooltip: FC<SmartTooltipProps> = ({
     if (position === 'auto') {
       const spaceTop = triggerRect.top;
       const spaceBottom = window.innerHeight - triggerRect.bottom;
-      const spaceLeft = triggerRect.left;
       const spaceRight = window.innerWidth - triggerRect.right;
 
       if (spaceBottom >= estimatedHeight) {
@@ -66,7 +66,6 @@ export const SmartTooltip: FC<SmartTooltipProps> = ({
       }
     }
 
-    // Calcula posição absoluta em relação à viewport
     switch (newPosition) {
       case 'top':
         top = triggerRect.top - estimatedHeight - 8;
@@ -86,7 +85,6 @@ export const SmartTooltip: FC<SmartTooltipProps> = ({
         break;
     }
 
-    // Garante que não sai da tela
     left = Math.max(8, Math.min(left, window.innerWidth - estimatedWidth - 8));
     top = Math.max(8, Math.min(top, window.innerHeight - estimatedHeight - 8));
 
@@ -94,26 +92,19 @@ export const SmartTooltip: FC<SmartTooltipProps> = ({
     setTooltipPos({ top, left });
   }, [isOpen, position, maxWidth]);
 
-  // Close on Escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape' && isOpen && !chatOpen) {
         setIsOpen(false);
         setIsPinned(false);
       }
     };
-
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
-  }, [isOpen]);
+  }, [isOpen, chatOpen]);
 
-  const handleMouseEnter = () => {
-    if (!isPinned) setIsOpen(true);
-  };
-
-  const handleMouseLeave = () => {
-    if (!isPinned) setIsOpen(false);
-  };
+  const handleMouseEnter = () => { if (!isPinned) setIsOpen(true); };
+  const handleMouseLeave = () => { if (!isPinned) setIsOpen(false); };
 
   const handleClick = () => {
     if (pinnable) {
@@ -128,6 +119,15 @@ export const SmartTooltip: FC<SmartTooltipProps> = ({
     setIsPinned(false);
   };
 
+  const handleOpenChat = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsOpen(false);
+    setIsPinned(false);
+    setChatOpen(true);
+  };
+
+  const topicLabel = content.topic || content.description.slice(0, 60);
+
   const tooltipContent = (
     <motion.div
       ref={tooltipRef}
@@ -136,11 +136,7 @@ export const SmartTooltip: FC<SmartTooltipProps> = ({
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.15, ease: 'easeOut' }}
       className="fixed z-[9999]"
-      style={{
-        top: `${tooltipPos.top}px`,
-        left: `${tooltipPos.left}px`,
-        maxWidth,
-      }}
+      style={{ top: `${tooltipPos.top}px`, left: `${tooltipPos.left}px`, maxWidth }}
       role="tooltip"
     >
       <div className="relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl overflow-hidden">
@@ -184,6 +180,18 @@ export const SmartTooltip: FC<SmartTooltipProps> = ({
               </div>
             </div>
           )}
+
+          {isPinned && (
+            <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+              <button
+                onClick={handleOpenChat}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 text-primary-700 dark:text-primary-400 text-xs font-medium transition-colors"
+              >
+                <Bot className="w-3.5 h-3.5" />
+                Perguntar ao Copiloto sobre este tema
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </motion.div>
@@ -212,6 +220,15 @@ export const SmartTooltip: FC<SmartTooltipProps> = ({
 
       <AnimatePresence>
         {isOpen && typeof document !== 'undefined' && createPortal(tooltipContent, document.body)}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {chatOpen && (
+          <CopilotoMiniChat
+            topic={topicLabel}
+            onClose={() => setChatOpen(false)}
+          />
+        )}
       </AnimatePresence>
     </div>
   );
