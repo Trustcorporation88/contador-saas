@@ -143,7 +143,7 @@ export class CompanyService {
 
     // Aplicar filtros de busca
     if (filters?.search) {
-      query = query.whereRaw('LOWER(name) LIKE LOWER(?)', [`%${filters.search}%`]);
+      query = query.whereRaw('LOWER(legal_name) LIKE LOWER(?)', [`%${filters.search}%`]);
     }
 
     if (filters?.tax_regime) {
@@ -264,7 +264,7 @@ export class CompanyService {
     };
 
     if (data.name) {
-      updateData.name = data.name;
+      updateData.legal_name = data.name;
     }
     if (data.address) {
       updateData.address = data.address;
