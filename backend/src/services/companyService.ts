@@ -59,7 +59,7 @@ export class CompanyService {
       const companyData = {
         id: companyId,
         cnpj: data.cnpj.replace(/[^\d]/g, ''), // Remover formatação
-        name: data.name,
+        legal_name: data.name,
         address: data.address || null,
         phone: data.phone || null,
         email: data.email || null,
@@ -76,7 +76,7 @@ export class CompanyService {
       logger.info('Company created', {
         companyId,
         cnpj: data.cnpj,
-        name: data.name,
+        legal_name: data.name,
         createdBy: adminUserId,
       });
 
@@ -372,7 +372,7 @@ export class CompanyService {
     return {
       id: company.id,
       cnpj: company.cnpj,
-      name: company.name,
+      name: company.legal_name,
       address: company.address,
       phone: company.phone,
       email: company.email,
@@ -400,7 +400,7 @@ export class CompanyService {
     try {
       const db = trx || (await getDatabase());
 
-      await db('access_audit').insert({
+      await db('audit_logs').insert({
         id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         user_id: userId,
         company_id: companyId,
