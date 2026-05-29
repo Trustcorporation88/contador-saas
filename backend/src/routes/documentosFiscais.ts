@@ -6,6 +6,7 @@
 import { Router, Request, Response } from 'express';
 import { DocumentoFiscalController } from '../controllers/documentoFiscalController';
 import { authenticateToken } from '../middleware/auth';
+import { applyCompanyContext } from '../middleware/companyContext';
 
 const router = Router();
 
@@ -13,6 +14,7 @@ const router = Router();
  * Middleware de autenticação para todas as rotas
  */
 router.use(authenticateToken);
+router.use(applyCompanyContext);
 
 /**
  * GET /api/v1/documentos

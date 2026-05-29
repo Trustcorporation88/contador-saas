@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import { authenticateToken } from '../middleware/auth';
+import { applyCompanyContext } from '../middleware/companyContext';
 import { ContasPagarController } from '../controllers/contasPagarController';
 
 const router = Router();
 
 router.use(authenticateToken);
+router.use(applyCompanyContext);
 
 router.get('/', ContasPagarController.listar);
 router.post('/', ContasPagarController.criar);

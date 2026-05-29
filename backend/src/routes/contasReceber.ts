@@ -1,10 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { authenticateToken } from '../middleware/auth';
+import { applyCompanyContext } from '../middleware/companyContext';
 import { ContasReceberController } from '../controllers/contasReceberController';
 
 const router = Router();
 
 router.use(authenticateToken);
+router.use(applyCompanyContext);
 
 router.get('/', (req: Request, res: Response) => {
   ContasReceberController.listar(req, res);
