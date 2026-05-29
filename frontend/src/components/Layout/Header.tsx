@@ -69,7 +69,7 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
   }, []);
 
   return (
-    <header className="sticky top-0 z-20 border-b border-white/60 bg-white/65 px-4 py-3 backdrop-blur-xl sm:px-6">
+    <header className="sticky top-0 z-40 border-b border-white/60 bg-white/65 px-4 py-3 backdrop-blur-xl sm:px-6">
       <div className="glass-strip flex min-h-[72px] items-center justify-between gap-3 px-4 py-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-3">
           <button
