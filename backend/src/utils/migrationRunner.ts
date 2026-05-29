@@ -491,7 +491,54 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           console.log('✓ 007_create_recurring_transactions_tables completed');
         },
       },
-    ];
+      {
+        name: '008_add_missing_columns',
+        up: async (db) => {
+          // Adicionar coluna fiscal_year_start em companies
+          const companiesHasColumn = await db.schema.hasColumn('companies', 'fiscal_year_start');
+          if (!companiesHasColumn) {
+            console.log('[MIGRATIONS] Adding fiscal_year_start to companies table...');
+            await db.schema.alterTable('companies', (table) => {
+              table.integer('fiscal_year_start').defaultTo(1).nullable();
+            });
+          }
+
+          // Adicionar coluna tax_regime em companies
+          const companiesHasTaxRegime = await db.schema.hasColumn('companies', 'tax_regime');
+          if (!companiesHasTaxRegime) {
+            console.log('[MIGRATIONS] Adding tax_regime to companies table...');
+            await db.schema.alterTable('companies', (table) => {
+              table.string('tax_regime', 50).nullable();
+            });
+          }
+
+          // Criar tabela audit_logs
+          const auditLogsExists = await db.schema.hasTable('audit_logs');
+          if (!auditLogsExists) {
+            console.log('[MIGRATIONS] Creating audit_logs table...');
+            await db.schema.createTable('audit_logs', (table) => {
+              table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+              table.uuid('user_id').nullable();
+              table.string('action', 50).notNullable();
+              table.string('entity_type', 100).notNullable();
+              table.uuid('entity_id').notNullable();
+              table.json('old_value').nullable();
+              table.json('new_value').nullable();
+              table.string('status', 50).notNullable();
+              table.string('ip_address', 50).nullable();
+              table.string('user_agent', 500).nullable();
+              table.timestamp('timestamp').defaultTo(db.fn.now());
+              table.index(['user_id']);
+              table.index(['entity_type']);
+              table.index(['entity_id']);
+              table.index(['timestamp']);
+            });
+          }
+
+          console.log('✓ 008_add_missing_columns completed');
+        },
+      },
+        ];
 
     for (const migration of migrations) {
       await migration.up(db);
