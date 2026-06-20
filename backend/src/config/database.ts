@@ -12,10 +12,27 @@ import { runMigrationsIfNeeded } from '../utils/migrationRunner';
 
 let db: Knex | null = null;
 
+const DEFAULT_RENDER_POSTGRES_REGION = 'oregon';
+
+function getRenderPostgresHostSuffix(): string {
+  const region = process.env.RENDER_DB_REGION?.trim() || DEFAULT_RENDER_POSTGRES_REGION;
+  return `${region}-postgres.render.com`;
+}
+
 /**
- * Corrige hostnames Render incompletos (ex: dpg-xxxxx-a sem .c.postgres.render.com)
+ * Corrige hostnames Render incompletos (ex: dpg-xxxxx-a sem região/postgres.render.com)
  */
 function normalizeRenderDatabaseUrl(url: string): string {
+  const suffix = getRenderPostgresHostSuffix();
+
+  if (url.includes('.c.postgres.render.com')) {
+    const fixed = url.replace('.c.postgres.render.com', suffix);
+    logger.warn('DATABASE_URL uses deprecated Render hostname suffix; corrected region hostname', {
+      suffix,
+    });
+    return fixed;
+  }
+
   const incompleteHostMatch = url.match(
     /^(postgresql:\/\/[^@]+@)(dpg-[a-z0-9]+-a)(\/[^?#]*(?:\?[^#]*)?(?:#.*)?)$/i,
   );
@@ -25,12 +42,13 @@ function normalizeRenderDatabaseUrl(url: string): string {
   }
 
   const [, prefix, host, path] = incompleteHostMatch;
-  const normalizedHost = `${host}.c.postgres.render.com`;
+  const normalizedHost = `${host}.${suffix}`;
   const normalized = `${prefix}${normalizedHost}:5432${path}`;
 
   logger.warn('DATABASE_URL hostname incomplete; auto-corrected Render external hostname', {
     originalHost: host,
     normalizedHost,
+    suffix,
   });
 
   return normalized;
@@ -131,7 +149,7 @@ export async function getDatabase(): Promise<Knex> {
       databaseUrl: envConfig.database.url ? '***' : 'not-set',
       suggestion:
         errorMsg.includes('ENOTFOUND') || errorCode === 'ENOTFOUND'
-          ? 'Database hostname not found - check if DATABASE_URL is correct in Render dashboard'
+          ? `Database hostname not found (${hostForLog}). Copy the full External Database URL from Render PostgreSQL → Connections, or set RENDER_DB_REGION if the database is in another region.`
           : errorMsg.includes('ECONNREFUSED') || errorCode === 'ECONNREFUSED'
             ? 'Connection refused - database service may not be running'
             : 'Unknown error - check DATABASE_URL format',

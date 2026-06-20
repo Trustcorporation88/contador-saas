@@ -185,8 +185,10 @@ function validateDatabaseUrlFormat(): void {
     return;
   }
 
+  const renderPostgresSuffix = `${process.env.RENDER_DB_REGION?.trim() || 'oregon'}-postgres.render.com`;
+
   const isValidRenderHost =
-    host.endsWith('.c.postgres.render.com') ||
+    host.endsWith(renderPostgresSuffix) ||
     host.endsWith('.postgres.render.com') ||
     host.endsWith('.internal') ||
     host === 'localhost' ||
