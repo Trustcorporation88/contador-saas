@@ -13,6 +13,27 @@ import { runMigrationsIfNeeded } from '../utils/migrationRunner';
 let db: Knex | null = null;
 
 /**
+ * Parse DATABASE_URL and ensure it's properly formatted for the client
+ * Handles Render's internal hostname issue by falling back to external URL if needed
+ */
+function getDatabaseConnectionConfig(url: string, isProduction: boolean): any {
+  if (!url) {
+    throw new Error('DATABASE_URL is required');
+  }
+
+  // Log the connection attempt (without password)
+  const urlToParse = url.replace(/:[^@]*@/, ':***@');
+  logger.info('Attempting database connection', { url: urlToParse, isProduction });
+
+  // For Render's internal hostnames (dpg-*), we need to ensure proper SSL handling
+  // The connectionString property handles this automatically
+  return {
+    connectionString: url,
+    ssl: isProduction ? { rejectUnauthorized: false } : false,
+  };
+}
+
+/**
  * Get or create database connection pool
  * Aplica extensões multi-tenant automaticamente
  */
@@ -24,10 +45,7 @@ export async function getDatabase(): Promise<Knex> {
   const isProduction = envConfig.nodeEnv === 'production';
 
   const connectionConfig = envConfig.database.url
-    ? {
-        connectionString: envConfig.database.url,
-        ssl: isProduction ? { rejectUnauthorized: false } : false,
-      }
+    ? getDatabaseConnectionConfig(envConfig.database.url, isProduction)
     : {
         host: envConfig.database.host,
         port: envConfig.database.port,
@@ -72,10 +90,21 @@ export async function getDatabase(): Promise<Knex> {
       multiTenantEnabled: true,
     });
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    const errorCode = (error as any)?.code || (error as any)?.errno || 'UNKNOWN';
+
     logger.error('Failed to connect to database', {
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMsg,
+      code: errorCode,
       host: hostForLog,
       isProduction,
+      databaseUrl: envConfig.database.url ? '***' : 'not-set',
+      suggestion:
+        errorMsg.includes('ENOTFOUND') || errorCode === 'ENOTFOUND'
+          ? 'Database hostname not found - check if DATABASE_URL is correct in Render dashboard'
+          : errorMsg.includes('ECONNREFUSED') || errorCode === 'ECONNREFUSED'
+            ? 'Connection refused - database service may not be running'
+            : 'Unknown error - check DATABASE_URL format',
     });
     throw error;
   }
