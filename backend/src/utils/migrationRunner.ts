@@ -89,7 +89,9 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
         up: async (db) => {
           const exists = await db.schema.hasTable('documentos_fiscais');
           if (exists) {
-            console.log('[MIGRATIONS] Skipping 002_create_documentos_fiscais_tables (already exists)');
+            console.log(
+              '[MIGRATIONS] Skipping 002_create_documentos_fiscais_tables (already exists)',
+            );
             return;
           }
 
@@ -128,7 +130,12 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
 
           await db.schema.createTable('itens_documentos_fiscais', (table) => {
             table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
-            table.uuid('documento_fiscal_id').notNullable().references('id').inTable('documentos_fiscais').onDelete('CASCADE');
+            table
+              .uuid('documento_fiscal_id')
+              .notNullable()
+              .references('id')
+              .inTable('documentos_fiscais')
+              .onDelete('CASCADE');
             table.text('descricao').notNullable();
             table.string('codigo_produto', 50);
             table.decimal('quantidade', 15, 6).notNullable();
@@ -147,7 +154,12 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
 
           await db.schema.createTable('anexos_documentos_fiscais', (table) => {
             table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
-            table.uuid('documento_fiscal_id').notNullable().references('id').inTable('documentos_fiscais').onDelete('CASCADE');
+            table
+              .uuid('documento_fiscal_id')
+              .notNullable()
+              .references('id')
+              .inTable('documentos_fiscais')
+              .onDelete('CASCADE');
             table.string('arquivo_nome', 255).notNullable();
             table.string('arquivo_mime', 100);
             table.integer('arquivo_tamanho');
@@ -170,17 +182,22 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           }
 
           console.log('[MIGRATIONS] Creating company_users table...');
-          
+
           await db.schema.createTable('company_users', (table) => {
             table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
             table.string('user_id').notNullable();
-            table.uuid('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+            table
+              .uuid('company_id')
+              .notNullable()
+              .references('id')
+              .inTable('companies')
+              .onDelete('CASCADE');
             table.string('role', 50).notNullable().defaultTo('user');
             table.json('permissions').nullable();
             table.boolean('is_active').defaultTo(true);
             table.timestamp('created_at').defaultTo(db.fn.now());
             table.timestamp('updated_at').defaultTo(db.fn.now());
-            
+
             table.index(['user_id']);
             table.index(['company_id']);
             table.unique(['user_id', 'company_id']);
@@ -199,7 +216,7 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           }
 
           console.log('[MIGRATIONS] Creating audit_logs table...');
-          
+
           await db.schema.createTable('audit_logs', (table) => {
             table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
             table.string('user_id').nullable();
@@ -219,6 +236,18 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           });
 
           console.log('✓ 010_create_audit_logs_table completed');
+        },
+      },
+      {
+        name: '20260620_add_users_email_index',
+        up: async (db) => {
+          console.log('[MIGRATIONS] Adding performance index for users.email...');
+          try {
+            await db.raw('CREATE INDEX IF NOT EXISTS idx_users_email_lower ON users(LOWER(email))');
+            console.log('✓ idx_users_email_lower created');
+          } catch (e) {
+            console.warn('[MIGRATIONS] Could not create index (maybe it exists):', e);
+          }
         },
       },
     ];
