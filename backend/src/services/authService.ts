@@ -122,6 +122,7 @@ export class AuthService {
     const usersColumns = (await db('users').columnInfo()) as Record<string, unknown>;
     const hasPasswordHashColumn = Boolean(usersColumns.password_hash);
     const hasPasswordColumn = Boolean(usersColumns.password);
+    const hasCompanyIdColumn = Boolean(usersColumns.company_id);
     const nameColumn = usersColumns.full_name ? 'full_name' : 'name';
     const activeColumn = usersColumns.is_active ? 'is_active' : 'active';
 
@@ -161,10 +162,13 @@ export class AuthService {
         id: crypto.randomUUID(),
         email: adminEmail,
         role: 'admin',
-        company_id: bootstrapCompany.id,
         created_at: new Date(),
         updated_at: new Date(),
       };
+
+      if (hasCompanyIdColumn) {
+        payload.company_id = bootstrapCompany.id;
+      }
 
       payload[nameColumn] = 'Administrador';
       payload[activeColumn] = true;

@@ -250,6 +250,28 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           }
         },
       },
+      {
+        name: '011_add_users_company_id',
+        up: async (db) => {
+          const hasTable = await db.schema.hasTable('users');
+          if (!hasTable) {
+            console.log('[MIGRATIONS] Skipping 011_add_users_company_id (users table missing)');
+            return;
+          }
+
+          const hasColumn = await db.schema.hasColumn('users', 'company_id');
+          if (hasColumn) {
+            console.log('[MIGRATIONS] Skipping 011_add_users_company_id (already exists)');
+            return;
+          }
+
+          console.log('[MIGRATIONS] Adding company_id to users table...');
+          await db.schema.alterTable('users', (table) => {
+            table.string('company_id', 64).nullable();
+          });
+          console.log('✓ 011_add_users_company_id completed');
+        },
+      },
     ];
 
     for (const migration of migrations) {
