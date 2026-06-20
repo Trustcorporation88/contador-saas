@@ -204,8 +204,6 @@ export class AuthService {
     // Check rate limiting (5 attempts / 15 minutes)
     this.checkLoginRateLimit(email);
 
-    await this.bootstrapAdminUser();
-
     // Buscar usuário
     const user = await this.findUserByEmail(email);
     if (!user) {

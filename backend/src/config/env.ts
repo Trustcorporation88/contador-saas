@@ -107,10 +107,7 @@ interface EnvConfig {
  * Validate environment variables using Joi schema
  */
 const envSchema = joi.object({
-  NODE_ENV: joi
-    .string()
-    .valid('development', 'production', 'test')
-    .default('development'),
+  NODE_ENV: joi.string().valid('development', 'production', 'test').default('development'),
   PORT: joi.number().default(3000),
   HOST: joi.string().default('0.0.0.0'),
   DATABASE_URL: joi.string().required(),
@@ -123,10 +120,10 @@ const envSchema = joi.object({
     then: joi.string().optional().default(''),
     otherwise: joi.string().required(),
   }),
-  DATABASE_POOL_MIN: joi.number().default(2),
-  DATABASE_POOL_MAX: joi.number().default(10),
+  DATABASE_POOL_MIN: joi.number().default(5),
+  DATABASE_POOL_MAX: joi.number().default(20),
   DATABASE_IDLE_TIMEOUT_MILLIS: joi.number().default(30000),
-  DATABASE_CONNECTION_TIMEOUT_MILLIS: joi.number().default(2000),
+  DATABASE_CONNECTION_TIMEOUT_MILLIS: joi.number().default(10000),
   JWT_SECRET: joi.string().required(),
   JWT_REFRESH_SECRET: joi.string().default(joi.ref('JWT_SECRET')),
   JWT_EXPIRY: joi.string().default('1h'),
@@ -134,12 +131,9 @@ const envSchema = joi.object({
   JWT_ALGORITHM: joi.string().valid('HS256', 'HS512').default('HS256'),
   CORS_ORIGIN: joi.string().default('http://localhost:3000'),
   CORS_CREDENTIALS: joi.boolean().default(true),
-  LOG_LEVEL: joi
-    .string()
-    .valid('debug', 'info', 'warn', 'error')
-    .default('info'),
+  LOG_LEVEL: joi.string().valid('debug', 'info', 'warn', 'error').default('info'),
   LOG_FORMAT: joi.string().valid('json', 'simple').default('json'),
-  BCRYPT_ROUNDS: joi.number().default(12),
+  BCRYPT_ROUNDS: joi.number().default(10),
   MAX_LOGIN_ATTEMPTS: joi.number().default(5),
   LOCK_TIME_MINUTES: joi.number().default(15),
   PASSWORD_RESET_TTL_MINUTES: joi.number().default(30),
@@ -159,12 +153,12 @@ const envSchema = joi.object({
 
   // Cache Configuration
   CACHE_ENABLED: joi.boolean().default(true),
-  CACHE_DEFAULT_TTL: joi.number().default(600),  // 10 minutos
-  CACHE_REPORTS_TTL: joi.number().default(300),  // 5 minutos
-  CACHE_ACCOUNTS_TTL: joi.number().default(900),  // 15 minutos
-  CACHE_TAXES_TTL: joi.number().default(3600),  // 1 hora
-  CACHE_DASHBOARD_TTL: joi.number().default(120),  // 2 minutos
-  CACHE_MAX_KEYS: joi.number().default(1000),  // Legacy
+  CACHE_DEFAULT_TTL: joi.number().default(600), // 10 minutos
+  CACHE_REPORTS_TTL: joi.number().default(300), // 5 minutos
+  CACHE_ACCOUNTS_TTL: joi.number().default(900), // 15 minutos
+  CACHE_TAXES_TTL: joi.number().default(3600), // 1 hora
+  CACHE_DASHBOARD_TTL: joi.number().default(120), // 2 minutos
+  CACHE_MAX_KEYS: joi.number().default(1000), // Legacy
 
   API_TIMEOUT: joi.number().default(30000),
   API_VERSION: joi.string().default('v1'),
