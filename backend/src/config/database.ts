@@ -13,6 +13,30 @@ import { runMigrationsIfNeeded } from '../utils/migrationRunner';
 let db: Knex | null = null;
 
 /**
+ * Corrige hostnames Render incompletos (ex: dpg-xxxxx-a sem .c.postgres.render.com)
+ */
+function normalizeRenderDatabaseUrl(url: string): string {
+  const incompleteHostMatch = url.match(
+    /^(postgresql:\/\/[^@]+@)(dpg-[a-z0-9]+-a)(\/[^?#]*(?:\?[^#]*)?(?:#.*)?)$/i,
+  );
+
+  if (!incompleteHostMatch) {
+    return url;
+  }
+
+  const [, prefix, host, path] = incompleteHostMatch;
+  const normalizedHost = `${host}.c.postgres.render.com`;
+  const normalized = `${prefix}${normalizedHost}:5432${path}`;
+
+  logger.warn('DATABASE_URL hostname incomplete; auto-corrected Render external hostname', {
+    originalHost: host,
+    normalizedHost,
+  });
+
+  return normalized;
+}
+
+/**
  * Parse DATABASE_URL and ensure it's properly formatted for the client
  * Handles Render's internal hostname issue by falling back to external URL if needed
  */
@@ -21,14 +45,16 @@ function getDatabaseConnectionConfig(url: string, isProduction: boolean): any {
     throw new Error('DATABASE_URL is required');
   }
 
+  const connectionUrl = normalizeRenderDatabaseUrl(url);
+
   // Log the connection attempt (without password)
-  const urlToParse = url.replace(/:[^@]*@/, ':***@');
+  const urlToParse = connectionUrl.replace(/:[^@]*@/, ':***@');
   logger.info('Attempting database connection', { url: urlToParse, isProduction });
 
   // For Render's internal hostnames (dpg-*), we need to ensure proper SSL handling
   // The connectionString property handles this automatically
   return {
-    connectionString: url,
+    connectionString: connectionUrl,
     ssl: isProduction ? { rejectUnauthorized: false } : false,
   };
 }
@@ -44,8 +70,12 @@ export async function getDatabase(): Promise<Knex> {
 
   const isProduction = envConfig.nodeEnv === 'production';
 
-  const connectionConfig = envConfig.database.url
-    ? getDatabaseConnectionConfig(envConfig.database.url, isProduction)
+  const normalizedDatabaseUrl = envConfig.database.url
+    ? normalizeRenderDatabaseUrl(envConfig.database.url)
+    : null;
+
+  const connectionConfig = normalizedDatabaseUrl
+    ? getDatabaseConnectionConfig(normalizedDatabaseUrl, isProduction)
     : {
         host: envConfig.database.host,
         port: envConfig.database.port,
@@ -56,8 +86,8 @@ export async function getDatabase(): Promise<Knex> {
         connectionTimeoutMillis: envConfig.database.connectionTimeoutMillis,
       };
 
-  const hostForLog = envConfig.database.url
-    ? (envConfig.database.url.split('@')[1] || 'URL').split('/')[0]
+  const hostForLog = normalizedDatabaseUrl
+    ? (normalizedDatabaseUrl.split('@')[1] || 'URL').split('/')[0]
     : envConfig.database.host;
 
   db = knex({

@@ -168,6 +168,37 @@ export function validateEnvironmentSecurity(): void {
  * Valida que todas variáveis obrigatórias estão presentes
  * (Joi já faz isso no env.ts, mas duplicamos para segurança)
  */
+function validateDatabaseUrlFormat(): void {
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (!databaseUrl) {
+    return;
+  }
+
+  const hostMatch = databaseUrl.match(/^postgresql:\/\/[^@]+@([^/:?#]+)/i);
+  const host = hostMatch?.[1] ?? '';
+
+  if (/^dpg-[a-z0-9]+-a$/i.test(host)) {
+    logger.warn(
+      'DATABASE_URL uses incomplete Render hostname; runtime will auto-correct to external URL',
+      { host },
+    );
+    return;
+  }
+
+  const isValidRenderHost =
+    host.endsWith('.c.postgres.render.com') ||
+    host.endsWith('.postgres.render.com') ||
+    host.endsWith('.internal') ||
+    host === 'localhost' ||
+    !host.startsWith('dpg-');
+
+  if (!isValidRenderHost) {
+    throw new Error(
+      `DATABASE_URL host "${host}" looks invalid. Use Render External Database URL from dashboard.`,
+    );
+  }
+}
+
 export function validateRequiredEnvVars(): void {
   const required = ['DATABASE_URL', 'JWT_SECRET'];
 
@@ -185,6 +216,8 @@ export function validateRequiredEnvVars(): void {
     logger.error(message);
     throw new Error(message);
   }
+
+  validateDatabaseUrlFormat();
 }
 
 /**

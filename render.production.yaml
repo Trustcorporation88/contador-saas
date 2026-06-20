@@ -39,9 +39,11 @@ services:
       - key: HOST
         value: 0.0.0.0
 
-      # ── Banco — preencher no dashboard do Render ──────────
+      # ── Banco — vinculado automaticamente ao PostgreSQL do Render ──
       - key: DATABASE_URL
-        sync: false           # sync: false = secret, não versionado
+        fromDatabase:
+          name: contador-db
+          property: connectionString
 
       # ── Redis — preencher no dashboard do Render ──────────
       - key: REDIS_URL
