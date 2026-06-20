@@ -16,7 +16,7 @@ export async function up(db: Knex): Promise<void> {
 
   // Create index on email (case-insensitive using lower() for compatibility)
   await db.raw(`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_email_lower
+    CREATE INDEX IF NOT EXISTS idx_users_email_lower
     ON users(LOWER(email));
   `);
 

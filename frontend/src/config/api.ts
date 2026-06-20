@@ -54,7 +54,7 @@ type RetryConfig = InternalAxiosRequestConfig & {
 };
 
 api.interceptors.response.use(
-  (response) => response,
+  (response: any) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as RetryConfig;
 
