@@ -305,7 +305,11 @@ export default function EmpresasPage() {
 
   const createMut = useMutation({
     mutationFn: (v: CreateForm) => CompanyService.create({ ...v, email: v.email || undefined }),
-    onSuccess:  () => { invalidate(); closeModal(); },
+    onSuccess:  (company) => {
+      invalidate();
+      setCurrentCompany(company.id);
+      closeModal();
+    },
     onError:    (e: Error) => setApiError(e.message),
   });
 
