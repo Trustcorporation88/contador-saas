@@ -21,16 +21,26 @@ export async function getDatabase(): Promise<Knex> {
     return db;
   }
 
+  const isProduction = envConfig.nodeEnv === 'production';
+
   const connectionConfig = envConfig.database.url
-    ? envConfig.database.url
+    ? {
+        connectionString: envConfig.database.url,
+        ssl: isProduction ? { rejectUnauthorized: false } : false,
+      }
     : {
         host: envConfig.database.host,
         port: envConfig.database.port,
         user: envConfig.database.user,
         password: envConfig.database.password,
         database: envConfig.database.name,
+        ssl: isProduction ? { rejectUnauthorized: false } : false,
         connectionTimeoutMillis: envConfig.database.connectionTimeoutMillis,
       };
+
+  const hostForLog = envConfig.database.url
+    ? (envConfig.database.url.split('@')[1] || 'URL').split('/')[0]
+    : envConfig.database.host;
 
   db = knex({
     client: 'pg',
@@ -54,17 +64,18 @@ export async function getDatabase(): Promise<Knex> {
   try {
     await db.raw('SELECT 1');
     logger.info('Database connection pool initialized', {
-      host: envConfig.database.host,
-      port: envConfig.database.port,
+      host: hostForLog,
       database: envConfig.database.name,
       poolMin: envConfig.database.poolMin,
       poolMax: envConfig.database.poolMax,
+      ssl: !!isProduction,
       multiTenantEnabled: true,
     });
   } catch (error) {
     logger.error('Failed to connect to database', {
       error: error instanceof Error ? error.message : String(error),
-      host: envConfig.database.host,
+      host: hostForLog,
+      isProduction,
     });
     throw error;
   }
