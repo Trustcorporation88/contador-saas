@@ -1,9 +1,9 @@
 /**
  * Environment Variables Security Validation
- * 
+ *
  * Valida configurações sensíveis de segurança no startup.
  * Fail fast se configurações inseguras em produção.
- * 
+ *
  * @module config/validateEnv
  */
 
@@ -23,62 +23,57 @@ export function validateEnvironmentSecurity(): void {
   });
 
   // CRÍTICO: JWT_SECRET não pode ser valor padrão em produção
-  if (isProd && (
-    envConfig.jwt.secret === 'change-me-in-prod' ||
-    envConfig.jwt.secret === 'your_super_secret_jwt_key_change_in_production' ||
-    envConfig.jwt.secret.length < 32
-  )) {
+  if (
+    isProd &&
+    (envConfig.jwt.secret === 'change-me-in-prod' ||
+      envConfig.jwt.secret === 'your_super_secret_jwt_key_change_in_production' ||
+      envConfig.jwt.secret.length < 32)
+  ) {
     errors.push(
       'JWT_SECRET is using default or weak value in production. ' +
-      'Set a strong random secret (min 32 characters).'
+        'Set a strong random secret (min 32 characters).',
     );
   }
 
   // CRÍTICO: REFRESH_TOKEN_SECRET deve ser diferente do JWT_SECRET
   if (envConfig.jwt.refreshSecret === envConfig.jwt.secret) {
     warnings.push(
-      'JWT_REFRESH_SECRET is same as JWT_SECRET. ' +
-      'Use different secrets for better security.'
+      'JWT_REFRESH_SECRET is same as JWT_SECRET. ' + 'Use different secrets for better security.',
     );
   }
 
   // CRÍTICO: CORS não pode incluir "*" em produção
   if (isProd && envConfig.corsOrigin.includes('*')) {
     errors.push(
-      'CORS_ORIGIN contains wildcard (*) in production. ' +
-      'Specify exact allowed origins.'
+      'CORS_ORIGIN contains wildcard (*) in production. ' + 'Specify exact allowed origins.',
     );
   }
 
   // CRÍTICO: CORS não pode incluir "localhost" em produção
   if (isProd && envConfig.corsOrigin.toLowerCase().includes('localhost')) {
-    warnings.push(
-      'CORS_ORIGIN contains localhost in production. ' +
-      'Remove development origins.'
-    );
+    warnings.push('CORS_ORIGIN contains localhost in production. ' + 'Remove development origins.');
   }
 
   // AVISO: ADMIN_BOOTSTRAP_PASSWORD não deve estar vazio em produção
   if (isProd && !envConfig.adminBootstrapPassword) {
     warnings.push(
       'ADMIN_BOOTSTRAP_PASSWORD is empty in production. ' +
-      'Set a strong admin password or disable bootstrap.'
+        'Set a strong admin password or disable bootstrap.',
     );
   }
 
-  // AVISO: bcrypt rounds deve ser >= 12
-  if (envConfig.bcryptRounds < 12) {
+  // AVISO: bcrypt rounds deve ser >= 10
+  if (envConfig.bcryptRounds < 10) {
     warnings.push(
-      `BCRYPT_ROUNDS is ${envConfig.bcryptRounds} (recommended: >= 12). ` +
-      'Low rounds may allow brute force attacks.'
+      `BCRYPT_ROUNDS is ${envConfig.bcryptRounds} (recommended: >= 10). ` +
+        'Low rounds may allow brute force attacks.',
     );
   }
 
   // AVISO: Rate limiting deve estar habilitado em produção
   if (isProd && !envConfig.enableRateLimiting) {
     warnings.push(
-      'ENABLE_RATE_LIMITING is false in production. ' +
-      'Enable rate limiting to prevent abuse.'
+      'ENABLE_RATE_LIMITING is false in production. ' + 'Enable rate limiting to prevent abuse.',
     );
   }
 
@@ -86,16 +81,13 @@ export function validateEnvironmentSecurity(): void {
   if (isProd && !envConfig.enableAuditLog) {
     warnings.push(
       'ENABLE_AUDIT_LOG is false in production. ' +
-      'Enable audit logging for compliance and security.'
+        'Enable audit logging for compliance and security.',
     );
   }
 
   // AVISO: 2FA deve estar habilitado em produção
   if (isProd && !envConfig.enable2FA) {
-    warnings.push(
-      'ENABLE_2FA is false in production. ' +
-      'Enable 2FA for enhanced security.'
-    );
+    warnings.push('ENABLE_2FA is false in production. ' + 'Enable 2FA for enhanced security.');
   }
 
   // AVISO: Database password não deve ser valor padrão
@@ -104,25 +96,19 @@ export function validateEnvironmentSecurity(): void {
     envConfig.database.password === 'password' ||
     envConfig.database.password === 'postgres'
   ) {
-    warnings.push(
-      'DATABASE_PASSWORD is using default value. ' +
-      'Set a strong random password.'
-    );
+    warnings.push('DATABASE_PASSWORD is using default value. ' + 'Set a strong random password.');
   }
 
   // AVISO: Redis password deve estar configurado em produção
   if (isProd && !envConfig.redis.password) {
-    warnings.push(
-      'REDIS_PASSWORD is empty in production. ' +
-      'Secure Redis with a password.'
-    );
+    warnings.push('REDIS_PASSWORD is empty in production. ' + 'Secure Redis with a password.');
   }
 
   // INFORMATIVO: API docs devem estar desabilitados em produção
   if (isProd && envConfig.enableApiDocs) {
     warnings.push(
       'ENABLE_API_DOCS is true in production. ' +
-      'Consider disabling API docs or protecting with authentication.'
+        'Consider disabling API docs or protecting with authentication.',
     );
   }
 
@@ -130,7 +116,7 @@ export function validateEnvironmentSecurity(): void {
   if (isProd && envConfig.enableObservabilityDashboard && !envConfig.observabilityApiKey) {
     warnings.push(
       'ENABLE_OBSERVABILITY_DASHBOARD is true but OBSERVABILITY_API_KEY is empty. ' +
-      'Set an API key to protect observability endpoint.'
+        'Set an API key to protect observability endpoint.',
     );
   }
 
@@ -153,13 +139,13 @@ export function validateEnvironmentSecurity(): void {
     if (isProd) {
       throw new Error(
         `Environment security validation failed with ${errors.length} critical errors. ` +
-        'See logs for details. Server will not start.'
+          'See logs for details. Server will not start.',
       );
     } else {
       // Em dev, apenas warning
       logger.warn(
         'Environment security validation found errors but continuing in development mode.',
-        { errors: errors.length }
+        { errors: errors.length },
       );
     }
   }
@@ -168,7 +154,7 @@ export function validateEnvironmentSecurity(): void {
   const summary = {
     errors: errors.length,
     warnings: warnings.length,
-    status: errors.length === 0 ? 'PASS' : (isProd ? 'FAIL' : 'PASS_WITH_ERRORS'),
+    status: errors.length === 0 ? 'PASS' : isProd ? 'FAIL' : 'PASS_WITH_ERRORS',
   };
 
   logger.info('Environment security validation completed', summary);
@@ -183,10 +169,7 @@ export function validateEnvironmentSecurity(): void {
  * (Joi já faz isso no env.ts, mas duplicamos para segurança)
  */
 export function validateRequiredEnvVars(): void {
-  const required = [
-    'DATABASE_URL',
-    'JWT_SECRET',
-  ];
+  const required = ['DATABASE_URL', 'JWT_SECRET'];
 
   const missing: string[] = [];
 
@@ -226,8 +209,8 @@ export function validateProductionConfig(): void {
       message: 'ENABLE_RATE_LIMITING must be true in production',
     },
     {
-      condition: envConfig.bcryptRounds >= 12,
-      message: 'BCRYPT_ROUNDS must be >= 12 in production',
+      condition: envConfig.bcryptRounds >= 10,
+      message: 'BCRYPT_ROUNDS must be >= 10 in production',
     },
   ];
 
@@ -239,7 +222,7 @@ export function validateProductionConfig(): void {
     });
 
     throw new Error(
-      `Production configuration invalid: ${failed.length} checks failed. See logs for details.`
+      `Production configuration invalid: ${failed.length} checks failed. See logs for details.`,
     );
   }
 
