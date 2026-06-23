@@ -1,0 +1,10 @@
+[
+  {
+    "company_id": "SUBSTITUA_PELO_UUID_DA_EMPRESA",
+    "cnpj": "05664820000100",
+    "uf": "sp",
+    "pfx": "./certs/05664820000100.pfx",
+    "senha": "SENHA_DO_CERTIFICADO",
+    "serpro_motor": false
+  }
+]

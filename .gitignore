@@ -79,5 +79,12 @@ uploads/
 .env*.local
 .env*
 
-backend/.env.local
-frontend/.env.local
+# ── Certificados e XMLs fiscais (captura automática) ─────────
+automacao-xml/certs/
+automacao-xml/xmls/
+automacao-xml/empresas.json
+automacao-xml/.runtime-*.json
+automacao-xml/sync.db
+backend/data/fiscal-certs/
+backend/data/fiscal-xmls/
+

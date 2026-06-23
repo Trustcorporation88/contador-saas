@@ -6,6 +6,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import DocumentoForm from '../../components/Documentos/DocumentoForm';
 import DocumentosList from '../../components/Documentos/DocumentosList';
+import FiscalCapturePanel from '../../components/Documentos/FiscalCapturePanel';
 import {
   DocumentoFiscalService,
   type DocumentoFiscal,
@@ -137,6 +138,8 @@ export default function DocumentosPage() {
           <p className="mt-3 text-3xl font-bold text-gray-900">{stats?.por_status?.registrado?.quantidade || 0}</p>
         </div>
       </div>
+
+      <FiscalCapturePanel />
 
       <div className="glass-strip flex flex-wrap items-end gap-3 px-4 py-4 sm:px-5">
         <div className="min-w-56 flex-1">

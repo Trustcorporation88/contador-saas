@@ -10,6 +10,7 @@ import dasRoutes from './das';
 import reconciliationRoutes from './reconciliation';
 import nfeOcrRoutes from './nfeOcr';
 import efdRoutes from './efd';
+import fiscalCaptureRoutes from './fiscalCapture';
 import createRecurringTransactionsRouter from './recurringTransactions';
 
 /**
@@ -114,6 +115,7 @@ router.use('/:companyId/das', dasRoutes);
 router.use('/:companyId/reconciliation', reconciliationRoutes);
 router.use('/:companyId/nfe', nfeOcrRoutes);
 router.use('/:companyId/efd', efdRoutes);
+router.use('/:companyId/fiscal-capture', fiscalCaptureRoutes);
 router.use('/:companyId/recurring-transactions', createRecurringTransactionsRouter());
 
 export default router;

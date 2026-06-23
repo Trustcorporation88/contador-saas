@@ -1,0 +1,7 @@
+pynfe>=0.4.4
+lxml>=4.9.0
+requests>=2.31.0
+requests-pkcs12>=1.25
+psycopg2-binary>=2.9.9
+cryptography>=41.0.0
+python-dotenv>=1.0.0

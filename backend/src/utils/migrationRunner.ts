@@ -272,6 +272,65 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           console.log('✓ 011_add_users_company_id completed');
         },
       },
+      {
+        name: '012_fiscal_xml_capture',
+        up: async (db) => {
+          const hasCerts = await db.schema.hasTable('fiscal_certificates');
+          if (!hasCerts) {
+            await db.schema.createTable('fiscal_certificates', (table) => {
+              table.uuid('id').primary();
+              table.string('company_id', 64).notNullable().unique();
+              table.string('cnpj', 14).notNullable();
+              table.string('uf', 2).notNullable();
+              table.string('pfx_path', 512).notNullable();
+              table.text('password_encrypted').notNullable();
+              table.timestamp('cert_valid_until').nullable();
+              table.boolean('serpro_motor_enabled').notNullable().defaultTo(false);
+              table.boolean('active').notNullable().defaultTo(true);
+              table.timestamp('created_at').notNullable().defaultTo(db.fn.now());
+              table.timestamp('updated_at').notNullable().defaultTo(db.fn.now());
+            });
+          }
+
+          const hasSync = await db.schema.hasTable('fiscal_xml_sync');
+          if (!hasSync) {
+            await db.schema.createTable('fiscal_xml_sync', (table) => {
+              table.string('company_id', 64).notNullable();
+              table.string('doc_type', 10).notNullable();
+              table.string('cursor_value', 64).notNullable().defaultTo('0');
+              table.timestamp('last_sync_at').nullable();
+              table.string('last_status', 32).nullable();
+              table.text('last_error').nullable();
+              table.primary(['company_id', 'doc_type']);
+            });
+          }
+
+          const hasCaptures = await db.schema.hasTable('fiscal_xml_captures');
+          if (!hasCaptures) {
+            await db.schema.createTable('fiscal_xml_captures', (table) => {
+              table.uuid('id').primary();
+              table.string('company_id', 64).notNullable();
+              table.string('doc_type', 10).notNullable();
+              table.string('chave', 60).notNullable();
+              table.string('direcao', 10).nullable();
+              table.string('xml_path', 1024).notNullable();
+              table.string('xml_hash', 64).nullable();
+              table.string('emitente_cnpj', 14).nullable();
+              table.string('destinatario_cnpj', 14).nullable();
+              table.decimal('valor_total', 15, 2).nullable();
+              table.date('data_emissao').nullable();
+              table.string('modelo', 10).nullable();
+              table.string('numero', 20).nullable();
+              table.string('serie', 10).nullable();
+              table.jsonb('metadata').nullable();
+              table.timestamp('captured_at').notNullable().defaultTo(db.fn.now());
+              table.unique(['company_id', 'chave']);
+              table.index(['company_id', 'captured_at']);
+            });
+          }
+          console.log('✓ 012_fiscal_xml_capture completed');
+        },
+      },
     ];
 
     for (const migration of migrations) {
