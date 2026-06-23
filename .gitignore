@@ -78,11 +78,13 @@ uploads/
 .vercel
 .env*.local
 .env*
+!automacao-xml/.env.example
 
 # ── Certificados e XMLs fiscais (captura automática) ─────────
 automacao-xml/certs/
 automacao-xml/xmls/
 automacao-xml/empresas.json
+automacao-xml/.env
 automacao-xml/.runtime-*.json
 automacao-xml/sync.db
 backend/data/fiscal-certs/

@@ -22,10 +22,37 @@ cd automacao-xml
 python -m venv .venv
 .venv\Scripts\activate   # Windows
 pip install -r requirements.txt
-copy empresas.example.json empresas.json
 ```
 
-Coloque os arquivos `.pfx` em `certs/` e ajuste `empresas.json`.
+### Configuração automática (Windows + Railway)
+
+```powershell
+cd automacao-xml
+.\setup-local.ps1
+```
+
+O script:
+- Busca `DATABASE_PUBLIC_URL` no Railway (Postgres público)
+- Cria `.env` com `FISCAL_AUTOMATION_DIR`, `FISCAL_XML_ROOT`, etc.
+- Gera `empresas.json` com as 3 empresas do procontador.com.br
+
+Depois:
+1. Coloque cada `.pfx` em `certs/{cnpj}.pfx`
+2. Edite `empresas.json` e troque `COLOQUE_SENHA_DO_CERTIFICADO` pela senha real
+3. Execute `.\run-captura.ps1` (ou agende no Task Scheduler)
+
+```powershell
+.\run-captura.ps1                    # NF-e + NFS-e
+.\run-captura.ps1 -Tipo nfe          # só NF-e
+.\run-captura.ps1 -CompanyId 05664820000100
+```
+
+### Configuração manual
+
+```bash
+copy .env.example .env
+copy empresas.example.json empresas.json
+```
 
 ## Execução manual
 
