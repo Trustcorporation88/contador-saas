@@ -1,3 +1,5 @@
+# DEPRECATED — migrar para Railway (ver RAILWAY-DEPLOY.md)
+# Mantido apenas como referência histórica do deploy Render.
 services:
   - type: web
     name: contador-backend-staging

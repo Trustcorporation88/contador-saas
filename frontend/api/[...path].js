@@ -1,12 +1,24 @@
-const UPSTREAM_BASE_URL =
-  process.env.BACKEND_URL ||
-  'https://contador-backend-staging.onrender.com';
+const UPSTREAM_BASE_URL = process.env.BACKEND_URL?.replace(/\/$/, '');
+
+if (!UPSTREAM_BASE_URL) {
+  console.error('[api proxy] BACKEND_URL não configurada no Vercel');
+}
 
 export const config = {
   runtime: 'edge',
 };
 
 export default async function handler(request) {
+  if (!UPSTREAM_BASE_URL) {
+    return new Response(
+      JSON.stringify({
+        error: 'BACKEND_URL não configurada',
+        message: 'Defina BACKEND_URL no Vercel apontando para o backend Railway.',
+      }),
+      { status: 503, headers: { 'content-type': 'application/json' } },
+    );
+  }
+
   const requestUrl = new URL(request.url);
   const upstreamPath = requestUrl.pathname.replace(/^\/api/, '');
   const upstreamUrl = new URL(`/api${upstreamPath}${requestUrl.search}`, UPSTREAM_BASE_URL);
