@@ -45,8 +45,17 @@ def homologacao() -> bool:
     return os.getenv("FISCAL_HOMOLOGACAO", "false").lower() in ("1", "true", "yes")
 
 
-def nfse_api_base() -> str:
+def nfse_adn_base() -> str:
+    """Base URL ADN para distribuicao DFe (contribuintes)."""
     return os.getenv(
-        "NFSE_API_BASE",
-        "https://adn.nfse.gov.br/contribuintes",
+        "NFSE_ADN_BASE",
+        os.getenv(
+            "NFSE_API_BASE",
+            "https://adn.nfse.gov.br/contribuintes",
+        ),
     ).rstrip("/")
+
+
+def nfse_api_base() -> str:
+    """Alias legado — aponta para ADN contribuintes."""
+    return nfse_adn_base()

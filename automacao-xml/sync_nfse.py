@@ -1,27 +1,34 @@
-"""Sincronização NFS-e via Portal Nacional (mTLS com certificado A1)."""
+"""Sincronização NFS-e via ADN (Portal Nacional) — distribuição DFe por NSU."""
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urljoin
 
 import requests
 from requests_pkcs12 import Pkcs12Adapter
 
 from common.certificates import alerta_expiracao
-from common.config import EmpresaConfig, nfse_api_base
+from common.config import EmpresaConfig, homologacao, nfse_adn_base
 from common.db import get_cursor, registrar_captura, save_cursor
+from common.decode import decode_gzip_base64
 from common.storage import hash_xml, salvar_xml
 from common.xml_parser import parse_nfse
+
+NSU_WIDTH = 15
+MAX_LOTE = 50
 
 
 @dataclass
 class SyncResult:
     capturados: int
-    ultima_chave: str | None
+    ultimo_nsu: str
     alerta_certificado: str | None = None
     aviso: str | None = None
+
+
+def formatar_nsu(valor: str | int) -> str:
+    digits = "".join(c for c in str(valor) if c.isdigit())
+    return digits.zfill(NSU_WIDTH)[-NSU_WIDTH:]
 
 
 def _session_pfx(pfx: str, senha: str) -> requests.Session:
@@ -33,102 +40,140 @@ def _session_pfx(pfx: str, senha: str) -> requests.Session:
     return session
 
 
-def _extrair_xml_payload(item: dict[str, Any]) -> bytes | None:
-    for key in ("xml", "xmlNfse", "arquivoXml", "conteudo"):
-        value = item.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.encode("utf-8")
-    return None
-
-
-def consultar_nfse(
-    empresa: EmpresaConfig,
-    ultima_chave: str | None = None,
-    pagina: int = 1,
-) -> dict[str, Any]:
+def consultar_distribuicao_dfe(empresa: EmpresaConfig, ultimo_nsu: str) -> dict[str, Any]:
     """
-  Consulta documentos no ADN/Portal Nacional da NFS-e.
-  Endpoint configurável via NFSE_API_BASE — municípios legados exigem integrador (Nuvem Fiscal, DFE Digital).
-  """
-    base = nfse_api_base()
-    url = urljoin(base + "/", "documentosfiscais")
-    params: dict[str, Any] = {
-        "cnpjCpf": empresa.cnpj,
-        "pagina": pagina,
-    }
-    if ultima_chave:
-        params["ultimaChave"] = ultima_chave
+    GET /contribuintes/DFe/{UltimoNSU}
+    Manual ADN NFS-e v1.2 — até 50 documentos por chamada.
+    """
+    base = nfse_adn_base()
+    nsu_param = formatar_nsu(ultimo_nsu or "0")
+    url = f"{base}/DFe/{nsu_param}"
 
     session = _session_pfx(empresa.pfx, empresa.senha)
-    response = session.get(url, params=params, timeout=120)
-    response.raise_for_status()
-    return response.json()
+    last_error: Exception | None = None
+    for tentativa in range(3):
+        try:
+            response = session.get(url, timeout=180)
+            if response.status_code in (502, 503, 504) and tentativa < 2:
+                continue
+            response.raise_for_status()
+            if not response.text.strip():
+                return {"StatusProcessamento": "NENHUM_DOCUMENTO_LOCALIZADO", "LoteDFe": []}
+            return response.json()
+        except requests.HTTPError as exc:
+            last_error = exc
+            if exc.response is not None and exc.response.status_code in (502, 503, 504) and tentativa < 2:
+                continue
+            raise
+        except requests.RequestException as exc:
+            last_error = exc
+            if tentativa < 2:
+                continue
+            raise
+
+    if last_error:
+        raise last_error
+    return {"StatusProcessamento": "NENHUM_DOCUMENTO_LOCALIZADO", "LoteDFe": []}
+
+
+def _extrair_nsu_resposta(payload: dict[str, Any], lote: list[dict[str, Any]], nsu_atual: str) -> str:
+    for key in ("UltNSU", "ultNSU", "UltimoNSU"):
+        valor = payload.get(key)
+        if valor is not None:
+            return formatar_nsu(valor)
+
+    if lote:
+        return formatar_nsu(max(int(item.get("NSU", 0)) for item in lote))
+
+    return formatar_nsu(nsu_atual)
+
+
+def _status_sem_documentos(status: str | None) -> bool:
+    if not status:
+        return False
+    normalizado = status.upper()
+    return any(
+        trecho in normalizado
+        for trecho in (
+            "NENHUM",
+            "NAO_EXIST",
+            "NÃO_EXIST",
+            "SEM_DOCUMENTO",
+            "NAO_HA",
+        )
+    )
 
 
 def sync_empresa_nfse(empresa: EmpresaConfig, company_id: str | None = None) -> SyncResult:
     company_id = company_id or empresa.company_id or empresa.cnpj
     alerta = alerta_expiracao(empresa.pfx, empresa.senha)
-    ultima_chave = get_cursor(company_id, "nfse")
-    if ultima_chave == "0":
-        ultima_chave = None
+    nsu = formatar_nsu(get_cursor(company_id, "nfse") or "0")
 
     capturados = 0
-    pagina = 1
     aviso = None
 
     if empresa.serpro_motor:
         aviso = (
-            "Empresa optante Simples Nacional: avalie o Motor de Cálculo Serpro "
-            "(custo adicional) para apuração automática além da captura de XML."
+            "Empresa optante Simples Nacional: avalie o Motor de Calculo Serpro "
+            "(custo adicional) para apuracao automatica alem da captura de XML."
         )
 
     while True:
         try:
-            payload = consultar_nfse(empresa, ultima_chave=ultima_chave, pagina=pagina)
+            payload = consultar_distribuicao_dfe(empresa, nsu)
         except requests.HTTPError as exc:
-            save_cursor(company_id, "nfse", ultima_chave or "0", status="error", error=str(exc))
+            save_cursor(company_id, "nfse", nsu, status="error", error=str(exc))
             raise
 
-        itens = payload.get("documentos") or payload.get("lista") or payload.get("nfse") or []
-        if not itens:
+        status = payload.get("StatusProcessamento") or payload.get("statusProcessamento")
+        lote = payload.get("LoteDFe") or payload.get("loteDFe") or []
+
+        if _status_sem_documentos(status) or not lote:
             break
 
-        for item in itens:
-            xml_bytes = _extrair_xml_payload(item)
-            chave = (
-                item.get("chaveAcesso")
-                or item.get("chNFSe")
-                or item.get("chave")
-                or item.get("id")
-            )
-            if not xml_bytes and isinstance(item.get("linkXml"), str):
-                session = _session_pfx(empresa.pfx, empresa.senha)
-                xml_resp = session.get(item["linkXml"], timeout=120)
-                xml_resp.raise_for_status()
-                xml_bytes = xml_resp.content
+        for item in lote:
+            tipo = (item.get("TipoDocumento") or item.get("tipoDocumento") or "").upper()
+            arquivo = item.get("ArquivoXml") or item.get("arquivoXml")
+            chave = item.get("ChaveAcesso") or item.get("chaveAcesso")
+            nsu_item = item.get("NSU") or item.get("nsu")
 
-            if not xml_bytes:
+            if not arquivo:
                 continue
 
-            chave = chave or hash_xml(xml_bytes)[:44]
-            path = salvar_xml(empresa.cnpj, str(chave), xml_bytes)
+            # Prioriza XML completo de NFS-e; eventos podem ser armazenados depois.
+            if tipo and tipo not in ("NFSE", "NFS-E", "NFS"):
+                continue
+
+            try:
+                xml_bytes = decode_gzip_base64(arquivo)
+            except Exception:
+                continue
+
+            chave_arquivo = chave or (str(nsu_item) if nsu_item is not None else hash_xml(xml_bytes)[:50])
+            path = salvar_xml(empresa.cnpj, str(chave_arquivo), xml_bytes)
             meta = parse_nfse(xml_bytes, empresa.cnpj)
             if meta.chave:
-                chave = meta.chave
+                chave_arquivo = meta.chave
             if registrar_captura(company_id, meta, str(path), hash_xml(xml_bytes)):
                 capturados += 1
-            ultima_chave = str(chave)
 
-        proxima = payload.get("proximaPagina") or payload.get("paginaSeguinte")
-        if not proxima or proxima <= pagina:
+        novo_nsu = _extrair_nsu_resposta(payload, lote, nsu)
+        max_nsu = payload.get("MaxNSU") or payload.get("maxNSU")
+        save_cursor(company_id, "nfse", novo_nsu)
+
+        if len(lote) < MAX_LOTE:
             break
-        pagina = int(proxima)
+        if max_nsu is not None and formatar_nsu(novo_nsu) >= formatar_nsu(max_nsu):
+            break
+        if novo_nsu == nsu:
+            break
 
-    cursor = ultima_chave or "0"
-    save_cursor(company_id, "nfse", cursor, status="ok")
+        nsu = novo_nsu
+
+    save_cursor(company_id, "nfse", nsu, status="ok")
     return SyncResult(
         capturados=capturados,
-        ultima_chave=ultima_chave,
+        ultimo_nsu=nsu,
         alerta_certificado=alerta,
         aviso=aviso,
     )

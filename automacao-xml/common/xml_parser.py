@@ -83,17 +83,33 @@ def parse_nfe(xml_bytes: bytes, cnpj_empresa: str) -> MetadadosXml:
 
 def parse_nfse(xml_bytes: bytes, cnpj_empresa: str) -> MetadadosXml:
     root = ET.fromstring(xml_bytes)
-    chave = None
-    for tag in ("chNFSe", "ChaveAcesso", "CodigoVerificacao", "Numero"):
-        el = root.find(f".//{tag}")
-        if el is not None and el.text:
-            chave = el.text.strip()
-            break
+    ns_uri = "http://www.sped.fazenda.gov.br/nfse"
 
-    emit = root.find(".//Emitente//Cnpj") or root.find(".//Prestador//Cnpj")
-    tom = root.find(".//Tomador//Cnpj") or root.find(".//TomadorServico//Cnpj")
-    emit_cnpj = _only_digits(_text(emit))
-    dest_cnpj = _only_digits(_text(tom))
+    def q(tag: str) -> str:
+        return f"{{{ns_uri}}}{tag}"
+
+    inf_nfse = root.find(f".//{q('infNFSe')}")
+
+    chave = None
+    if inf_nfse is not None:
+        raw_id = inf_nfse.attrib.get("Id", "")
+        chave = raw_id.replace("NFS", "").replace("NFSe", "")
+        chave = "".join(c for c in chave if c.isdigit()) or raw_id or None
+
+    if not chave:
+        for tag in ("chNFSe", "ChaveAcesso", "CodigoVerificacao"):
+            el = root.find(f".//{tag}") or root.find(f".//{q(tag)}")
+            if el is not None and el.text:
+                chave = el.text.strip()
+                break
+
+    emit = root.find(f".//{q('emit')}") or root.find(".//Emitente//Cnpj")
+    tom = root.find(f".//{q('toma')}") or root.find(".//Tomador//Cnpj")
+
+    emit_cnpj_el = emit.find(q("CNPJ")) if emit is not None else None
+    tom_cnpj_el = tom.find(q("CNPJ")) if tom is not None else None
+    emit_cnpj = _only_digits(_text(emit_cnpj_el) or _text(emit))
+    dest_cnpj = _only_digits(_text(tom_cnpj_el) or _text(tom))
 
     direcao = None
     if emit_cnpj == cnpj_empresa:
@@ -101,9 +117,14 @@ def parse_nfse(xml_bytes: bytes, cnpj_empresa: str) -> MetadadosXml:
     elif dest_cnpj == cnpj_empresa:
         direcao = "entrada"
 
-    valor_el = root.find(".//ValoresNfse//ValorLiquidoNfse") or root.find(".//ValorServicos")
-    numero_el = root.find(".//Numero") or root.find(".//nNFSe")
-    data_el = root.find(".//DataEmissao") or root.find(".//dhEmi")
+    valor_el = (
+        root.find(f".//{q('valores')}/{q('vLiq')}")
+        or root.find(f".//{q('vServ')}")
+        or root.find(".//ValoresNfse//ValorLiquidoNfse")
+        or root.find(".//ValorServicos")
+    )
+    numero_el = root.find(f".//{q('nNFSe')}") or root.find(".//Numero")
+    data_el = root.find(f".//{q('dhProc')}") or root.find(".//DataEmissao") or root.find(f".//{q('dhEmi')}")
 
     return MetadadosXml(
         chave=chave or "",

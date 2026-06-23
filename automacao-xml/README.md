@@ -89,6 +89,7 @@ Defina `PYTHON_BIN` e `FISCAL_AUTOMATION_DIR` no Railway/servidor para o backend
 | **Certificado A1** | Validade 1–3 anos; o script alerta 30 dias antes |
 | **SEFAZ** | Máx. 50 documentos por chamada; itera pelo NSU |
 | **NFS-e municipal** | Municípios fora do Portal Nacional exigem webservice próprio ou API terceira (Nuvem Fiscal, DFE Digital) |
+| **NFS-e nacional** | Distribuição via ADN: `GET https://adn.nfse.gov.br/contribuintes/DFe/{NSU}` (até 50 docs, cursor NSU) |
 | **Motor Serpro** | Empresas no **Simples Nacional** podem usar o Motor de Cálculo Serpro (custo Serpro) para apuração além da captura de XML — flag `serpro_motor` no cadastro |
 | **Segurança** | Prefira executar em servidor local/VPN; não commitar `.pfx` nem senhas |
 | **Nuvem** | Certificado A1 em servidor cloud exige política de segurança rigorosa; muitos escritórios rodam o scheduler em máquina local |

@@ -121,7 +121,7 @@ export default function FiscalCapturePanel() {
           </div>
           <div className="mt-3 space-y-2 text-sm text-gray-700">
             <p>NF-e NSU: {nfeSync?.cursor_value || '0'}</p>
-            <p>NFS-e chave: {nfseSync?.cursor_value || '0'}</p>
+            <p>NFS-e NSU: {nfseSync?.cursor_value || '0'}</p>
             <p>XMLs capturados: {status?.captures_total ?? 0}</p>
             <p className={status?.python_available ? 'text-emerald-700' : 'text-amber-700'}>
               Python no servidor: {status?.python_available ? 'disponível' : 'indisponível — use scheduler local'}

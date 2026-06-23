@@ -18,7 +18,7 @@ from sync_nfse import sync_empresa_nfse
 
 
 def carregar_empresas_json(path: Path) -> list[EmpresaConfig]:
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = json.loads(path.read_text(encoding="utf-8-sig"))
     empresas: list[EmpresaConfig] = []
     for item in data:
         empresas.append(
@@ -65,18 +65,18 @@ def main() -> int:
                 result = sync_empresa_nfe(empresa, company_id)
                 print(f"  NF-e: {result.capturados} XML(s), NSU={result.ultimo_nsu}")
                 if result.alerta_certificado:
-                    print(f"  ⚠ {result.alerta_certificado}")
+                    print(f"  AVISO: {result.alerta_certificado}")
             except Exception as exc:
                 print(f"  NF-e ERRO: {exc}")
 
         if args.tipo in ("nfse", "all"):
             try:
                 result = sync_empresa_nfse(empresa, company_id)
-                print(f"  NFS-e: {result.capturados} XML(s), chave={result.ultima_chave}")
+                print(f"  NFS-e: {result.capturados} XML(s), NSU={result.ultimo_nsu}")
                 if result.aviso:
-                    print(f"  ℹ {result.aviso}")
+                    print(f"  INFO: {result.aviso}")
                 if result.alerta_certificado:
-                    print(f"  ⚠ {result.alerta_certificado}")
+                    print(f"  AVISO: {result.alerta_certificado}")
             except Exception as exc:
                 print(f"  NFS-e ERRO: {exc}")
 
