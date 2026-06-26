@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CloudDownload, KeyRound, RefreshCw, ShieldAlert } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { useAuthStore } from '../../store/authStore';
+import { CompanyService } from '../../services/companyService';
 import {
   FiscalCaptureService,
   type FiscalDocType,
@@ -14,6 +16,7 @@ const UFS = [
 
 export default function FiscalCapturePanel() {
   const qc = useQueryClient();
+  const currentCompanyId = useAuthStore((state) => state.currentCompanyId);
   const [cnpj, setCnpj] = useState('');
   const [uf, setUf] = useState('sp');
   const [password, setPassword] = useState('');
@@ -23,9 +26,23 @@ export default function FiscalCapturePanel() {
   const [formError, setFormError] = useState('');
 
   const { data: status, isLoading } = useQuery({
-    queryKey: ['fiscal-capture-status'],
+    queryKey: ['fiscal-capture-status', currentCompanyId],
     queryFn: () => FiscalCaptureService.getStatus(),
+    enabled: !!currentCompanyId,
   });
+
+  const { data: company } = useQuery({
+    queryKey: ['company', currentCompanyId],
+    queryFn: () => CompanyService.getById(currentCompanyId!),
+    enabled: !!currentCompanyId,
+  });
+
+  useEffect(() => {
+    if (!company || cnpj) return;
+    if (company.cnpj) {
+      setCnpj(company.cnpj.replace(/\D/g, ''));
+    }
+  }, [company, cnpj]);
 
   const { data: captures } = useQuery({
     queryKey: ['fiscal-capture-list'],
@@ -40,8 +57,12 @@ export default function FiscalCapturePanel() {
   const uploadMutation = useMutation({
     mutationFn: () => {
       if (!file) throw new Error('Selecione o arquivo .pfx');
+      const cnpjDigits = cnpj.replace(/\D/g, '');
+      if (cnpjDigits.length !== 14) {
+        throw new Error('Informe o CNPJ da empresa com 14 dígitos (não use o e-mail de login)');
+      }
       return FiscalCaptureService.uploadCertificate({
-        cnpj,
+        cnpj: cnpjDigits,
         uf,
         password,
         serproMotor,
@@ -150,7 +171,14 @@ export default function FiscalCapturePanel() {
         >
           <div>
             <label className="input-label">CNPJ</label>
-            <input className="input-field" value={cnpj} onChange={(e) => setCnpj(e.target.value)} placeholder="00.000.000/0001-00" required />
+            <input
+              className="input-field"
+              value={cnpj}
+              onChange={(e) => setCnpj(e.target.value.replace(/\D/g, '').slice(0, 14))}
+              placeholder="00000000000000"
+              inputMode="numeric"
+              required
+            />
           </div>
           <div>
             <label className="input-label">UF</label>

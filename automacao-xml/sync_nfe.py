@@ -41,9 +41,9 @@ def sync_empresa_nfe(empresa: EmpresaConfig, company_id: str | None = None) -> S
         raise RuntimeError("Instale pynfe: pip install -r requirements.txt") from exc
 
     con = ComunicacaoSefaz(
-        uf=empresa.uf.lower(),
-        certificado=empresa.pfx,
-        senha=empresa.senha,
+        empresa.uf.lower(),
+        empresa.pfx,
+        empresa.senha,
         homologacao=homologacao(),
     )
 

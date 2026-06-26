@@ -34,7 +34,13 @@ def get_certs_dir() -> Path:
 
 
 def get_database_url() -> str | None:
-    return os.getenv("DATABASE_URL")
+    url = os.getenv("DATABASE_URL") or os.getenv("\ufeffDATABASE_URL")
+    if url:
+        return url
+    # Fallback: .env salvo com BOM no Windows
+    from dotenv import dotenv_values
+    vals = dotenv_values(ROOT / ".env")
+    return vals.get("DATABASE_URL") or vals.get("\ufeffDATABASE_URL")
 
 
 def get_sqlite_path() -> Path:

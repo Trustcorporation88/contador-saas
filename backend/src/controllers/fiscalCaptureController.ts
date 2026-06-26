@@ -19,16 +19,24 @@ export class FiscalCaptureController {
       }
 
       const { cnpj, uf, password, serpro_motor, cert_valid_until } = req.body;
-      if (!cnpj || !uf || !password) {
+      const cnpjDigits = String(cnpj || '').replace(/\D/g, '');
+      if (!cnpjDigits || cnpjDigits.length !== 14) {
         res.status(400).json({
           success: false,
-          error: 'Campos obrigatórios: cnpj, uf, password',
+          error: 'CNPJ inválido — informe os 14 dígitos da empresa (não use e-mail de login)',
+        });
+        return;
+      }
+      if (!uf || !password) {
+        res.status(400).json({
+          success: false,
+          error: 'Campos obrigatórios: uf e senha do certificado',
         });
         return;
       }
 
       const saved = await FiscalCaptureService.upsertCertificate(companyId, {
-        cnpj,
+        cnpj: cnpjDigits,
         uf,
         password,
         pfxBuffer: file.buffer,

@@ -5,6 +5,8 @@
  */
 
 import { Knex } from 'knex';
+import { up as upContasReceber } from '../migrations/add_contas_receber';
+import { up as upContasPagar } from '../migrations/add_contas_pagar';
 
 // Track which migrations have been run
 const executedMigrations = new Set<string>();
@@ -329,6 +331,20 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
             });
           }
           console.log('✓ 012_fiscal_xml_capture completed');
+        },
+      },
+      {
+        name: '013_add_contas_receber',
+        up: async (db) => {
+          await upContasReceber(db);
+          console.log('✓ 013_add_contas_receber completed');
+        },
+      },
+      {
+        name: '014_add_contas_pagar',
+        up: async (db) => {
+          await upContasPagar(db);
+          console.log('✓ 014_add_contas_pagar completed');
         },
       },
     ];

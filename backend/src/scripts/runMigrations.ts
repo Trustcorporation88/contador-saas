@@ -1,49 +1,33 @@
 /**
- * Run database migrations
- * Execute: ts-node src/scripts/runMigrations.ts
+ * Executa migrations pendentes (uso local / CI).
+ * Uso: DATABASE_URL=... npm run migrate
  */
-
+import 'dotenv/config';
 import knex from 'knex';
-import { envConfig } from '../config/env';
-import { up as addDocumentosFiscaisMigration } from '../migrations/add_documentos_fiscais';
-import { up as addAuthTablesMigration } from '../migrations/add_auth_tables';
+import { runMigrationsIfNeeded } from '../utils/migrationRunner';
 
-async function runMigrations() {
-  const connectionConfig = envConfig.database.url
-    ? envConfig.database.url
-    : {
-        host: envConfig.database.host,
-        port: envConfig.database.port,
-        user: envConfig.database.user,
-        password: envConfig.database.password,
-        database: envConfig.database.name,
-      };
+async function main() {
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    console.error('DATABASE_URL não definida');
+    process.exit(1);
+  }
 
   const db = knex({
     client: 'pg',
-    connection: connectionConfig,
+    connection: url,
+    ssl: url.includes('railway') || url.includes('rlwy.net') ? { rejectUnauthorized: false } : false,
   });
 
   try {
-    console.log('Running migrations...\n');
-
-    // Execute migrations in order
-    console.log('1/2 Running add_auth_tables...');
-    await addAuthTablesMigration(db);
-    console.log('✓ add_auth_tables completed\n');
-
-    console.log('2/2 Running add_documentos_fiscais...');
-    await addDocumentosFiscaisMigration(db);
-    console.log('✓ add_documentos_fiscais completed\n');
-
-    console.log('✓ All migrations completed successfully!');
-    process.exit(0);
-  } catch (error) {
-    console.error('❌ Migration failed:', error);
-    process.exit(1);
+    await runMigrationsIfNeeded(db);
+    console.log('Migrations concluídas.');
   } finally {
     await db.destroy();
   }
 }
 
-runMigrations();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

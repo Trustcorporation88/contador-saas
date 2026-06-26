@@ -9,6 +9,7 @@
     "start": "node dist/server.js",
     "build": "tsc",
     "seed:dev-user": "ts-node --transpile-only src/scripts/seedDevUser.ts",
+    "migrate": "ts-node --transpile-only src/scripts/runMigrations.ts",
     "build:watch": "tsc --watch",
     "test": "jest",
     "test:watch": "jest --watch",
