@@ -44,6 +44,10 @@ COPY --from=builder /app/dist ./dist
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
+# Writable dirs for certificados/XML
+RUN mkdir -p /app/data/fiscal-certs /app/data/fiscal-xmls && \
+    chown -R nodejs:nodejs /app
+
 USER nodejs
 
 EXPOSE 3000

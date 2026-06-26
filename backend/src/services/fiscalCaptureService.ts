@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import fs from 'fs-extra';
+import os from 'os';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { getDatabase } from '../config/database';
@@ -48,11 +49,23 @@ export interface FiscalCaptureRecord {
 }
 
 function getCertsDir(): string {
-  return process.env.FISCAL_CERTS_DIR || path.join(process.cwd(), 'data', 'fiscal-certs');
+  if (process.env.FISCAL_CERTS_DIR) {
+    return process.env.FISCAL_CERTS_DIR;
+  }
+  if (process.env.NODE_ENV === 'production') {
+    return path.join(os.tmpdir(), 'fiscal-certs');
+  }
+  return path.join(process.cwd(), 'data', 'fiscal-certs');
 }
 
 function getXmlRoot(): string {
-  return process.env.FISCAL_XML_ROOT || path.join(process.cwd(), 'data', 'fiscal-xmls');
+  if (process.env.FISCAL_XML_ROOT) {
+    return process.env.FISCAL_XML_ROOT;
+  }
+  if (process.env.NODE_ENV === 'production') {
+    return path.join(os.tmpdir(), 'fiscal-xmls');
+  }
+  return path.join(process.cwd(), 'data', 'fiscal-xmls');
 }
 
 function getAutomationDir(): string {
@@ -65,6 +78,33 @@ function getPythonBin(): string {
 
 function onlyDigits(value: string): string {
   return value.replace(/\D/g, '');
+}
+
+async function materializePfxFile(
+  companyId: string,
+  pfxPath: string,
+  pfxData: string | null | undefined,
+  pfxBuffer?: Buffer,
+): Promise<string> {
+  const targetDir = path.dirname(pfxPath);
+  await fs.ensureDir(targetDir);
+
+  if (pfxBuffer && pfxBuffer.length > 0) {
+    await fs.writeFile(pfxPath, pfxBuffer);
+    return pfxPath;
+  }
+
+  if (pfxData) {
+    await fs.writeFile(pfxPath, Buffer.from(pfxData, 'base64'));
+    return pfxPath;
+  }
+
+  const fallback = path.join(os.tmpdir(), 'fiscal-certs', `${companyId}.pfx`);
+  if (await fs.pathExists(fallback)) {
+    return fallback;
+  }
+
+  throw new Error('Certificado A1 não encontrado no servidor. Cadastre o .pfx novamente.');
 }
 
 export class FiscalCaptureService {
@@ -81,12 +121,20 @@ export class FiscalCaptureService {
   ): Promise<FiscalCertificateRecord> {
     const db = await getDatabase();
     const certsDir = getCertsDir();
-    await fs.ensureDir(certsDir);
 
     const cnpj = onlyDigits(data.cnpj);
     const uf = data.uf.toLowerCase().slice(0, 2);
     const pfxPath = path.join(certsDir, `${companyId}.pfx`);
-    await fs.writeFile(pfxPath, data.pfxBuffer);
+    const pfxDataB64 = data.pfxBuffer.toString('base64');
+
+    try {
+      await materializePfxFile(companyId, pfxPath, pfxDataB64, data.pfxBuffer);
+    } catch (error) {
+      logger.warn('Falha ao gravar .pfx em disco; mantendo cópia no banco', {
+        companyId,
+        error: (error as Error).message,
+      });
+    }
 
     const encryptedPassword = encryptSecret(data.password);
     const now = new Date();
@@ -97,6 +145,7 @@ export class FiscalCaptureService {
       cnpj,
       uf,
       pfx_path: pfxPath,
+      pfx_data: pfxDataB64,
       password_encrypted: encryptedPassword,
       cert_valid_until: data.certValidUntil ? new Date(data.certValidUntil) : null,
       serpro_motor_enabled: Boolean(data.serproMotor),
@@ -209,6 +258,12 @@ export class FiscalCaptureService {
     const automationDir = getAutomationDir();
     const schedulerPath = path.join(automationDir, 'scheduler.py');
 
+    const pfxPath = await materializePfxFile(
+      companyId,
+      String(cert.pfx_path),
+      cert.pfx_data as string | null | undefined,
+    );
+
     if (!(await fs.pathExists(schedulerPath))) {
       return {
         success: false,
@@ -222,7 +277,7 @@ export class FiscalCaptureService {
         company_id: companyId,
         cnpj: cert.cnpj,
         uf: cert.uf,
-        pfx: cert.pfx_path,
+        pfx: pfxPath,
         senha: password,
         serpro_motor: Boolean(cert.serpro_motor_enabled),
       },

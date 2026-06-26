@@ -47,8 +47,14 @@ export class FiscalCaptureController {
       logger.info('Certificado fiscal A1 cadastrado', { companyId, cnpj: saved.cnpj });
       res.status(201).json({ success: true, data: saved });
     } catch (error) {
-      logger.error('Erro ao cadastrar certificado fiscal', { error: (error as Error).message });
-      res.status(500).json({ success: false, error: 'Erro ao salvar certificado A1' });
+      const message = (error as Error).message;
+      logger.error('Erro ao cadastrar certificado fiscal', { error: message });
+      res.status(500).json({
+        success: false,
+        error: message.includes('EACCES') || message.includes('permission denied')
+          ? 'Servidor sem permissão para gravar o certificado. Tente novamente após o próximo deploy.'
+          : `Erro ao salvar certificado A1: ${message}`,
+      });
     }
   }
 
