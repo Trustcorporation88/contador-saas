@@ -1,21 +1,17 @@
-# Build context: raiz do repositório (pasta contador-saas), não apenas backend/
-# docker build -f backend/Dockerfile .
-
-## Build stage — Node/TypeScript
+# Build context: pasta backend/ (copie automacao-xml antes: npm run prepare:docker)
 FROM node:18-alpine AS builder
 
-WORKDIR /app/backend
+WORKDIR /app
 
-COPY backend/package*.json backend/tsconfig.json ./
+COPY package*.json tsconfig.json ./
 RUN if [ -f package-lock.json ]; then npm ci --ignore-scripts; else npm install --ignore-scripts; fi
 
-COPY backend/src ./src
+COPY src ./src
 RUN npm run build || (test -f dist/server.js && echo "TypeScript warnings; dist emitted.")
 
-## Runtime — Node + Python (captura NF-e/NFS-e)
 FROM node:18-alpine
 
-WORKDIR /app/backend
+WORKDIR /app
 
 RUN apk add --no-cache dumb-init python3 py3-pip \
     libxml2 libxslt openssl \
@@ -23,16 +19,16 @@ RUN apk add --no-cache dumb-init python3 py3-pip \
     python3-dev gcc musl-dev libffi-dev openssl-dev libxml2-dev libxslt-dev \
     && apk add --no-cache --virtual .node-build-deps python3 make g++
 
-COPY backend/package*.json ./
+COPY package*.json ./
 RUN node -e "const fs=require('fs'); const p=require('./package.json'); if (p.scripts && p.scripts.prepare) delete p.scripts.prepare; fs.writeFileSync('package.json', JSON.stringify(p, null, 2));" \
     && if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi \
     && apk del .node-build-deps
 
-COPY --from=builder /app/backend/dist ./dist
+COPY --from=builder /app/dist ./dist
 COPY automacao-xml /app/automacao-xml
 
 RUN pip3 install --no-cache-dir --break-system-packages \
-    -r /app/automacao-xml/requirements.txt signxml \
+    -r /app/automacao-xml/requirements.txt \
     && apk del .py-build-deps
 
 ENV FISCAL_AUTOMATION_DIR=/app/automacao-xml
