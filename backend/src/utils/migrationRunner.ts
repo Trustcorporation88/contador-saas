@@ -341,6 +341,13 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
         },
       },
       {
+        name: '014_add_contas_pagar',
+        up: async (db) => {
+          await upContasPagar(db);
+          console.log('✓ 014_add_contas_pagar completed');
+        },
+      },
+      {
         name: '015_fiscal_certificate_pfx_data',
         up: async (db) => {
           const hasTable = await db.schema.hasTable('fiscal_certificates');

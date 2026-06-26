@@ -145,7 +145,7 @@ export default function FiscalCapturePanel() {
             <p>NFS-e NSU: {nfseSync?.cursor_value || '0'}</p>
             <p>XMLs capturados: {status?.captures_total ?? 0}</p>
             <p className={status?.python_available ? 'text-emerald-700' : 'text-amber-700'}>
-              Python no servidor: {status?.python_available ? 'disponível' : 'indisponível — use scheduler local'}
+              Captura automática: {status?.python_available ? 'ativa no servidor' : 'aguardando deploy'}
             </p>
           </div>
         </div>

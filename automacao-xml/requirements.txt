@@ -5,3 +5,4 @@ requests-pkcs12>=1.25
 psycopg2-binary>=2.9.9
 cryptography>=41.0.0
 python-dotenv>=1.0.0
+signxml>=3.2.0

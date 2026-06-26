@@ -69,11 +69,24 @@ function getXmlRoot(): string {
 }
 
 function getAutomationDir(): string {
-  return process.env.FISCAL_AUTOMATION_DIR || path.join(process.cwd(), '..', 'automacao-xml');
+  if (process.env.FISCAL_AUTOMATION_DIR) {
+    return process.env.FISCAL_AUTOMATION_DIR;
+  }
+  const candidates = [
+    '/app/automacao-xml',
+    path.join(process.cwd(), 'automacao-xml'),
+    path.join(process.cwd(), '..', 'automacao-xml'),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, 'scheduler.py'))) {
+      return candidate;
+    }
+  }
+  return path.join(process.cwd(), '..', 'automacao-xml');
 }
 
 function getPythonBin(): string {
-  return process.env.PYTHON_BIN || 'python';
+  return process.env.PYTHON_BIN || (process.env.NODE_ENV === 'production' ? 'python3' : 'python');
 }
 
 function onlyDigits(value: string): string {
@@ -267,7 +280,8 @@ export class FiscalCaptureService {
     if (!(await fs.pathExists(schedulerPath))) {
       return {
         success: false,
-        message: `Módulo de automação não encontrado em ${schedulerPath}. Execute o scheduler localmente ou configure FISCAL_AUTOMATION_DIR.`,
+        message:
+          'Captura automática indisponível neste servidor. Aguarde o próximo deploy ou contate o suporte.',
       };
     }
 
