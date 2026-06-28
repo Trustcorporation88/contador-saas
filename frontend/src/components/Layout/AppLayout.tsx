@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import CopilotFab from './CopilotFab';
 import ServiceGuidePanel from '../services/ServiceGuidePanel';
 
 export default function AppLayout() {
@@ -27,6 +28,7 @@ export default function AppLayout() {
           </main>
         </div>
       </div>
+      <CopilotFab />
     </div>
   );
 }

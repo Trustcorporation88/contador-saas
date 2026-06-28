@@ -173,7 +173,7 @@ export default function DashboardPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="relative space-y-6 p-4 sm:p-6 lg:p-8 pb-24">
+    <div className="relative space-y-6 p-4 sm:p-6 lg:p-8 pb-20">
 
       {/* Header */}
       <div className="glass-strip flex flex-col gap-3 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -473,14 +473,6 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
-
-      <Link
-        to="/copiloto"
-        className="fixed bottom-6 right-6 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-lg shadow-primary-500/30 transition hover:scale-105"
-        title="Abrir Copiloto IA"
-      >
-        <Bot className="h-6 w-6" />
-      </Link>
     </div>
   );
 }
