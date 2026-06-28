@@ -11,7 +11,7 @@
     "seed:dev-user": "ts-node --transpile-only src/scripts/seedDevUser.ts",
     "migrate": "ts-node --transpile-only src/scripts/runMigrations.ts",
     "prepare:docker": "powershell -ExecutionPolicy Bypass -File scripts/prepare-docker-context.ps1",
-    "deploy:railway": "npm run prepare:docker && railway up --detach --no-gitignore",
+    "deploy:railway": "cd .. && railway up --detach --service contador-api",
     "build:watch": "tsc --watch",
     "test": "jest",
     "test:watch": "jest --watch",

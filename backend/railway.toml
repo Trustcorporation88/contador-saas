@@ -1,5 +1,5 @@
-# Backend API — deploy no Railway (substitui Render)
-# No Railway: Root Directory = backend (ou use railway up . --path-as-root na pasta backend)
+# Backend API — ver railway.toml na RAIZ do repo (GitHub autodeploy)
+# Root Directory no Railway = / (vazio). Não use backend/ como root (falta automacao-xml).
 
 [build]
 builder = "DOCKERFILE"

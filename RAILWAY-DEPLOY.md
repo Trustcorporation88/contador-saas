@@ -19,8 +19,8 @@ Guia para tirar o backend e o PostgreSQL do Render e rodar no Railway.
 2. **Add PostgreSQL** (plugin)
 3. **Add Service** → **GitHub Repo** → `Trustcorporation88/contador-saas`
 4. No serviço do backend:
-   - **Root Directory:** `backend`
-   - **Builder:** Dockerfile (usa `backend/railway.toml`)
+   - **Root Directory:** vazio (raiz do repo — inclui `automacao-xml/` e `backend/`)
+   - **Builder:** Dockerfile via `railway.toml` na raiz
 
 ---
 
@@ -57,14 +57,27 @@ No serviço **contador-api**, em **Variables**:
 
 ## Passo 3 — Deploy do backend
 
+### Autodeploy via GitHub (recomendado)
+
+1. Serviço **contador-api** → **Settings** → **Root Directory** = vazio (`/`, raiz do repo)
+2. Repo conectado: `Trustcorporation88/contador-saas` branch `master`
+3. Cada `git push` em `master` dispara build via `railway.toml` + `backend/Dockerfile`
+
+### Deploy manual (CLI)
+
 ```bash
 cd backend
-railway login
-railway link          # escolher projeto contador-saas
-railway up --detach
+npm run deploy:railway
 ```
 
-Ou push no GitHub com integração Railway ativa.
+Ou na raiz do repo:
+
+```bash
+railway link    # projeto contador-saas → serviço contador-api
+railway up --detach --service contador-api
+```
+
+**Importante:** não rode `railway up` na raiz sem `--service contador-api` (existe outro serviço `contador-saas` sem Postgres).
 
 Após o deploy, copie a URL pública, ex.:
 `https://contador-api-production.up.railway.app`

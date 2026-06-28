@@ -1,0 +1,13 @@
+# Railway — backend API (contador-api)
+# Settings do serviço: Root Directory = / (vazio, raiz do repo)
+# Não use Root Directory = backend (falta automacao-xml/ no build)
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "backend/Dockerfile"
+watchPatterns = ["backend/**", "automacao-xml/**"]
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
