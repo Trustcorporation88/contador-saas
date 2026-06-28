@@ -18,6 +18,7 @@ import {
   Building2,
   FileText,
   AlertCircle,
+  Bot,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -25,6 +26,7 @@ import { useAuthStore } from '../../store/authStore';
 import { DashboardService } from '../../services/dashboardService';
 import { StatCard } from '../../components/ui/Card';
 import { PageLoader } from '../../components/ui/LoadingSpinner';
+import DashboardHomeWidgets from './DashboardHomeWidgets';
 import type { TaxRegime } from '../../services/companyService';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -107,6 +109,12 @@ export default function DashboardPage() {
   const todayStr     = useMemo(() => format(new Date(), 'yyyy-MM-dd'),                   []);
   const monthStart   = useMemo(() => format(new Date(), 'yyyy-MM-01'),                   []);
   const lastUpdated  = useMemo(() => format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }), []);
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Bom dia';
+    if (h < 18) return 'Boa tarde';
+    return 'Boa noite';
+  }, []);
 
   const qCompany = useQuery({
     queryKey: ['company', companyId],
@@ -165,14 +173,17 @@ export default function DashboardPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="relative space-y-6 p-4 sm:p-6 lg:p-8 pb-24">
 
       {/* Header */}
       <div className="glass-strip flex flex-col gap-3 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div>
-          <p className="shell-title">Visão executiva</p>
+          <p className="shell-title">Painel · visão executiva</p>
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-xl font-extrabold tracking-tight text-gray-900">Dashboard Executivo</h1>
+            <h1 className="text-xl font-extrabold tracking-tight text-gray-900">
+              {greeting}
+              {company?.name ? `, ${company.name}` : ''}
+            </h1>
             {company && (
               <span
                 className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium ${
@@ -183,14 +194,26 @@ export default function DashboardPage() {
               </span>
             )}
           </div>
-          {company && (
-            <p className="text-sm text-gray-500 mt-0.5">
-              {company.name}
-            </p>
-          )}
+          <p className="text-sm text-gray-500 mt-0.5">
+            Resumo do negócio, indicadores e lançamentos recentes
+          </p>
         </div>
-        <p className="text-xs text-gray-400 whitespace-nowrap">
-          Atualizado: {lastUpdated}
+        <div className="flex flex-col items-start sm:items-end gap-2">
+          <Link to="/copiloto" className="btn btn-primary text-sm inline-flex items-center gap-2">
+            <Bot className="h-4 w-4" />
+            Copiloto IA
+          </Link>
+          <p className="text-xs text-gray-400 whitespace-nowrap">
+            Atualizado: {lastUpdated}
+          </p>
+        </div>
+      </div>
+
+      <DashboardHomeWidgets />
+
+      <div className="border-t border-gray-100 pt-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-4">
+          Indicadores executivos
         </p>
       </div>
 
@@ -451,6 +474,13 @@ export default function DashboardPage() {
         )}
       </div>
 
+      <Link
+        to="/copiloto"
+        className="fixed bottom-6 right-6 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-lg shadow-primary-500/30 transition hover:scale-105"
+        title="Abrir Copiloto IA"
+      >
+        <Bot className="h-6 w-6" />
+      </Link>
     </div>
   );
 }

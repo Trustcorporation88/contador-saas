@@ -43,6 +43,7 @@ export function canAccessPath(
   if (path === "/auditoria") return AUDIT_ACCESS.includes(role);
   if (path === "/impostos") return TAX_ACCESS.includes(role);
   if (path.startsWith("/relatorios/")) return REPORT_ACCESS.includes(role);
+  if (path === "/dashboard") return FULL_ACCESS.includes(role) || role === "manager";
   if (path === "/") return role !== "viewer";
   if (
     [
