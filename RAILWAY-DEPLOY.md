@@ -44,6 +44,15 @@ No serviço **contador-api**, em **Variables**:
 | `CACHE_ENABLED` | `false` (se não tiver Redis ainda) |
 | `DEEPSEEK_API_KEY` | (opcional) |
 
+### Logins demo por regime (criados automaticamente no boot)
+
+| Regime | E-mail | Senha |
+|--------|--------|-------|
+| Lucro Real | `lucroreal@procontador.com.br` | `LucroReal@2026` |
+| Lucro Presumido | `lucropresumido@procontador.com.br` | `LucroPresumido@2026` |
+| Simples Nacional | `simplesnacional@procontador.com.br` | `SimplesNacional@2026` |
+| MEI | `mei@procontador.com.br` | `Mei@2026` |
+
 **Não defina `PORT`** — o Railway injeta automaticamente.
 
 ### Redis (opcional, recomendado)
