@@ -11,6 +11,7 @@ import { BackupService } from './services/backupService';
 import { DASScheduler } from './services/dasScheduler';
 import cron from 'node-cron';
 import authService from './services/authService';
+import { bootstrapRegimeDemoUsers } from './services/bootstrapRegimeUsers';
 import redisClient from './services/cache/redisClient';
 
 /**
@@ -96,6 +97,9 @@ async function startServer(): Promise<void> {
 
     await authService.bootstrapAdminUser();
     console.log('Authentication bootstrap completed');
+
+    await bootstrapRegimeDemoUsers();
+    console.log('Regime demo users bootstrap completed');
 
     if (envConfig.cache.enabled) {
       redisClient.connect();
