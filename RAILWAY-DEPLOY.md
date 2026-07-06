@@ -6,7 +6,7 @@ Guia para tirar o backend e o PostgreSQL do Render e rodar no Railway.
 
 | Componente | Onde |
 |------------|------|
-| Frontend (React/Vite) | Vercel — `contador-saas.vercel.app` |
+| Frontend (React/Vite) | Railway — serviço `contador-saas` → `www.procontador.com.br` |
 | Backend (Node/Express) | Railway — serviço `contador-api` |
 | PostgreSQL | Railway — plugin Postgres |
 | Redis (opcional) | Railway — plugin Redis (recomendado para logout/rate limit) |
@@ -90,21 +90,32 @@ curl https://SEU-BACKEND.up.railway.app/api/v1/health
 
 ---
 
-## Passo 4 — Atualizar Vercel (frontend)
+## Passo 4 — Frontend no Railway (`www.procontador.com.br`)
 
-No projeto **contador-saas** no Vercel → **Settings → Environment Variables**:
+Serviço **contador-saas** (pasta `frontend/`):
 
-| Nome | Valor |
-|------|--------|
-| `BACKEND_URL` | `https://SEU-BACKEND.up.railway.app` (sem barra no final) |
+1. **Root Directory:** `frontend`
+2. **Builder:** Dockerfile via `frontend/railway.toml`
+3. **Variáveis:**
+   - `BACKEND_URL` = `https://contador-api-production.up.railway.app`
+   - `PORT` = injetado pelo Railway (nginx usa `${PORT}`)
 
-O proxy `/api/*` usa `frontend/api/[...path].js` com essa variável.
+O nginx faz proxy de `/api/*` para o backend. O React usa mesma origem em `procontador.com.br`.
 
-Redeploy do frontend:
-```bash
-cd frontend
-vercel deploy --prod --scope trustcorporation88s-projects
-```
+**URL temporária:** https://contador-saas-production.up.railway.app
+
+### DNS (Cloudflare / Hostinger)
+
+| Tipo | Nome | Valor |
+|------|------|-------|
+| CNAME | `www` | `kju4cq0u.up.railway.app` |
+| CNAME | `@` | `f89wuuss.up.railway.app` |
+| TXT | `_railway-verify.www` | `railway-verify=f13dc8e7e096e0a9e9e5fb63b29146c838d2bc912ecab260ea4fea08b9f17005` |
+| TXT | `_railway-verify` | `railway-verify=e326a1fa5c410759f62ada424081244de64edc979b0dff97f9d2ed38fcf5ba81` |
+
+Use **DNS only** (nuvem cinza) no Cloudflare ao configurar.
+
+Depois de propagar, pode suspender o projeto na Vercel.
 
 ---
 
