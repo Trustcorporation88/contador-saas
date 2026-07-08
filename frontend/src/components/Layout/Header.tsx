@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { LogOut, User as UserIcon, ChevronDown, PanelLeft, Sparkles } from "lucide-react";
+import { LogOut, User as UserIcon, ChevronDown, PanelLeft, Sparkles, ArrowLeft } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useAuthStore } from "../../store/authStore";
 import { AuthService } from "../../services/authService";
@@ -54,6 +54,16 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
     navigate("/login", { replace: true });
   };
 
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate("/dashboard");
+    }
+  };
+
+  const showBackButton = location.pathname !== "/dashboard";
+
   const pageTitle = resolvePageTitle(location.pathname);
   const service = getServiceDefinition(location.pathname);
   const serviceStatus = service ? getOperationalStatusMeta(service.status) : null;
@@ -81,6 +91,18 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
             <PanelLeft className="h-4 w-4" />
           </button>
 
+          {showBackButton && (
+            <button
+              type="button"
+              onClick={handleBack}
+              className="flex items-center gap-1.5 rounded-2xl border border-ink-100 bg-white/80 px-3 py-2.5 text-sm font-semibold text-ink-700 transition hover:border-primary-200 hover:text-primary-700"
+              aria-label="Voltar"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">Voltar</span>
+            </button>
+          )}
+
           <div className="min-w-0">
             <p className="shell-title">Painel de navegação</p>
             <h1 className="truncate text-lg font-extrabold tracking-tight text-ink-900">{pageTitle}</h1>
@@ -99,6 +121,18 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
               {serviceStatus ? `${serviceStatus.label} · ${service?.title}` : "Estrutura contábil ativa"}
             </p>
           </div>
+
+          {!PUBLIC_ACCESS_ENABLED && (
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 rounded-2xl border border-red-100 bg-white/85 px-3 py-2.5 text-sm font-semibold text-red-600 shadow-sm transition hover:border-red-300 hover:bg-red-50"
+              aria-label="Sair"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">Sair</span>
+            </button>
+          )}
 
           <div className="relative" ref={menuRef}>
             <button
