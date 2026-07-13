@@ -255,6 +255,33 @@ export class FiscalCaptureService {
     };
   }
 
+  static async runReprocess(companyId: string): Promise<{
+    success: boolean;
+    message: string;
+    stdout?: string;
+    stderr?: string;
+  }> {
+    const automationDir = getAutomationDir();
+    const scriptPath = path.join(automationDir, 'scripts', 'reprocess_captures.py');
+
+    if (!(await fs.pathExists(scriptPath))) {
+      return {
+        success: false,
+        message:
+          'Reprocessamento indisponível neste servidor. Aguarde o próximo deploy ou contate o suporte.',
+      };
+    }
+
+    const env = {
+      ...process.env,
+      DATABASE_URL: envConfig.database.url,
+      FISCAL_XML_ROOT: getXmlRoot(),
+      FISCAL_CERTS_DIR: getCertsDir(),
+    };
+
+    return this.spawnPython(scriptPath, [companyId], env);
+  }
+
   static async runSync(companyId: string, tipo: 'nfe' | 'nfse' | 'all' = 'all'): Promise<{
     success: boolean;
     message: string;

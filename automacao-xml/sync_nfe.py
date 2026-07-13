@@ -31,6 +31,11 @@ def _decode_doc_zip(texto: str) -> bytes:
         return raw
 
 
+def _nsu_int(valor: str | int | None) -> int:
+    digits = "".join(c for c in str(valor or "0") if c.isdigit())
+    return int(digits) if digits else 0
+
+
 def sync_empresa_nfe(empresa: EmpresaConfig, company_id: str | None = None) -> SyncResult:
     company_id = company_id or empresa.company_id or empresa.cnpj
     alerta = alerta_expiracao(empresa.pfx, empresa.senha)
@@ -50,40 +55,52 @@ def sync_empresa_nfe(empresa: EmpresaConfig, company_id: str | None = None) -> S
     nsu = get_cursor(company_id, "nfe")
     capturados = 0
 
-    while True:
-        resposta = con.consulta_distribuicao(
-            cnpj=empresa.cnpj,
-            chave="",
-            nsu=int(nsu),
-            consulta_nsu_especifico=False,
-        )
-        root = ET.fromstring(resposta.text)
-        docs = root.findall(".//ns:docZip", NS)
+    try:
+        while True:
+            resposta = con.consulta_distribuicao(
+                cnpj=empresa.cnpj,
+                chave="",
+                nsu=int(nsu),
+                consulta_nsu_especifico=False,
+            )
+            root = ET.fromstring(resposta.text)
+            docs = root.findall(".//ns:docZip", NS)
 
-        if not docs:
-            break
+            if not docs:
+                break
 
-        for doc in docs:
-            chave = doc.attrib.get("NSU") or doc.attrib.get("chNFe") or doc.attrib.get("schema", "doc")
-            if doc.text:
+            for doc in docs:
+                if not doc.text:
+                    continue
                 xml_bytes = _decode_doc_zip(doc.text)
-                chave_arquivo = doc.attrib.get("chNFe") or chave
-                path = salvar_xml(empresa.cnpj, chave_arquivo, xml_bytes)
                 meta = parse_nfe(xml_bytes, empresa.cnpj)
-                if meta.chave:
-                    chave_arquivo = meta.chave
-                if registrar_captura(company_id, meta, str(path), hash_xml(xml_bytes)):
+
+                # Nome de arquivo estavel: chave da NF-e ou o NSU do docZip.
+                chave_arquivo = meta.chave or doc.attrib.get("chNFe") or doc.attrib.get("NSU") or "doc"
+                path = salvar_xml(empresa.cnpj, chave_arquivo, xml_bytes)
+
+                # So registra documentos identificaveis (NF-e completa ou resumo);
+                # eventos sao apenas arquivados no disco para nao bloquear, via
+                # UNIQUE(chave), o registro da nota real com a mesma chave.
+                if (
+                    meta.tipo_doc != "nfe_evento"
+                    and meta.chave
+                    and registrar_captura(company_id, meta, str(path), hash_xml(xml_bytes))
+                ):
                     capturados += 1
 
-        ultimo_nsu = root.findtext(".//ns:ultNSU", namespaces=NS) or nsu
-        max_nsu = root.findtext(".//ns:maxNSU", namespaces=NS)
-        save_cursor(company_id, "nfe", ultimo_nsu)
-        nsu = ultimo_nsu
+            ultimo_nsu = root.findtext(".//ns:ultNSU", namespaces=NS) or nsu
+            max_nsu = root.findtext(".//ns:maxNSU", namespaces=NS)
+            save_cursor(company_id, "nfe", ultimo_nsu)
+            nsu = ultimo_nsu
 
-        if len(docs) < 50:
-            break
-        if max_nsu and ultimo_nsu >= max_nsu:
-            break
+            if len(docs) < 50:
+                break
+            if max_nsu and _nsu_int(ultimo_nsu) >= _nsu_int(max_nsu):
+                break
+    except Exception as exc:
+        save_cursor(company_id, "nfe", nsu, status="error", error=str(exc))
+        raise
 
     save_cursor(company_id, "nfe", nsu, status="ok")
     return SyncResult(capturados=capturados, ultimo_nsu=nsu, alerta_certificado=alerta)

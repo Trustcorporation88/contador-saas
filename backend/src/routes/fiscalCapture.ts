@@ -26,5 +26,6 @@ router.post('/certificate', upload.single('certificate'), FiscalCaptureControlle
 router.get('/status', FiscalCaptureController.getStatus);
 router.get('/captures', FiscalCaptureController.listCaptures);
 router.post('/sync', FiscalCaptureController.sync);
+router.post('/reprocess', FiscalCaptureController.reprocess);
 
 export default router;

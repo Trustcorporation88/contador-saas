@@ -27,6 +27,8 @@ export interface FiscalCapture {
   doc_type: string;
   chave: string;
   direcao: string | null;
+  emitente_cnpj: string | null;
+  destinatario_cnpj: string | null;
   valor_total: string | null;
   data_emissao: string | null;
   numero: string | null;
@@ -80,6 +82,11 @@ export const FiscalCaptureService = {
 
   async sync(tipo: FiscalDocType = 'all'): Promise<{ message: string; stdout?: string }> {
     const { data } = await api.post(companyPath('/sync'), { tipo }, { timeout: 300000 });
+    return data;
+  },
+
+  async reprocess(): Promise<{ message: string; stdout?: string }> {
+    const { data } = await api.post(companyPath('/reprocess'), {}, { timeout: 300000 });
     return data;
   },
 };

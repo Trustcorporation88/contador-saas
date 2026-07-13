@@ -55,6 +55,19 @@ No serviço **contador-api**, em **Variables**:
 
 **Não defina `PORT`** — o Railway injeta automaticamente.
 
+### Volume persistente para XMLs e certificados (obrigatório)
+
+Os XMLs capturados e o `.pfx` são gravados em `/app/data` (ver `FISCAL_XML_ROOT` e
+`FISCAL_CERTS_DIR` no `backend/Dockerfile`). Sem um volume, esses arquivos são
+**apagados a cada deploy/restart**, quebrando a guarda legal de 5 anos.
+
+1. No serviço **contador-api** → **Settings** → **Volumes** → **New Volume**.
+2. **Mount path:** `/app/data`
+3. Redeploy. O Railway passa a persistir `/app/data/fiscal-xmls` e `/app/data/fiscal-certs`.
+
+> As variáveis `FISCAL_XML_ROOT` / `FISCAL_CERTS_DIR` já vêm definidas no Dockerfile;
+> só é preciso montar o volume no ponto `/app/data`.
+
 ### Redis (opcional, recomendado)
 
 1. **Add Redis** no mesmo projeto

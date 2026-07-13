@@ -11,3 +11,8 @@ watchPatterns = ["backend/**", "automacao-xml/**"]
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
+
+# IMPORTANTE: monte um Volume persistente com Mount path = /app/data
+# (Settings > Volumes no serviço). Sem isso os XMLs capturados e o .pfx
+# em /app/data/fiscal-xmls e /app/data/fiscal-certs sao apagados a cada deploy.
+# Ver RAILWAY-DEPLOY.md > Passo 2 > Volume persistente.

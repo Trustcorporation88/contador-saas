@@ -24,6 +24,23 @@ export default function FiscalCapturePanel() {
   const [file, setFile] = useState<File | null>(null);
   const [syncTipo, setSyncTipo] = useState<FiscalDocType>('all');
   const [formError, setFormError] = useState('');
+  const [showCertForm, setShowCertForm] = useState(false);
+
+  const formatCnpj = (value?: string | null): string => {
+    const digits = (value || '').replace(/\D/g, '');
+    if (digits.length !== 14) return value || '—';
+    return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+  };
+
+  const docLabel = (docType: string): string => {
+    const map: Record<string, string> = {
+      nfe: 'NF-e',
+      nfe_resumo: 'NF-e (resumo)',
+      nfe_evento: 'NF-e (evento)',
+      nfse: 'NFS-e',
+    };
+    return map[docType] || docType.toUpperCase();
+  };
 
   const { data: status, isLoading } = useQuery({
     queryKey: ['fiscal-capture-status', currentCompanyId],
@@ -73,6 +90,7 @@ export default function FiscalCapturePanel() {
       setFormError('');
       setPassword('');
       setFile(null);
+      setShowCertForm(false);
       await invalidate();
     },
     onError: (error: Error) => setFormError(error.message),
@@ -80,6 +98,15 @@ export default function FiscalCapturePanel() {
 
   const syncMutation = useMutation({
     mutationFn: () => FiscalCaptureService.sync(syncTipo),
+    onSuccess: async () => {
+      setFormError('');
+      await invalidate();
+    },
+    onError: (error: Error) => setFormError(error.message),
+  });
+
+  const reprocessMutation = useMutation({
+    mutationFn: () => FiscalCaptureService.reprocess(),
     onSuccess: async () => {
       setFormError('');
       await invalidate();
@@ -123,12 +150,21 @@ export default function FiscalCapturePanel() {
             <p className="mt-3 text-sm text-gray-500">Carregando...</p>
           ) : cert ? (
             <div className="mt-3 space-y-1 text-sm text-gray-700">
-              <p>CNPJ: {cert.cnpj}</p>
+              <p>CNPJ: {formatCnpj(cert.cnpj)}</p>
               <p>UF: {cert.uf.toUpperCase()}</p>
+              <p>Senha: {cert.has_password ? '•••••• (salva com segurança)' : 'não informada'}</p>
               <p>Motor Serpro: {cert.serpro_motor_enabled ? 'Sim' : 'Não'}</p>
               {cert.cert_valid_until && (
                 <p>Validade: {new Date(cert.cert_valid_until).toLocaleDateString('pt-BR')}</p>
               )}
+              <button
+                type="button"
+                onClick={() => setShowCertForm((prev) => !prev)}
+                className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-800"
+              >
+                <KeyRound className="h-3.5 w-3.5" />
+                {showCertForm ? 'Cancelar' : 'Substituir certificado / senha'}
+              </button>
             </div>
           ) : (
             <p className="mt-3 text-sm text-gray-500">Nenhum certificado cadastrado.</p>
@@ -158,10 +194,13 @@ export default function FiscalCapturePanel() {
           <p className="mt-3 text-sm text-gray-600">
             XMLs organizados por CNPJ/ano/mês. Mantenha backup por no mínimo 5 anos conforme legislação fiscal.
           </p>
+          <p className="mt-2 text-xs text-amber-700">
+            NFC-e (modelo 65) não é distribuída pela Distribuição DFe da SEFAZ — importe por upload ou relatório do PDV.
+          </p>
         </div>
       </div>
 
-      {!cert && (
+      {(!cert || showCertForm) && (
         <form
           className="mt-5 grid gap-3 rounded-2xl border border-dashed border-emerald-200 bg-white/80 p-4 md:grid-cols-2"
           onSubmit={(event) => {
@@ -201,7 +240,9 @@ export default function FiscalCapturePanel() {
             Empresa Simples Nacional — considerar Motor Serpro na apuração
           </label>
           <div className="md:col-span-2">
-            <Button type="submit" loading={uploadMutation.isPending}>Cadastrar certificado A1</Button>
+            <Button type="submit" loading={uploadMutation.isPending}>
+              {cert ? 'Substituir certificado A1' : 'Cadastrar certificado A1'}
+            </Button>
           </div>
         </form>
       )}
@@ -219,7 +260,23 @@ export default function FiscalCapturePanel() {
           <Button type="button" icon={<CloudDownload className="h-4 w-4" />} loading={syncMutation.isPending} onClick={() => syncMutation.mutate()}>
             Capturar XML agora
           </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            icon={<RefreshCw className="h-4 w-4" />}
+            loading={reprocessMutation.isPending}
+            onClick={() => reprocessMutation.mutate()}
+            title="Recalcula valor, emitente e direção dos XMLs já capturados"
+          >
+            Reprocessar notas
+          </Button>
         </div>
+      )}
+
+      {reprocessMutation.isSuccess && (
+        <p className="mt-3 text-sm text-emerald-700">
+          Notas reprocessadas — valores e emitentes atualizados.
+        </p>
       )}
 
       {captures && captures.data.length > 0 && (
@@ -230,6 +287,7 @@ export default function FiscalCapturePanel() {
                 <th className="px-4 py-3">Tipo</th>
                 <th className="px-4 py-3">Direção</th>
                 <th className="px-4 py-3">Número</th>
+                <th className="px-4 py-3">Emitente</th>
                 <th className="px-4 py-3">Valor</th>
                 <th className="px-4 py-3">Capturado em</th>
               </tr>
@@ -237,9 +295,10 @@ export default function FiscalCapturePanel() {
             <tbody>
               {captures.data.map((item) => (
                 <tr key={item.id} className="border-t border-gray-100">
-                  <td className="px-4 py-3 uppercase">{item.doc_type}</td>
+                  <td className="px-4 py-3">{docLabel(item.doc_type)}</td>
                   <td className="px-4 py-3">{item.direcao || '—'}</td>
                   <td className="px-4 py-3">{item.numero || item.chave.slice(0, 12)}</td>
+                  <td className="px-4 py-3">{formatCnpj(item.emitente_cnpj)}</td>
                   <td className="px-4 py-3">
                     {item.valor_total
                       ? Number(item.valor_total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })

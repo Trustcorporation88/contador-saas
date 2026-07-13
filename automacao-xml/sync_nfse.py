@@ -152,8 +152,9 @@ def sync_empresa_nfse(empresa: EmpresaConfig, company_id: str | None = None) -> 
             chave_arquivo = chave or (str(nsu_item) if nsu_item is not None else hash_xml(xml_bytes)[:50])
             path = salvar_xml(empresa.cnpj, str(chave_arquivo), xml_bytes)
             meta = parse_nfse(xml_bytes, empresa.cnpj)
-            if meta.chave:
-                chave_arquivo = meta.chave
+            # Garante chave nao-vazia para evitar colisao no UNIQUE(company_id, chave).
+            if not meta.chave:
+                meta.chave = str(chave or chave_arquivo)
             if registrar_captura(company_id, meta, str(path), hash_xml(xml_bytes)):
                 capturados += 1
 

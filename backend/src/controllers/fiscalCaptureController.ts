@@ -96,4 +96,21 @@ export class FiscalCaptureController {
       res.status(500).json({ success: false, error: (error as Error).message });
     }
   }
+
+  static async reprocess(req: Request, res: Response): Promise<void> {
+    try {
+      const companyId = req.params.companyId;
+      const result = await FiscalCaptureService.runReprocess(companyId);
+
+      if (!result.success) {
+        res.status(502).json({ success: false, ...result });
+        return;
+      }
+
+      logger.info('Reprocessamento de capturas fiscais concluído', { companyId });
+      res.json({ success: true, ...result });
+    } catch (error) {
+      res.status(500).json({ success: false, error: (error as Error).message });
+    }
+  }
 }
