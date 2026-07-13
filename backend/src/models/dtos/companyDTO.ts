@@ -27,6 +27,15 @@ export interface CreateCompanyDTO {
     month: number;
     day: number;
   };
+  // Dados fiscais (emissão de NF-e)
+  inscricao_estadual?: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+  endereco_numero?: string;
+  endereco_bairro?: string;
+  codigo_municipio?: string;
+  crt?: string;
 }
 
 /**
@@ -44,6 +53,15 @@ export interface UpdateCompanyDTO {
     month: number;
     day: number;
   };
+  // Dados fiscais (emissão de NF-e)
+  inscricao_estadual?: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+  endereco_numero?: string;
+  endereco_bairro?: string;
+  codigo_municipio?: string;
+  crt?: string;
 }
 
 /**
@@ -62,6 +80,14 @@ export interface CompanyResponse {
     month: number;
     day: number;
   };
+  inscricao_estadual?: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+  endereco_numero?: string;
+  endereco_bairro?: string;
+  codigo_municipio?: string;
+  crt?: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;

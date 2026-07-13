@@ -36,6 +36,7 @@ const LancamentosPage = lazy(
 );
 const LancadorPage = lazy(() => import("../pages/Lancamentos/LancadorPage"));
 const DocumentosPage = lazy(() => import("../pages/Documentos/DocumentosPage"));
+const NfeEmissaoPage = lazy(() => import("../pages/Documentos/NfeEmissaoPage"));
 const ContasReceberPage = lazy(
   () => import("../pages/ContasReceber/ContasReceberPage"),
 );
@@ -242,6 +243,16 @@ const router = createBrowserRouter([
               <RoleRoute allowedPath="/documentos">
                 <Suspense fallback={<LoadingScreen />}>
                   <DocumentosPage />
+                </Suspense>
+              </RoleRoute>
+            ),
+          },
+          {
+            path: "documentos/nfe",
+            element: (
+              <RoleRoute allowedPath="/documentos">
+                <Suspense fallback={<LoadingScreen />}>
+                  <NfeEmissaoPage />
                 </Suspense>
               </RoleRoute>
             ),

@@ -362,6 +362,115 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           console.log('✓ 015_fiscal_certificate_pfx_data completed');
         },
       },
+      {
+        name: '016_nfe_emission',
+        up: async (db) => {
+          // Tabela de numeração sequencial por empresa/série/modelo
+          if (!(await db.schema.hasTable('nfe_numeracao'))) {
+            console.log('[MIGRATIONS] Creating nfe_numeracao table...');
+            await db.schema.createTable('nfe_numeracao', (table) => {
+              table.increments('id').primary();
+              table.uuid('company_id').notNullable();
+              table.integer('serie').notNullable().defaultTo(1);
+              table.integer('modelo').notNullable().defaultTo(55);
+              table.integer('ultimo_numero').notNullable().defaultTo(0);
+              table.timestamp('created_at').defaultTo(db.fn.now());
+              table.timestamp('updated_at').defaultTo(db.fn.now());
+              table.unique(['company_id', 'serie', 'modelo']);
+            });
+          }
+
+          // Tabela principal de NF-e
+          if (!(await db.schema.hasTable('nfe'))) {
+            console.log('[MIGRATIONS] Creating nfe table...');
+            await db.schema.createTable('nfe', (table) => {
+              table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+              table.uuid('company_id').notNullable();
+              table.integer('numero').notNullable();
+              table.integer('serie').notNullable().defaultTo(1);
+              table.integer('modelo').notNullable().defaultTo(55);
+              table.string('chave_acesso', 44);
+              table.string('protocolo', 30);
+              table.string('ambiente', 20).defaultTo('homologacao');
+              table.string('emit_cnpj', 14).notNullable();
+              table.string('emit_razao_social', 255).notNullable();
+              table.string('dest_cpf_cnpj', 14).notNullable();
+              table.string('dest_razao_social', 255).notNullable();
+              table.string('dest_email', 255);
+              table.decimal('valor_produtos', 15, 2).defaultTo(0);
+              table.decimal('valor_frete', 15, 2).defaultTo(0);
+              table.decimal('valor_desconto', 15, 2).defaultTo(0);
+              table.decimal('valor_icms', 15, 2).defaultTo(0);
+              table.decimal('valor_pis', 15, 2).defaultTo(0);
+              table.decimal('valor_cofins', 15, 2).defaultTo(0);
+              table.decimal('valor_total', 15, 2).defaultTo(0);
+              table.string('status', 20).notNullable().defaultTo('RASCUNHO');
+              table.string('status_sefaz', 10);
+              table.text('status_motivo');
+              table.string('natureza_operacao', 120).defaultTo('VENDA');
+              table.text('informacoes_adicionais');
+              table.text('xml_nfe');
+              table.text('xml_proc');
+              table.text('dest_endereco');
+              table.timestamp('data_emissao').defaultTo(db.fn.now());
+              table.timestamp('data_autorizacao');
+              table.timestamp('data_cancelamento');
+              table.text('justificativa_cancelamento');
+              table.timestamp('created_at').defaultTo(db.fn.now());
+              table.timestamp('updated_at').defaultTo(db.fn.now());
+              table.index(['company_id']);
+              table.index(['status']);
+            });
+          }
+
+          // Itens da NF-e
+          if (!(await db.schema.hasTable('nfe_itens'))) {
+            console.log('[MIGRATIONS] Creating nfe_itens table...');
+            await db.schema.createTable('nfe_itens', (table) => {
+              table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+              table.uuid('nfe_id').notNullable();
+              table.integer('numero_item').notNullable();
+              table.string('codigo_produto', 60);
+              table.string('descricao', 255).notNullable();
+              table.string('ncm', 8);
+              table.string('cfop', 4);
+              table.string('unidade', 6).defaultTo('UN');
+              table.decimal('quantidade', 15, 4).defaultTo(0);
+              table.decimal('valor_unitario', 15, 4).defaultTo(0);
+              table.decimal('valor_total', 15, 2).defaultTo(0);
+              table.string('cst_icms', 4);
+              table.decimal('aliquota_icms', 7, 4);
+              table.decimal('valor_icms', 15, 2);
+              table.string('cst_pis', 4);
+              table.decimal('aliquota_pis', 7, 4);
+              table.decimal('valor_pis', 15, 2);
+              table.string('cst_cofins', 4);
+              table.decimal('aliquota_cofins', 7, 4);
+              table.decimal('valor_cofins', 15, 2);
+              table.index(['nfe_id']);
+            });
+          }
+
+          // Campos fiscais adicionais na tabela companies (emitente)
+          const companiesExists = await db.schema.hasTable('companies');
+          if (companiesExists) {
+            const cols: Array<[string, (t: Knex.AlterTableBuilder) => void]> = [
+              ['inscricao_estadual', (t) => t.string('inscricao_estadual', 20).nullable()],
+              ['endereco_numero', (t) => t.string('endereco_numero', 20).nullable()],
+              ['endereco_bairro', (t) => t.string('endereco_bairro', 120).nullable()],
+              ['codigo_municipio', (t) => t.string('codigo_municipio', 7).nullable()],
+              ['crt', (t) => t.string('crt', 1).nullable()],
+            ];
+            for (const [col, builder] of cols) {
+              if (!(await db.schema.hasColumn('companies', col))) {
+                await db.schema.alterTable('companies', builder);
+              }
+            }
+          }
+
+          console.log('✓ 016_nfe_emission completed');
+        },
+      },
     ];
 
     for (const migration of migrations) {

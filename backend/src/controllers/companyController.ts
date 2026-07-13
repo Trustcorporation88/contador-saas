@@ -48,7 +48,9 @@ export class CompanyController {
         return;
       }
 
-      const { cnpj, name, address, phone, email, tax_regime, fiscal_year_start } = req.body;
+      const { cnpj, name, address, phone, email, tax_regime, fiscal_year_start,
+        inscricao_estadual, city, state, postal_code, endereco_numero,
+        endereco_bairro, codigo_municipio, crt } = req.body;
 
       // Validar dados obrigatórios
       if (!cnpj || !name || !tax_regime) {
@@ -70,6 +72,14 @@ export class CompanyController {
           email,
           tax_regime,
           fiscal_year_start,
+          inscricao_estadual,
+          city,
+          state,
+          postal_code,
+          endereco_numero,
+          endereco_bairro,
+          codigo_municipio,
+          crt,
         },
         req.user.id, // Auto-associar criador como admin
       );
@@ -311,7 +321,9 @@ export class CompanyController {
       }
 
       const { id } = req.params;
-      const { name, address, phone, email, tax_regime, fiscal_year_start } = req.body;
+      const { name, address, phone, email, tax_regime, fiscal_year_start,
+        inscricao_estadual, city, state, postal_code, endereco_numero,
+        endereco_bairro, codigo_municipio, crt } = req.body;
 
       // Verificar se tentou alterar CNPJ
       if (req.body.cnpj) {
@@ -324,7 +336,10 @@ export class CompanyController {
       }
 
       // Validar que há pelo menos um campo a atualizar
-      if (!name && !address && !phone && !email && !tax_regime && !fiscal_year_start) {
+      const hasFiscalField = inscricao_estadual !== undefined || city !== undefined ||
+        state !== undefined || postal_code !== undefined || endereco_numero !== undefined ||
+        endereco_bairro !== undefined || codigo_municipio !== undefined || crt !== undefined;
+      if (!name && !address && !phone && !email && !tax_regime && !fiscal_year_start && !hasFiscalField) {
         res.status(HTTP_STATUS.BAD_REQUEST).json({
           error: 'Bad Request',
           code: ERROR_CODES.VALIDATION_ERROR,
@@ -343,6 +358,14 @@ export class CompanyController {
           email,
           tax_regime,
           fiscal_year_start,
+          inscricao_estadual,
+          city,
+          state,
+          postal_code,
+          endereco_numero,
+          endereco_bairro,
+          codigo_municipio,
+          crt,
         },
         req.user.id,
         req.user.companyId,

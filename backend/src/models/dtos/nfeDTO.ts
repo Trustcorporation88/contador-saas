@@ -35,6 +35,10 @@ export interface NfeItemDTO {
   aliquota_pis?:   number;
   cst_cofins?:     string;
   aliquota_cofins?: number;
+  // Emissão real (pynfe)
+  icms_modalidade?: string;   // CST (2 díg) ou CSOSN (3 díg, Simples)
+  icms_origem?:     number;   // 0=Nacional ...
+  tributos_aprox?:  number;   // valor aproximado dos tributos
 }
 
 // ─── Destinatário ─────────────────────────────────────────────────────────────
@@ -43,6 +47,8 @@ export interface NfeDestinatario {
   cpf_cnpj:     string;   // CPF (11 dígitos) ou CNPJ (14 dígitos)
   razao_social: string;
   email?:       string;
+  inscricao_estadual?: string;
+  indicador_ie?: number;  // 1=Contribuinte, 2=Isento, 9=Não contribuinte
   endereco?: {
     logradouro:  string;
     numero:      string;
@@ -50,6 +56,7 @@ export interface NfeDestinatario {
     municipio:   string;
     uf:          string;
     cep:         string;
+    cod_municipio?: string;  // código IBGE (7 díg)
   };
 }
 
@@ -63,6 +70,7 @@ export interface CreateNfeDTO {
   itens:                 NfeItemDTO[];
   valor_frete?:          number;
   valor_desconto?:       number;
+  forma_pagamento?:      string;   // tPag: 01=dinheiro, 03=cartão crédito...
   informacoes_adicionais?: string;
 }
 
@@ -76,6 +84,9 @@ export interface NfeRecord {
   modelo:                number;
   chave_acesso?:         string;
   protocolo?:            string;
+  ambiente?:             string;
+  xml_proc?:             string;
+  dest_endereco?:        string;
   emit_cnpj:             string;
   emit_razao_social:     string;
   dest_cpf_cnpj:         string;

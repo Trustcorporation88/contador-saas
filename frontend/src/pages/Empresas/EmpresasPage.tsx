@@ -78,6 +78,16 @@ const baseSchema = z.object({
   email:              z.string().email('E-mail inválido').optional().or(z.literal('')),
   phone:              z.string().optional(),
   fiscal_year_start:  z.number().int().min(1).max(12).optional(),
+  // Dados fiscais (emissão de NF-e)
+  inscricao_estadual: z.string().optional(),
+  address:            z.string().optional(),
+  endereco_numero:    z.string().optional(),
+  endereco_bairro:    z.string().optional(),
+  city:               z.string().optional(),
+  state:              z.string().optional(),
+  postal_code:        z.string().optional(),
+  codigo_municipio:   z.string().optional(),
+  crt:                z.string().optional(),
 });
 
 const createSchema = baseSchema.extend({
@@ -151,6 +161,15 @@ function CompanyForm({
         if (result.contato?.telefone) {
           setValue('phone', result.contato.telefone);
         }
+        if (result.endereco) {
+          if (result.endereco.logradouro) setValue('address', result.endereco.logradouro);
+          if (result.endereco.numero) setValue('endereco_numero', result.endereco.numero);
+          if (result.endereco.bairro) setValue('endereco_bairro', result.endereco.bairro);
+          if (result.endereco.municipio) setValue('city', result.endereco.municipio);
+          if (result.endereco.uf) setValue('state', result.endereco.uf);
+          if (result.endereco.cep) setValue('postal_code', result.endereco.cep);
+        }
+        setValue('crt', result.simples_nacional ? '1' : '3');
         
         setCnpjSuccess(true);
         setTimeout(() => setCnpjSuccess(false), 3000);
@@ -249,6 +268,52 @@ function CompanyForm({
             <option key={i + 1} value={i + 1}>{m}</option>
           ))}
         </select>
+      </div>
+
+      {/* Dados fiscais para emissão de NF-e */}
+      <div className="rounded-xl border border-gray-200 p-4 space-y-3">
+        <p className="text-xs font-bold uppercase tracking-wide text-gray-600">
+          Dados fiscais (emissão de NF-e)
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <Input
+            label="Inscrição Estadual"
+            placeholder="ISENTO se não houver"
+            error={errors.inscricao_estadual?.message}
+            {...register('inscricao_estadual')}
+          />
+          <div>
+            <label className="input-label">Regime (CRT)</label>
+            <select className="input-field" {...register('crt')}>
+              <option value="">—</option>
+              <option value="1">1 - Simples Nacional</option>
+              <option value="2">2 - Simples Nacional (excesso)</option>
+              <option value="3">3 - Regime Normal</option>
+            </select>
+          </div>
+        </div>
+        <Input
+          label="Logradouro"
+          error={errors.address?.message}
+          {...register('address')}
+        />
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Número" error={errors.endereco_numero?.message} {...register('endereco_numero')} />
+          <Input label="Bairro" error={errors.endereco_bairro?.message} {...register('endereco_bairro')} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Município" error={errors.city?.message} {...register('city')} />
+          <Input label="UF" maxLength={2} error={errors.state?.message} {...register('state')} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="CEP" error={errors.postal_code?.message} {...register('postal_code')} />
+          <Input
+            label="Código IBGE do município"
+            hint="7 dígitos — obrigatório para NF-e"
+            error={errors.codigo_municipio?.message}
+            {...register('codigo_municipio')}
+          />
+        </div>
       </div>
 
       {apiError && (
@@ -562,6 +627,15 @@ export default function EmpresasPage() {
                   email:             modalState.company.email ?? '',
                   phone:             modalState.company.phone ?? '',
                   fiscal_year_start: modalState.company.fiscal_year_start ?? 1,
+                  inscricao_estadual: modalState.company.inscricao_estadual ?? '',
+                  address:           modalState.company.address ?? '',
+                  endereco_numero:   modalState.company.endereco_numero ?? '',
+                  endereco_bairro:   modalState.company.endereco_bairro ?? '',
+                  city:              modalState.company.city ?? '',
+                  state:             modalState.company.state ?? '',
+                  postal_code:       modalState.company.postal_code ?? '',
+                  codigo_municipio:  modalState.company.codigo_municipio ?? '',
+                  crt:               modalState.company.crt ?? '',
                 }
               : undefined
           }

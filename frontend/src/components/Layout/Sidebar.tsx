@@ -45,6 +45,7 @@ const navItems: NavItem[] = [
   { label: 'Plano de Contas',    icon: BookOpen,        path: '/contas'                 },
   { label: 'Lançamentos',        icon: FileText,        path: '/lancamentos'            },
   { label: 'Documentos Fiscais', icon: FileText,        path: '/documentos'             },
+  { label: 'Emissão NF-e',       icon: FileText,        path: '/documentos/nfe'         },
   { label: 'Contas a Receber',   icon: FileText,        path: '/contas-receber'         },
   { label: 'Contas a Pagar',     icon: FileText,        path: '/contas-pagar'           },
   {

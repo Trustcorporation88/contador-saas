@@ -12,6 +12,15 @@ export interface APICompany {
   phone?: string;
   tax_regime: TaxRegime;
   fiscal_year_start?: number;
+  inscricao_estadual?: string;
+  address?: string;
+  endereco_numero?: string;
+  endereco_bairro?: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+  codigo_municipio?: string;
+  crt?: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -41,6 +50,15 @@ export interface CompanyPayload {
   email?: string;
   phone?: string;
   fiscal_year_start?: number;
+  inscricao_estadual?: string;
+  address?: string;
+  endereco_numero?: string;
+  endereco_bairro?: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+  codigo_municipio?: string;
+  crt?: string;
 }
 
 export interface CreatePayload extends CompanyPayload {

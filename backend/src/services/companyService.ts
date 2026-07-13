@@ -65,6 +65,14 @@ export class CompanyService {
         email: data.email || null,
         tax_regime: data.tax_regime,
         fiscal_year_start: data.fiscal_year_start ? JSON.stringify(data.fiscal_year_start) : null,
+        inscricao_estadual: data.inscricao_estadual || null,
+        city: data.city || null,
+        state: data.state || null,
+        postal_code: data.postal_code || null,
+        endereco_numero: data.endereco_numero || null,
+        endereco_bairro: data.endereco_bairro || null,
+        codigo_municipio: data.codigo_municipio || null,
+        crt: data.crt || null,
         is_active: true,
         created_at: now,
         updated_at: now,
@@ -281,6 +289,20 @@ export class CompanyService {
     if (data.fiscal_year_start) {
       updateData.fiscal_year_start = JSON.stringify(data.fiscal_year_start);
     }
+    for (const field of [
+      'inscricao_estadual',
+      'city',
+      'state',
+      'postal_code',
+      'endereco_numero',
+      'endereco_bairro',
+      'codigo_municipio',
+      'crt',
+    ] as const) {
+      if (data[field] !== undefined) {
+        updateData[field] = data[field] || null;
+      }
+    }
 
     // Atualizar no banco
     await db('companies').where('id', id).update(updateData);
@@ -380,6 +402,14 @@ export class CompanyService {
       fiscal_year_start: company.fiscal_year_start
         ? JSON.parse(company.fiscal_year_start)
         : undefined,
+      inscricao_estadual: company.inscricao_estadual || undefined,
+      city: company.city || undefined,
+      state: company.state || undefined,
+      postal_code: company.postal_code || undefined,
+      endereco_numero: company.endereco_numero || undefined,
+      endereco_bairro: company.endereco_bairro || undefined,
+      codigo_municipio: company.codigo_municipio || undefined,
+      crt: company.crt || undefined,
       is_active: company.is_active,
       created_at: new Date(company.created_at).toISOString(),
       updated_at: new Date(company.updated_at).toISOString(),

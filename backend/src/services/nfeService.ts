@@ -23,6 +23,7 @@ import {
   NfeListFilters,
   SefazResponse,
 } from '../models/dtos/nfeDTO';
+import { emitirNfeReal, getEmissionMode, getAmbiente } from './nfeEmitter';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -316,11 +317,17 @@ export class NfeService {
       serie,
       modelo,
       chave_acesso:     chave,
+      ambiente:         getAmbiente(),
       emit_cnpj:        cnpj,
-      emit_razao_social: company.name,
+      emit_razao_social: company.legal_name ?? company.trade_name ?? company.name,
       dest_cpf_cnpj:    dto.destinatario.cpf_cnpj.replace(/\D/g, ''),
       dest_razao_social: dto.destinatario.razao_social,
       dest_email:       dto.destinatario.email,
+      dest_endereco:    JSON.stringify({
+        endereco:            dto.destinatario.endereco ?? null,
+        inscricao_estadual:  dto.destinatario.inscricao_estadual ?? '',
+        indicador_ie:        dto.destinatario.indicador_ie ?? 9,
+      }),
       valor_produtos:   parseFloat(valor_produtos.toFixed(2)),
       valor_frete:      parseFloat(valor_frete.toFixed(2)),
       valor_desconto:   parseFloat(valor_desconto.toFixed(2)),
@@ -388,8 +395,56 @@ export class NfeService {
       );
     }
 
+    const now = new Date().toISOString();
+    const mode = getEmissionMode();
+
+    // ── Modo real: assina com A1 e transmite à SEFAZ via pynfe ──
+    if (mode === 'real') {
+      const company = await db('companies').where({ id: companyId }).first();
+      if (!company) throw Object.assign(new Error('Empresa não encontrada'), { status: 404 });
+      const itens = await db('nfe_itens').where({ nfe_id: id }).orderBy('numero_item');
+
+      const result = await emitirNfeReal(company, nfe, itens);
+
+      if (!result.ok) {
+        // Falha de autorização: registra motivo e mantém como PENDENTE
+        await db('nfe').where({ id, company_id: companyId }).update({
+          status:        NfeStatus.PENDENTE,
+          status_sefaz:  result.cStat,
+          status_motivo: result.motivo,
+          ambiente:      result.ambiente,
+        });
+        throw Object.assign(
+          new Error(`SEFAZ rejeitou a NF-e (${result.cStat || 's/ código'}): ${result.motivo}`),
+          { status: 422 },
+        );
+      }
+
+      const [updated] = await db('nfe')
+        .where({ id, company_id: companyId })
+        .update({
+          status:           NfeStatus.AUTORIZADA,
+          status_sefaz:     result.cStat,
+          status_motivo:    result.motivo,
+          protocolo:        result.protocolo,
+          chave_acesso:     result.chave || nfe.chave_acesso,
+          ambiente:         result.ambiente,
+          xml_proc:         result.xml_proc,
+          data_autorizacao: now,
+        })
+        .returning('*');
+
+      logger.info('NF-e autorizada (real)', {
+        id,
+        ambiente: result.ambiente,
+        protocolo: result.protocolo,
+        cStat: result.cStat,
+      });
+      return updated as NfeRecord;
+    }
+
+    // ── Modo mock: simulador (desenvolvimento) ──
     const sefaz = await mockSefazAuthorize(nfe.xml_nfe);
-    const now   = new Date().toISOString();
 
     const [updated] = await db('nfe')
       .where({ id, company_id: companyId })
@@ -402,7 +457,7 @@ export class NfeService {
       })
       .returning('*');
 
-    logger.info('NF-e autorizada', { id, protocolo: sefaz.protocolo });
+    logger.info('NF-e autorizada (mock)', { id, protocolo: sefaz.protocolo });
     return updated as NfeRecord;
   }
 
