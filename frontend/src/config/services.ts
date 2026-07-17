@@ -97,6 +97,7 @@ export const SERVICES: Service[] = [
     icon: Search,
     category: 'fiscal',
     route: '/documentos/nfe',
+    externalUrl: 'https://cnpj.trustcorp.com.br',
     status: 'active',
     automated: true,
     badge: 'Novo',

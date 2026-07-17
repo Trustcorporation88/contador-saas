@@ -35,6 +35,7 @@ export const ServiceCard: FC<ServiceCardProps> = ({
   icon: Icon,
   category,
   route,
+  externalUrl,
   status = 'active',
   badge,
   metrics,
@@ -64,6 +65,10 @@ export const ServiceCard: FC<ServiceCardProps> = ({
 
   const handleClick = () => {
     if (isDisabled) return;
+    if (externalUrl) {
+      window.open(externalUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
     navigate(route);
   };
 

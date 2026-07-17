@@ -31,6 +31,7 @@ export interface Service {
   icon: LucideIcon;
   category: ServiceCategory;
   route: string;
+  externalUrl?: string;
   status?: ServiceStatus;
   badge?: string | number;
   metrics?: ServiceMetric[];
