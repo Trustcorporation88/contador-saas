@@ -92,6 +92,28 @@ export const serviceCatalog: ServiceDefinition[] = [
     backendRoutes: ["/companies", "/companies/:id", "/cnpj/:cnpj"],
   },
   {
+    title: "Busca CNPJ/CPF",
+    path: "/documentos/nfe",
+    category: "core",
+    status: "operacional",
+    summary:
+      "Consulta completa de CPF e CNPJ para preencher nome, endereço e cadastro fiscal.",
+    howItWorks:
+      "Usa o documento informado para consultar TrustCorp/Receita e preenche automaticamente os dados básicos do destinatário.",
+    requiredData: [
+      "CPF (11 dígitos) ou CNPJ (14 dígitos)",
+      "Autorização para consulta",
+      "Empresa ativa para emissão",
+    ],
+    bestResultsTips: [
+      "Digite apenas os números do documento",
+      "Use a consulta antes de emitir NF-e ou cadastrar cliente",
+      "Complete o cadastro da empresa emissora para evitar bloqueios",
+    ],
+    dataSources: ["TrustCorp CNPJ/CPF API", "Receita Federal"],
+    backendRoutes: ["/cnpj/documento/:documento", "/cnpj/cpf/:cpf", "/cnpj/:cnpj"],
+  },
+  {
     title: "Plano de Contas",
     path: "/contas",
     category: "core",

@@ -24,6 +24,7 @@ import {
   FileBarChart,
   Brain,
   LayoutDashboard,
+  Search,
 } from 'lucide-react';
 import { Service, CategoryConfig, ServiceCategory } from '../types/service';
 
@@ -87,6 +88,23 @@ export const SERVICES: Service[] = [
       summary: 'Use este serviço para registrar notas emitidas e validar dados fiscais antes da transmissão.',
       requiredInputs: ['CNPJ do emitente', 'cliente/tomador', 'itens/serviços', 'valores e tributos'],
       examples: ['NF de venda de serviço', 'NF de revenda com tributação do Simples'],
+    },
+  },
+  {
+    id: 'documento-lookup',
+    title: 'Busca CNPJ/CPF',
+    description: 'Consulta completa de CPF e CNPJ com auto-preenchimento cadastral',
+    icon: Search,
+    category: 'fiscal',
+    route: '/documentos/nfe',
+    status: 'active',
+    automated: true,
+    badge: 'Novo',
+    help: {
+      summary: 'Consulte CPF/CNPJ para preencher automaticamente nome, endereço e dados cadastrais.',
+      requiredInputs: ['CPF (11 dígitos) ou CNPJ (14 dígitos)'],
+      examples: ['Consulta de destinatário para emissão NF-e', 'Validação cadastral antes de faturar'],
+      automation: 'Busca automática via cnpj.trustcorp.com.br com fallback de CNPJ quando necessário.',
     },
   },
   {

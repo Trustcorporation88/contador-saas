@@ -2042,6 +2042,40 @@ export interface ServiceHelpV2 {
 export const SERVICES_HELP: Record<string, ServiceHelpV2> = {
 
   // ─── 1. NF-e ───────────────────────────────────────────────────────────────
+  'documento-lookup': {
+    id: 'documento-lookup',
+    title: 'Busca CNPJ/CPF',
+    whatIs:
+      'Serviço de consulta cadastral que identifica automaticamente CPF ou CNPJ e busca dados básicos para preenchimento de cadastro e emissão de documentos.',
+    whenToUse:
+      'Use antes de emitir NF-e ou cadastrar um cliente/fornecedor quando precisar completar nome, endereço e validação documental.',
+    estimatedTime: '10-20 segundos',
+    fields: [
+      {
+        name: 'documento',
+        label: 'CPF ou CNPJ',
+        description: 'Documento a ser consultado. Pode ser CPF (11 dígitos) ou CNPJ (14 dígitos).',
+        example: '12.345.678/0001-90 ou 123.456.789-09',
+        required: true,
+        type: 'cnpj',
+        tips: ['Digite somente números', 'CPF com 11 dígitos e CNPJ com 14'],
+      },
+    ],
+    tips: [
+      'Use a consulta para reduzir erro de digitação',
+      'Complete o cadastro da empresa emissora para a NF-e não bloquear',
+      'Se o provedor não responder, revise os dados manualmente',
+    ],
+    commonErrors: [
+      'Documento inválido — verifique os dígitos',
+      'Serviço indisponível — tente novamente em alguns instantes',
+      'CNPJ/CPF não encontrado — confira se o cadastro está ativo',
+    ],
+    examples: [
+      { title: 'NF-e com destinatário cadastrado', description: 'Digita o CNPJ e preenche razão social e endereço automaticamente.' },
+      { title: 'Cadastro de fornecedor', description: 'Consulta o documento para evitar erro no endereço e na razão social.' },
+    ],
+  },
   'nfe-emissao': {
     id: 'nfe-emissao',
     title: 'Emissão de NF-e',
@@ -3503,4 +3537,3 @@ export const SERVICES_HELP: Record<string, ServiceHelpV2> = {
   },
 
 }; // fim SERVICES_HELP
-
