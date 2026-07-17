@@ -77,7 +77,7 @@ export const SERVICES: Service[] = [
     description: 'Emitir e gerenciar notas fiscais eletrônicas',
     icon: FileText,
     category: 'fiscal',
-    route: '/documentos/nfe/criar',
+    route: '/documentos/nfe',
     status: 'warning',
     badge: 2,
     metrics: [
