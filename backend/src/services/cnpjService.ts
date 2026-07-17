@@ -176,28 +176,43 @@ function mapTrustcorpCnpjResponse(raw: unknown, documento: string, cached: boole
 
   return {
     cnpj: sanitizeDigits(pickString(data?.cnpj, documento)),
-    razao_social: pickString(data?.razao_social, data?.nome, data?.nome_empresarial),
-    nome_fantasia: pickString(data?.nome_fantasia, data?.fantasia, data?.razao_social),
-    situacao: pickString(data?.situacao, data?.status, data?.descricao_situacao_cadastral),
-    ativa: pickBoolean(data?.ativa, data?.ativo, data?.situacao === 'ATIVA'),
+    razao_social: pickString(
+      data?.razao_social,
+      data?.razaoSocial,
+      data?.nome,
+      data?.nomeFantasia,
+      data?.nome_fantasia,
+      data?.nome_empresarial,
+      data?.nomeEmpresarial,
+    ),
+    nome_fantasia: pickString(
+      data?.nome_fantasia,
+      data?.nomeFantasia,
+      data?.fantasia,
+      data?.nome_fantasia_raiz,
+      data?.razao_social,
+      data?.razaoSocial,
+    ),
+    situacao: pickString(data?.situacao, data?.status, data?.descricao_situacao_cadastral, data?.descricaoSituacaoCadastral),
+    ativa: pickBoolean(data?.ativa, data?.ativo, data?.situacao === 'ATIVA', data?.status === 'ATIVA'),
     endereco: {
-      logradouro: pickString(endereco?.logradouro, data?.logradouro),
+      logradouro: pickString(endereco?.logradouro, endereco?.logradouroCompleto, data?.logradouro, data?.logradouroCompleto, data?.logradouroCompletoEndereco),
       numero: pickString(endereco?.numero, data?.numero),
       complemento: pickString(endereco?.complemento, data?.complemento),
-      bairro: pickString(endereco?.bairro, data?.bairro),
-      municipio: pickString(endereco?.municipio, data?.municipio, data?.cidade),
-      uf: pickString(endereco?.uf, data?.uf),
+      bairro: pickString(endereco?.bairro, data?.bairro, data?.bairroCidade),
+      municipio: pickString(endereco?.municipio, data?.municipio, data?.cidade, data?.municipioDescricao),
+      uf: pickString(endereco?.uf, data?.uf, data?.estado),
       cep: pickString(endereco?.cep, data?.cep),
     },
     contato: {
-      telefone: pickString(contato?.telefone, contato?.celular, data?.telefone),
-      email: pickString(contato?.email, data?.email),
+      telefone: pickString(contato?.telefone, contato?.celular, data?.telefone, data?.ddd_telefone_1, data?.dddTelefone),
+      email: pickString(contato?.email, data?.email, data?.e_mail),
     },
-    porte: pickString(data?.porte, data?.descricao_porte),
-    natureza_juridica: pickString(data?.natureza_juridica),
+    porte: pickString(data?.porte, data?.descricao_porte, data?.descricaoPorte),
+    natureza_juridica: pickString(data?.natureza_juridica, data?.naturezaJuridica),
     cnae_principal: {
-      codigo: pickNumber(cnaePrincipal?.codigo, data?.cnae_fiscal),
-      descricao: pickString(cnaePrincipal?.descricao, data?.cnae_fiscal_descricao),
+      codigo: pickNumber(cnaePrincipal?.codigo, data?.cnae_fiscal, data?.cnaeFiscal),
+      descricao: pickString(cnaePrincipal?.descricao, data?.cnae_fiscal_descricao, data?.cnaeFiscalDescricao),
     },
     cnaes_secundarios: cnaesSecundarios.map((c: any) => ({
       codigo: pickNumber(c?.codigo),
@@ -317,7 +332,64 @@ export class CnpjService {
 
     try {
       const raw = await fetchFromTrustcorp('cnpj', clean);
-      const result = mapTrustcorpCnpjResponse(raw, clean, false);
+      const trustcorpResult = mapTrustcorpCnpjResponse(raw, clean, false);
+      const needsFallback =
+        !trustcorpResult.razao_social ||
+        !trustcorpResult.endereco.logradouro ||
+        !trustcorpResult.endereco.bairro ||
+        !trustcorpResult.endereco.municipio ||
+        !trustcorpResult.endereco.uf ||
+        !trustcorpResult.endereco.cep;
+
+      if (needsFallback) {
+        try {
+          const { data } = await axios.get<BrasilApiCnpjResponse>(`${BRASIL_API}/${clean}`, {
+            timeout: 10000,
+            headers: { Accept: 'application/json' },
+          });
+          const brasilResult = mapBrasilApiResponse(data, false);
+          const result = {
+            ...brasilResult,
+            ...trustcorpResult,
+            razao_social: trustcorpResult.razao_social || brasilResult.razao_social,
+            nome_fantasia: trustcorpResult.nome_fantasia || brasilResult.nome_fantasia,
+            situacao: trustcorpResult.situacao || brasilResult.situacao,
+            ativa: trustcorpResult.ativa || brasilResult.ativa,
+            endereco: {
+              logradouro: trustcorpResult.endereco.logradouro || brasilResult.endereco.logradouro,
+              numero: trustcorpResult.endereco.numero || brasilResult.endereco.numero,
+              complemento: trustcorpResult.endereco.complemento || brasilResult.endereco.complemento,
+              bairro: trustcorpResult.endereco.bairro || brasilResult.endereco.bairro,
+              municipio: trustcorpResult.endereco.municipio || brasilResult.endereco.municipio,
+              uf: trustcorpResult.endereco.uf || brasilResult.endereco.uf,
+              cep: trustcorpResult.endereco.cep || brasilResult.endereco.cep,
+            },
+            contato: {
+              telefone: trustcorpResult.contato.telefone || brasilResult.contato.telefone,
+              email: trustcorpResult.contato.email || brasilResult.contato.email,
+            },
+            cnae_principal: {
+              codigo: trustcorpResult.cnae_principal.codigo || brasilResult.cnae_principal.codigo,
+              descricao: trustcorpResult.cnae_principal.descricao || brasilResult.cnae_principal.descricao,
+            },
+            cnaes_secundarios: trustcorpResult.cnaes_secundarios.length > 0
+              ? trustcorpResult.cnaes_secundarios
+              : brasilResult.cnaes_secundarios,
+            socios: trustcorpResult.socios.length > 0 ? trustcorpResult.socios : brasilResult.socios,
+            capital_social: trustcorpResult.capital_social || brasilResult.capital_social,
+            simples_nacional: trustcorpResult.simples_nacional || brasilResult.simples_nacional,
+            mei: trustcorpResult.mei || brasilResult.mei,
+            fonte: `${trustcorpResult.fonte} + ${brasilResult.fonte}`,
+            cached: false,
+          } satisfies CnpjLookupResult;
+          cnpjCache.set(clean, result);
+          return result;
+        } catch {
+          // Se a fallback falhar, devolve o que TrustCorp conseguiu mapear.
+        }
+      }
+
+      const result = trustcorpResult;
       cnpjCache.set(clean, result);
       return result;
     } catch (err) {
@@ -400,4 +472,3 @@ export class CnpjService {
     cpfCache.del(clean);
   }
 }
-
