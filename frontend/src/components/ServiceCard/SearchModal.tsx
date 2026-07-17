@@ -36,6 +36,11 @@ export const SearchModal: FC<SearchModalProps> = ({ isOpen, onClose }) => {
   }, [query]);
 
   const handleSelect = (service: Service) => {
+    if ((service as Service & { externalUrl?: string }).externalUrl) {
+      window.location.assign((service as Service & { externalUrl?: string }).externalUrl as string);
+      onClose();
+      return;
+    }
     navigate(service.route);
     onClose();
   };

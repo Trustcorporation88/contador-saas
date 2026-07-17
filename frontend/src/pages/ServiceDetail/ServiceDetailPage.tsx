@@ -130,6 +130,11 @@ const ServiceDetailPage: FC = () => {
 
   const goToForm = () => {
     markAsUsed();
+    const externalUrl = (service as typeof service & { externalUrl?: string }).externalUrl;
+    if (externalUrl) {
+      window.location.assign(externalUrl);
+      return;
+    }
     navigate(service.route);
   };
 

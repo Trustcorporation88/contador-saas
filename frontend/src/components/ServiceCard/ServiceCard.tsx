@@ -66,7 +66,7 @@ export const ServiceCard: FC<ServiceCardProps> = ({
   const handleClick = () => {
     if (isDisabled) return;
     if (externalUrl) {
-      window.open(externalUrl, '_blank', 'noopener,noreferrer');
+      window.location.assign(externalUrl);
       return;
     }
     navigate(route);
