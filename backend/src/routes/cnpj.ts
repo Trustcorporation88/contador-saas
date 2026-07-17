@@ -1,9 +1,12 @@
 /**
- * CNPJ Routes
- * Consulta e validação de CNPJ via Receita Federal / BrasilAPI
+ * Documento Routes
+ * Consulta e validação de CNPJ/CPF
  *
- * GET /cnpj/:cnpj          - Busca dados completos na Receita Federal (com cache 24h)
- * GET /cnpj/:cnpj/validate - Valida dígitos localmente (sem API externa)
+ * GET /cnpj/documento/:documento - Busca por CPF/CNPJ (auto)
+ * GET /cnpj/:cnpj                - Busca CNPJ
+ * GET /cnpj/cpf/:cpf             - Busca CPF
+ * GET /cnpj/:cnpj/validate       - Valida CNPJ localmente
+ * GET /cnpj/cpf/:cpf/validate    - Valida CPF localmente
  */
 
 import { Router } from 'express';
@@ -14,7 +17,16 @@ const router = Router();
 
 router.use(authenticateToken);
 
-/** Consulta completa na Receita Federal via BrasilAPI */
+/** Consulta automática por documento (11 = CPF, 14 = CNPJ) */
+router.get('/documento/:documento', CnpjController.lookupDocumento);
+
+/** Consulta de CPF */
+router.get('/cpf/:cpf', CnpjController.lookupCpf);
+
+/** Validação local de CPF */
+router.get('/cpf/:cpf/validate', CnpjController.validateCpf);
+
+/** Consulta de CNPJ */
 router.get('/:cnpj', CnpjController.lookup);
 
 /** Validação local de dígitos verificadores */

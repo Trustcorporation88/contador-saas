@@ -4,6 +4,7 @@ import { Plus, Trash2, FileText, Download, Ban, AlertTriangle, CheckCircle2 } fr
 import { useAuthStore } from '../../store/authStore';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { CompanyService, type DocumentoLookupResult } from '../../services/companyService';
 import {
   NfeService,
   type CreateNfePayload,
@@ -51,6 +52,8 @@ export default function NfeEmissaoPage() {
   const [uf, setUf] = useState('');
   const [cep, setCep] = useState('');
   const [codMunicipio, setCodMunicipio] = useState('');
+  const [cnpjLookupLoading, setCnpjLookupLoading] = useState(false);
+  const [cnpjLookupInfo, setCnpjLookupInfo] = useState('');
 
   // Dados da nota
   const [naturezaOperacao, setNaturezaOperacao] = useState('VENDA DE MERCADORIA');
@@ -192,6 +195,43 @@ export default function NfeEmissaoPage() {
     }
   };
 
+  const preencherDestinatarioPorDocumento = async () => {
+    const documento = destCpfCnpj.replace(/\D/g, '');
+    if (documento.length !== 11 && documento.length !== 14) return;
+
+    setCnpjLookupLoading(true);
+    setCnpjLookupInfo('');
+    try {
+      const data: DocumentoLookupResult = await CompanyService.lookupDocumento(documento);
+
+      if (data.tipo === 'cnpj') {
+        if (data.razao_social) setDestNome(data.razao_social);
+        if (data.contato?.email && !destEmail) setDestEmail(data.contato.email);
+        if (data.endereco?.logradouro) setLogradouro(data.endereco.logradouro);
+        if (data.endereco?.numero) setNumero(data.endereco.numero);
+        if (data.endereco?.bairro) setBairro(data.endereco.bairro);
+        if (data.endereco?.municipio) setMunicipio(data.endereco.municipio);
+        if (data.endereco?.uf) setUf(data.endereco.uf.toUpperCase());
+        if (data.endereco?.cep) setCep(data.endereco.cep);
+        setCnpjLookupInfo('CNPJ consultado: razão social e endereço preenchidos automaticamente.');
+      } else {
+        if (data.nome) setDestNome(data.nome);
+        const end = data.endereco;
+        if (end?.logradouro) setLogradouro(end.logradouro);
+        if (end?.numero) setNumero(end.numero);
+        if (end?.bairro) setBairro(end.bairro);
+        if (end?.municipio) setMunicipio(end.municipio);
+        if (end?.uf) setUf(end.uf.toUpperCase());
+        if (end?.cep) setCep(end.cep);
+        setCnpjLookupInfo('CPF consultado: nome e endereço preenchidos quando disponíveis.');
+      }
+    } catch {
+      setCnpjLookupInfo('Não foi possível consultar esse documento agora. Você pode preencher manualmente.');
+    } finally {
+      setCnpjLookupLoading(false);
+    }
+  };
+
   if (!companyId) {
     return (
       <div className="p-6">
@@ -251,7 +291,20 @@ export default function NfeEmissaoPage() {
       <section className="card space-y-4 p-5">
         <h2 className="text-sm font-bold uppercase tracking-wide text-gray-700">Destinatário</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Input label="CPF / CNPJ" value={destCpfCnpj} onChange={(e) => setDestCpfCnpj(e.target.value)} />
+          <Input
+            label="CPF / CNPJ"
+            value={destCpfCnpj}
+            hint={
+              cnpjLookupLoading
+                ? 'Consultando CNPJ...'
+                : cnpjLookupInfo || 'Ao sair do campo, buscamos CPF/CNPJ automaticamente.'
+            }
+            onChange={(e) => {
+              setDestCpfCnpj(e.target.value);
+              setCnpjLookupInfo('');
+            }}
+            onBlur={preencherDestinatarioPorDocumento}
+          />
           <Input label="Razão social / Nome" value={destNome} onChange={(e) => setDestNome(e.target.value)} />
           <Input label="E-mail" type="email" value={destEmail} onChange={(e) => setDestEmail(e.target.value)} />
           <Input label="Inscrição Estadual" value={destIe} onChange={(e) => setDestIe(e.target.value)} />

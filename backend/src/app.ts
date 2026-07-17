@@ -26,6 +26,8 @@ const fallbackOrigins = [
   'https://procontador.com.br',
   'https://www.procontador.com.br',
   'https://contador-saas-ashy.vercel.app',
+  'https://contador-saas-trustcorporation88s-projects.vercel.app',
+  'https://cnpj.trustcorp.com.br',
   'https://app.ocontador.app',
   'http://localhost:5173',
   'http://localhost:3000',
@@ -39,6 +41,16 @@ const allowedOrigins = Array.from(
       .concat(fallbackOrigins)
   )
 );
+const allowedOriginPatterns: RegExp[] = [
+  /^https:\/\/[a-z0-9-]+\.vercel\.app$/i,
+  /^https:\/\/([a-z0-9-]+\.)?procontador\.com\.br$/i,
+  /^https:\/\/([a-z0-9-]+\.)?trustcorp\.com\.br$/i,
+  /^http:\/\/localhost:(3000|5173)$/i,
+];
+
+function isAllowedOrigin(origin: string): boolean {
+  return allowedOrigins.includes(origin) || allowedOriginPatterns.some((pattern) => pattern.test(origin));
+}
 
 const sanitizeString = (value: string): string => value.replace(/<[^>]*>/g, '').trim();
 
@@ -70,7 +82,13 @@ app.use(securityMiddleware());
 // CORS configuration
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      if (!origin || isAllowedOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('Not allowed by CORS'));
+    },
     credentials: envConfig.corsCredentials,
     optionsSuccessStatus: 200,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
@@ -90,7 +108,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   const origin = req.headers.origin;
   if (!origin) return next();
 
-  if (allowedOrigins.includes(origin)) return next();
+  if (isAllowedOrigin(origin)) return next();
 
   return res.status(403).json({
     error: 'Forbidden',

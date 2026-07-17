@@ -96,12 +96,48 @@ export interface CnpjLookupResult {
   cached: boolean;
 }
 
+export interface CpfLookupResult {
+  cpf: string;
+  nome: string;
+  situacao: string;
+  ativo: boolean;
+  data_nascimento?: string;
+  nome_mae?: string;
+  endereco?: {
+    logradouro?: string;
+    numero?: string;
+    complemento?: string;
+    bairro?: string;
+    municipio?: string;
+    uf?: string;
+    cep?: string;
+  };
+  fonte: string;
+  cached: boolean;
+}
+
+export type DocumentoLookupResult =
+  | ({ tipo: 'cnpj' } & CnpjLookupResult)
+  | ({ tipo: 'cpf' } & CpfLookupResult);
+
 // ─── Service ─────────────────────────────────────────────────────────────────
 
 export const CompanyService = {
   async lookupCNPJ(cnpj: string): Promise<CnpjLookupResult> {
     const clean = cnpj.replace(/\D/g, '');
     const { data } = await api.get<CnpjLookupResult>(`/cnpj/${clean}`);
+    return data;
+  },
+
+  async lookupCPF(cpf: string): Promise<CpfLookupResult> {
+    const clean = cpf.replace(/\D/g, '');
+    const { data } = await api.get<CpfLookupResult>(`/cnpj/cpf/${clean}`);
+    return data;
+  },
+
+  async lookupDocumento(documento: string): Promise<DocumentoLookupResult> {
+    const clean = documento.replace(/\D/g, '');
+    const { data } = await api.get<DocumentoLookupResult>(`/cnpj/documento/${clean}`);
     return data;
   },
 
