@@ -230,8 +230,8 @@ function buildPayload(
     itens: itens.map((it) => ({
       codigo: it.codigo_produto,
       descricao: it.descricao,
-      ncm: it.ncm || '',
-      cfop: it.cfop,
+      ncm: digits(it.ncm).slice(0, 8),
+      cfop: digits(it.cfop).slice(0, 4),
       unidade: it.unidade || 'UN',
       quantidade: Number(it.quantidade),
       valor_unitario: Number(it.valor_unitario),
