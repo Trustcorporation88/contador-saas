@@ -15,7 +15,6 @@ import {
   Settings,
   ChevronDown,
   ChevronRight,
-  TrendingUp,
   ClipboardList,
   HeartPulse,
   Sliders,
@@ -121,12 +120,16 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       >
       {/* Brand */}
       <div className="flex items-center justify-between border-b border-white/10 px-5 py-5">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-400 via-primary-500 to-primary-700 shadow-glow">
-            <TrendingUp className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <p className="text-sm font-extrabold leading-tight tracking-tight text-white">Pro Contador</p>
+        <div className="flex min-w-0 items-center gap-3">
+          <img
+            src="/brand/procontador-logo.png"
+            alt="ProContador"
+            width={44}
+            height={44}
+            className="h-11 w-11 shrink-0 rounded-xl object-contain shadow-glow"
+          />
+          <div className="min-w-0">
+            <p className="text-sm font-extrabold leading-tight tracking-tight text-white">ProContador</p>
             <p className="text-[11px] uppercase tracking-[0.22em] text-white/50">Lei 6.404/76</p>
           </div>
         </div>

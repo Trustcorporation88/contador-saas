@@ -73,6 +73,10 @@ uploads/
 *.xls
 *.csv
 
+# Exceção: brand assets do frontend (Vite public)
+!frontend/public/brand/
+!frontend/public/brand/**
+
 # Exceção: manter arquivos de exemplo
 !plano-contas-padrao.json
 .vercel

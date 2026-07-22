@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { TrendingUp, Eye, EyeOff, Lock, Mail } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { AuthService } from '../../services/authService';
+
+const BRAND_LOGO = '/brand/procontador-logo.png';
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
 
@@ -145,9 +147,13 @@ export default function LoginPage() {
         <div className="hidden rounded-[32px] border border-white/70 bg-[linear-gradient(145deg,rgba(16,101,79,0.95),rgba(7,39,32,0.96))] p-8 text-white shadow-[0_30px_90px_rgba(7,39,32,0.32)] lg:block">
           <div className="flex h-full flex-col justify-between">
             <div>
-              <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-[24px] bg-white/10 backdrop-blur-sm">
-                <TrendingUp className="h-9 w-9 text-white" />
-              </div>
+              <img
+                src={BRAND_LOGO}
+                alt="ProContador"
+                width={220}
+                height={220}
+                className="mb-6 h-auto w-[min(100%,13.5rem)] rounded-2xl object-contain shadow-[0_18px_50px_rgba(0,0,0,0.35)]"
+              />
               <p className="text-xs font-bold uppercase tracking-[0.28em] text-primary-100/80">Plataforma contábil</p>
               <h1 className="mt-3 text-4xl font-extrabold leading-tight tracking-tight text-white">
                 Contabilidade operacional com cara de produto premium.
@@ -176,10 +182,14 @@ export default function LoginPage() {
 
         <div className="w-full max-w-md justify-self-center lg:max-w-none lg:self-center">
           <div className="mb-8 text-center lg:hidden">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-600 shadow-lg shadow-primary-200">
-              <TrendingUp className="h-8 w-8 text-white" />
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900">Contador SaaS</h1>
+            <img
+              src={BRAND_LOGO}
+              alt="ProContador"
+              width={112}
+              height={112}
+              className="mx-auto mb-4 h-28 w-28 rounded-2xl object-contain shadow-lg shadow-primary-200/60"
+            />
+            <h1 className="text-2xl font-bold text-gray-900">ProContador</h1>
             <p className="mt-1 text-sm text-gray-500">Sistema Contábil · Lei 6.404/76</p>
           </div>
 
@@ -188,7 +198,14 @@ export default function LoginPage() {
             /* ── Etapa 1: e-mail + senha ──────────────────────────── */
             <>
               <div className="mb-6 text-center">
-                <p className="shell-title">Acesso seguro</p>
+                <img
+                  src={BRAND_LOGO}
+                  alt="ProContador"
+                  width={72}
+                  height={72}
+                  className="mx-auto mb-3 hidden h-[4.5rem] w-[4.5rem] rounded-xl object-contain lg:block"
+                />
+                <p className="shell-title">Acesso restrito</p>
                 <h2 className="mt-2 text-base font-semibold text-gray-700">
                   Acesso ao Sistema
                 </h2>
@@ -367,7 +384,7 @@ export default function LoginPage() {
           </div>
 
           <p className="mt-6 text-center text-xs text-gray-400">
-            © {new Date().getFullYear()} Contador SaaS · LGPD compliant
+            © {new Date().getFullYear()} ProContador · LGPD compliant
           </p>
         </div>
       </div>
