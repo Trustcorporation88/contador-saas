@@ -288,12 +288,35 @@ export class NfeService {
 
     const numero = await NfeService.proximoNumero(companyId, serie, modelo);
 
-    // Calcular totais
-    const itensCalc = dto.itens.map((item, idx) => ({
-      ...item,
-      numero_item: idx + 1,
-      ...calcularImpostosItem(item),
-    }));
+    // Calcular totais — NCM no banco é VARCHAR(8) só dígitos (ex.: 84212300)
+    const itensCalc = dto.itens.map((item, idx) => {
+      const ncm = String(item.ncm ?? '')
+        .replace(/\D/g, '')
+        .slice(0, 8);
+      const cfop = String(item.cfop ?? '')
+        .replace(/\D/g, '')
+        .slice(0, 4);
+      if (ncm && ncm.length !== 8) {
+        throw Object.assign(
+          new Error(
+            `NCM inválido no item ${idx + 1}: use 8 dígitos (ex.: 84212300). Você enviou "${item.ncm}".`,
+          ),
+          { status: 400 },
+        );
+      }
+      if (!cfop || cfop.length !== 4) {
+        throw Object.assign(
+          new Error(`CFOP inválido no item ${idx + 1}: use 4 dígitos (ex.: 5102).`),
+          { status: 400 },
+        );
+      }
+      const normalized = { ...item, ncm: ncm || undefined, cfop };
+      return {
+        ...normalized,
+        numero_item: idx + 1,
+        ...calcularImpostosItem(normalized),
+      };
+    });
 
     const valor_produtos = itensCalc.reduce((s, i) => s + i.valor_total, 0);
     const valor_icms     = itensCalc.reduce((s, i) => s + i.valor_icms,  0);

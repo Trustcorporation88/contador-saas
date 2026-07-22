@@ -107,8 +107,8 @@ export default function NfeEmissaoPage() {
         itens: itens.map((i) => ({
           codigo_produto: i.codigo_produto,
           descricao: i.descricao,
-          ncm: i.ncm || undefined,
-          cfop: i.cfop,
+          ncm: i.ncm ? i.ncm.replace(/\D/g, '').slice(0, 8) : undefined,
+          cfop: i.cfop.replace(/\D/g, '').slice(0, 4),
           unidade: i.unidade || 'UN',
           quantidade: Number(i.quantidade),
           valor_unitario: Number(i.valor_unitario),
@@ -355,8 +355,28 @@ export default function NfeEmissaoPage() {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <Input label="Código" value={item.codigo_produto} onChange={(e) => updateItem(item._key, { codigo_produto: e.target.value })} />
                 <Input label="Descrição" value={item.descricao} onChange={(e) => updateItem(item._key, { descricao: e.target.value })} />
-                <Input label="NCM" value={item.ncm} onChange={(e) => updateItem(item._key, { ncm: e.target.value })} />
-                <Input label="CFOP" value={item.cfop} onChange={(e) => updateItem(item._key, { cfop: e.target.value })} />
+                <Input
+                  label="NCM (8 dígitos)"
+                  placeholder="84212300"
+                  maxLength={10}
+                  value={item.ncm}
+                  onChange={(e) =>
+                    updateItem(item._key, {
+                      ncm: e.target.value.replace(/\D/g, '').slice(0, 8),
+                    })
+                  }
+                />
+                <Input
+                  label="CFOP"
+                  placeholder="5102"
+                  maxLength={4}
+                  value={item.cfop}
+                  onChange={(e) =>
+                    updateItem(item._key, {
+                      cfop: e.target.value.replace(/\D/g, '').slice(0, 4),
+                    })
+                  }
+                />
                 <Input label="Unidade" value={item.unidade} onChange={(e) => updateItem(item._key, { unidade: e.target.value })} />
                 <Input label="Quantidade" type="number" step="0.0001" value={item.quantidade} onChange={(e) => updateItem(item._key, { quantidade: Number(e.target.value) })} />
                 <Input label="Valor unitário" type="number" step="0.01" value={item.valor_unitario} onChange={(e) => updateItem(item._key, { valor_unitario: Number(e.target.value) })} />
