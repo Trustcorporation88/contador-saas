@@ -262,9 +262,13 @@ export class FiscalCaptureService {
     stderr?: string;
   }> {
     const automationDir = getAutomationDir();
-    const scriptPath = path.join(automationDir, 'scripts', 'reprocess_captures.py');
+    const scriptCandidates = [
+      path.join(automationDir, 'maintenance', 'reprocess_captures.py'),
+      path.join(automationDir, 'scripts', 'reprocess_captures.py'),
+    ];
+    const scriptPath = scriptCandidates.find((candidate) => fs.existsSync(candidate));
 
-    if (!(await fs.pathExists(scriptPath))) {
+    if (!scriptPath) {
       return {
         success: false,
         message:

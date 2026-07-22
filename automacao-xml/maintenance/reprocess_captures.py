@@ -5,8 +5,8 @@ ON CONFLICT DO NOTHING — rodar o sync novamente nao corrige capturas antigas
 que foram gravadas antes da correcao do parser.
 
 Uso:
-    python scripts/reprocess_captures.py            # todas as empresas
-    python scripts/reprocess_captures.py <company>  # apenas uma empresa
+    python maintenance/reprocess_captures.py            # todas as empresas
+    python maintenance/reprocess_captures.py <company>   # apenas uma empresa
 """
 from __future__ import annotations
 

@@ -12,6 +12,7 @@ automacao-xml/
 ├── sync_nfe.py               # NF-e produto — SEFAZ / Distribuição DFe (NSU)
 ├── sync_nfse.py              # NFS-e serviço — Portal Nacional
 ├── scheduler.py              # Orquestrador multi-empresa
+├── maintenance/              # Scripts de manutenção e reprocessamento
 └── requirements.txt
 ```
 
