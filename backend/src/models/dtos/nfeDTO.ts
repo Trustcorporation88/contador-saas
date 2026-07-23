@@ -64,6 +64,8 @@ export interface NfeDestinatario {
 
 export interface CreateNfeDTO {
   serie?:                number;   // padrão: 1
+  numero?:               number;   // se omitido, usa sequência automática
+  confirmar_numero_manual?: boolean; // obrigatório quando numero é informado
   modelo?:               NfeModelo; // padrão: 55
   natureza_operacao?:    string;   // padrão: "VENDA"
   destinatario:          NfeDestinatario;

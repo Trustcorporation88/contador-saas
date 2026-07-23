@@ -58,6 +58,12 @@ export default function NfeEmissaoPage() {
   // Dados da nota
   const [naturezaOperacao, setNaturezaOperacao] = useState('VENDA DE MERCADORIA');
   const [serie, setSerie] = useState(1);
+  const [numeroManual, setNumeroManual] = useState<string>('');
+  const [usarNumeroManual, setUsarNumeroManual] = useState(false);
+  const [confirmarNumeroManual, setConfirmarNumeroManual] = useState(false);
+  const [checkNumeracao, setCheckNumeracao] = useState<string>('');
+  const [checkOk, setCheckOk] = useState(false);
+  const [checkLoading, setCheckLoading] = useState(false);
   const [formaPagamento, setFormaPagamento] = useState('01');
   const [frete, setFrete] = useState(0);
   const [desconto, setDesconto] = useState(0);
@@ -117,6 +123,21 @@ export default function NfeEmissaoPage() {
           aliquota_cofins: Number(i.aliquota_cofins) || 0,
         })),
       };
+
+      if (usarNumeroManual) {
+        const n = Number(numeroManual);
+        if (!Number.isInteger(n) || n < 1) {
+          throw new Error('Informe um número de NF-e válido.');
+        }
+        if (!confirmarNumeroManual || !checkOk) {
+          throw new Error(
+            'Valide o número/série no SEFAZ e confirme o checkbox antes de emitir.',
+          );
+        }
+        payload.numero = n;
+        payload.confirmar_numero_manual = true;
+      }
+
       const criada = await NfeService.create(companyId, payload);
       return NfeService.authorize(companyId, criada.id);
     },
@@ -397,7 +418,45 @@ export default function NfeEmissaoPage() {
         <h2 className="text-sm font-bold uppercase tracking-wide text-gray-700">Dados da nota</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Input label="Natureza da operação" value={naturezaOperacao} onChange={(e) => setNaturezaOperacao(e.target.value)} />
-          <Input label="Série" type="number" value={serie} onChange={(e) => setSerie(Number(e.target.value))} />
+          <Input
+            label="Série"
+            type="number"
+            value={serie}
+            onChange={(e) => {
+              setSerie(Number(e.target.value));
+              setCheckOk(false);
+              setConfirmarNumeroManual(false);
+              setCheckNumeracao('');
+            }}
+          />
+          <div className="w-full space-y-2">
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={usarNumeroManual}
+                onChange={(e) => {
+                  setUsarNumeroManual(e.target.checked);
+                  setCheckOk(false);
+                  setConfirmarNumeroManual(false);
+                  setCheckNumeracao('');
+                }}
+              />
+              Informar número manualmente
+            </label>
+            <Input
+              label="Número da NF-e"
+              type="number"
+              disabled={!usarNumeroManual}
+              value={numeroManual}
+              onChange={(e) => {
+                setNumeroManual(e.target.value);
+                setCheckOk(false);
+                setConfirmarNumeroManual(false);
+                setCheckNumeracao('');
+              }}
+              hint={usarNumeroManual ? 'Ex.: 189 após a 188' : 'Automático se desmarcado'}
+            />
+          </div>
           <div className="w-full">
             <label className="input-label">Forma de pagamento</label>
             <select className="input-field" value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)}>
@@ -412,6 +471,62 @@ export default function NfeEmissaoPage() {
           <Input label="Frete (R$)" type="number" step="0.01" value={frete} onChange={(e) => setFrete(Number(e.target.value))} />
           <Input label="Desconto (R$)" type="number" step="0.01" value={desconto} onChange={(e) => setDesconto(Number(e.target.value))} />
         </div>
+
+        {usarNumeroManual && (
+          <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/80 p-4">
+            <p className="text-sm text-amber-900">
+              Antes de emitir, valide número/série na base e na SEFAZ. A confirmação definitiva de
+              duplicidade também ocorre na autorização (cStat 539).
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                loading={checkLoading}
+                onClick={async () => {
+                  setCheckLoading(true);
+                  setCheckNumeracao('');
+                  setCheckOk(false);
+                  setConfirmarNumeroManual(false);
+                  try {
+                    const n = Number(numeroManual);
+                    const result = await NfeService.verificarNumeracao(companyId, {
+                      serie: Number(serie) || 1,
+                      numero: n,
+                    });
+                    setCheckNumeracao(result.mensagem);
+                    setCheckOk(result.disponivel);
+                  } catch (e) {
+                    setCheckOk(false);
+                    setCheckNumeracao(e instanceof Error ? e.message : 'Falha na verificação');
+                  } finally {
+                    setCheckLoading(false);
+                  }
+                }}
+              >
+                Verificar no SEFAZ
+              </Button>
+            </div>
+            {checkNumeracao && (
+              <p className={`text-sm ${checkOk ? 'text-emerald-800' : 'text-red-700'}`}>
+                {checkNumeracao}
+              </p>
+            )}
+            <label className="flex items-start gap-2 text-sm text-gray-800">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={confirmarNumeroManual}
+                disabled={!checkOk}
+                onChange={(e) => setConfirmarNumeroManual(e.target.checked)}
+              />
+              <span>
+                Confirmo que o número <strong>{numeroManual}</strong> série{' '}
+                <strong>{serie}</strong> está correto e foi validado (livre na base / SEFAZ online).
+              </span>
+            </label>
+          </div>
+        )}
         <div className="w-full">
           <label className="input-label">Informações complementares</label>
           <textarea

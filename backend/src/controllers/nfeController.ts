@@ -24,6 +24,34 @@ export class NfeController {
     }
   }
 
+  /** POST /companies/:companyId/nfe/verificar-numeracao — Valida número/série (local + SEFAZ) */
+  static async verificarNumeracao(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<Response | void> {
+    try {
+      const { companyId } = req.params;
+      const serie = Number(req.body?.serie ?? 1);
+      const numero = Number(req.body?.numero);
+      const modelo = req.body?.modelo != null ? Number(req.body.modelo) : 55;
+      if (!Number.isFinite(numero)) {
+        return res.status(400).json({ error: 'Informe o número da NF-e.' });
+      }
+      const result = await NfeService.verificarNumeracao(companyId, {
+        serie,
+        numero,
+        modelo,
+      });
+      return res.status(200).json(result);
+    } catch (err: unknown) {
+      const e = err as Error & { status?: number };
+      if (e.status && e.status < 500) return res.status(e.status).json({ error: e.message });
+      logger.error('NF-e verificar numeração error', { error: (err as Error).message });
+      return next(err);
+    }
+  }
+
   /** GET /companies/:companyId/nfe — Listar NF-e */
   static async list(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
     try {

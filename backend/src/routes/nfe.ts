@@ -16,6 +16,7 @@ import { NfeController } from '../controllers/nfeController';
 const router = Router({ mergeParams: true });
 
 router.post  ('/',                 NfeController.create);
+router.post  ('/verificar-numeracao', NfeController.verificarNumeracao);
 router.get   ('/',                 NfeController.list);
 router.get   ('/:id',             NfeController.get);
 router.post  ('/:id/autorizar',   NfeController.authorize);

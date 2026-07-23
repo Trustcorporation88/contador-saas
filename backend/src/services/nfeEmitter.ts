@@ -365,4 +365,143 @@ export async function emitirNfeReal(
   }
 }
 
+export type NumeracaoCheckResult = {
+  ok: boolean;
+  sefaz_online: boolean;
+  ja_emitida_sefaz: boolean | null;
+  disponivel?: boolean | null;
+  cStat: string;
+  motivo: string;
+  fonte: string;
+  serie: number;
+  numero: number;
+  chave?: string;
+};
+
+/** Consulta status SEFAZ (+ protocolo por chave, se houver) para número/série. */
+export async function verificarNumeracaoSefaz(opts: {
+  companyId: string;
+  uf: string;
+  serie: number;
+  numero: number;
+  modelo?: number;
+  chave?: string | null;
+}): Promise<NumeracaoCheckResult> {
+  const db = await getDatabase();
+  const ambiente = getAmbiente();
+  const modelo = opts.modelo ?? 55;
+
+  const cert = await db('fiscal_certificates')
+    .where({ company_id: opts.companyId, active: true })
+    .first();
+  if (!cert) {
+    throw Object.assign(
+      new Error('Certificado digital A1 não configurado. Cadastre o .pfx em Captura Fiscal.'),
+      { status: 422 },
+    );
+  }
+
+  const certSenha = decryptSecret(cert.password_encrypted);
+  const certPath = await materializePfx(
+    opts.companyId,
+    String(cert.pfx_path || ''),
+    cert.pfx_data as string | null | undefined,
+  );
+
+  const payload = {
+    ambiente,
+    cert_path: certPath,
+    cert_senha: certSenha,
+    uf: opts.uf,
+    modelo,
+    serie: opts.serie,
+    numero: opts.numero,
+    chave: opts.chave || undefined,
+  };
+
+  const payloadFile = path.join(os.tmpdir(), `nfe-check-${randomUUID()}.json`);
+  await fs.writeJson(payloadFile, payload, { spaces: 0 });
+
+  try {
+    const automationDir = getAutomationDir();
+    const scriptPath = path.join(automationDir, 'verificar_numeracao_nfe.py');
+    if (!(await fs.pathExists(scriptPath))) {
+      throw Object.assign(
+        new Error('Script verificar_numeracao_nfe.py não encontrado no servidor.'),
+        { status: 500 },
+      );
+    }
+
+    const result = await new Promise<NumeracaoCheckResult>((resolve) => {
+      const child = spawn(getPythonBin(), [scriptPath, payloadFile], {
+        cwd: automationDir,
+        env: process.env,
+      });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (d) => {
+        stdout += d.toString();
+      });
+      child.stderr.on('data', (d) => {
+        stderr += d.toString();
+      });
+      child.on('close', () => {
+        const line = stdout
+          .split('\n')
+          .map((l) => l.trim())
+          .find((l) => l.startsWith('NFE_CHECK:'));
+        if (!line) {
+          resolve({
+            ok: false,
+            sefaz_online: false,
+            ja_emitida_sefaz: null,
+            cStat: '',
+            motivo: 'Motor de verificação não retornou resultado. ' + (stderr.slice(-400) || ''),
+            fonte: 'erro',
+            serie: opts.serie,
+            numero: opts.numero,
+          });
+          return;
+        }
+        try {
+          const parsed = JSON.parse(line.replace('NFE_CHECK:', '').trim());
+          resolve({
+            ok: Boolean(parsed.ok),
+            sefaz_online: Boolean(parsed.sefaz_online),
+            ja_emitida_sefaz:
+              parsed.ja_emitida_sefaz === null || parsed.ja_emitida_sefaz === undefined
+                ? null
+                : Boolean(parsed.ja_emitida_sefaz),
+            disponivel:
+              parsed.disponivel === null || parsed.disponivel === undefined
+                ? null
+                : Boolean(parsed.disponivel),
+            cStat: parsed.cStat || '',
+            motivo: parsed.motivo || '',
+            fonte: parsed.fonte || 'sefaz',
+            serie: Number(parsed.serie ?? opts.serie),
+            numero: Number(parsed.numero ?? opts.numero),
+            chave: parsed.chave,
+          });
+        } catch (e) {
+          resolve({
+            ok: false,
+            sefaz_online: false,
+            ja_emitida_sefaz: null,
+            cStat: '',
+            motivo: 'Resposta inválida do verificador: ' + (e as Error).message,
+            fonte: 'erro',
+            serie: opts.serie,
+            numero: opts.numero,
+          });
+        }
+      });
+    });
+
+    return result;
+  } finally {
+    await fs.remove(payloadFile).catch(() => undefined);
+  }
+}
+
 export { getAmbiente };

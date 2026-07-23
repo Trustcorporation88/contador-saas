@@ -23,7 +23,7 @@ import {
   NfeListFilters,
   SefazResponse,
 } from '../models/dtos/nfeDTO';
-import { emitirNfeReal, getEmissionMode, getAmbiente } from './nfeEmitter';
+import { emitirNfeReal, getEmissionMode, getAmbiente, verificarNumeracaoSefaz } from './nfeEmitter';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -273,6 +273,116 @@ export class NfeService {
     return next;
   }
 
+  /** Atualiza contador local para não regredir após número manual. */
+  private static async sincronizarNumeracao(
+    companyId: string,
+    serie: number,
+    modelo: number,
+    numeroUsado: number,
+  ): Promise<void> {
+    const db = await getDatabase();
+    const row = await db('nfe_numeracao')
+      .where({ company_id: companyId, serie, modelo })
+      .first();
+    if (!row) {
+      await db('nfe_numeracao').insert({
+        company_id: companyId,
+        serie,
+        modelo,
+        ultimo_numero: numeroUsado,
+      });
+      return;
+    }
+    if (Number(row.ultimo_numero) < numeroUsado) {
+      await db('nfe_numeracao')
+        .where({ company_id: companyId, serie, modelo })
+        .update({ ultimo_numero: numeroUsado });
+    }
+  }
+
+  /**
+   * Valida número/série: base local + SEFAZ (status; consulta por chave se existir).
+   */
+  static async verificarNumeracao(
+    companyId: string,
+    opts: { serie: number; numero: number; modelo?: number },
+  ) {
+    const db = await getDatabase();
+    const serie = opts.serie;
+    const numero = opts.numero;
+    const modelo = opts.modelo ?? 55;
+
+    if (!Number.isInteger(serie) || serie < 1 || serie > 999) {
+      throw Object.assign(new Error('Série inválida (1–999).'), { status: 400 });
+    }
+    if (!Number.isInteger(numero) || numero < 1) {
+      throw Object.assign(new Error('Número da NF-e inválido.'), { status: 400 });
+    }
+
+    const company = await db('companies').where({ id: companyId }).first();
+    if (!company) throw Object.assign(new Error('Empresa não encontrada'), { status: 404 });
+
+    const local = await db('nfe')
+      .where({ company_id: companyId, serie, modelo, numero })
+      .first();
+
+    let chaveLocal: string | null = null;
+    let jaEmitidaLocal = false;
+    if (local) {
+      chaveLocal = local.chave_acesso || null;
+      jaEmitidaLocal = ['AUTORIZADA', 'CANCELADA', 'DENEGADA', 'PENDENTE'].includes(
+        String(local.status),
+      );
+    }
+
+    const sefaz = await verificarNumeracaoSefaz({
+      companyId,
+      uf: String(company.state || ''),
+      serie,
+      numero,
+      modelo,
+      chave: chaveLocal,
+    });
+
+    const jaEmitidaSefaz = sefaz.ja_emitida_sefaz === true;
+    const disponivel =
+      !jaEmitidaLocal &&
+      !jaEmitidaSefaz &&
+      sefaz.sefaz_online &&
+      (sefaz.disponivel === true || sefaz.disponivel === null || sefaz.disponivel === undefined);
+
+    return {
+      disponivel,
+      serie,
+      numero,
+      modelo,
+      local: local
+        ? {
+            id: local.id,
+            status: local.status,
+            chave_acesso: local.chave_acesso,
+            data_emissao: local.data_emissao,
+          }
+        : null,
+      sefaz: {
+        online: sefaz.sefaz_online,
+        ja_emitida: sefaz.ja_emitida_sefaz,
+        cStat: sefaz.cStat,
+        motivo: sefaz.motivo,
+        fonte: sefaz.fonte,
+      },
+      mensagem: jaEmitidaLocal
+        ? `Número ${numero} série ${serie} já existe no ProContador (status ${local.status}).`
+        : jaEmitidaSefaz
+          ? `SEFAZ confirma NF-e já emitida para número ${numero} série ${serie}.`
+          : !sefaz.sefaz_online
+            ? `SEFAZ offline: ${sefaz.motivo}`
+            : sefaz.ja_emitida_sefaz === null
+              ? `Número ${numero}/${serie} livre na base local. ${sefaz.motivo}`
+              : `Número ${numero}/${serie} disponível.`,
+    };
+  }
+
   /**
    * Criar NF-e (status RASCUNHO)
    * Gera XML e chave de acesso mas NÃO envia ao SEFAZ
@@ -286,7 +396,29 @@ export class NfeService {
     const company = await db('companies').where({ id: companyId }).first();
     if (!company) throw Object.assign(new Error('Empresa não encontrada'), { status: 404 });
 
-    const numero = await NfeService.proximoNumero(companyId, serie, modelo);
+    let numero: number;
+    if (dto.numero != null) {
+      if (!dto.confirmar_numero_manual) {
+        throw Object.assign(
+          new Error(
+            'Para informar o número manualmente, confirme o campo confirmar_numero_manual=true após validar no SEFAZ.',
+          ),
+          { status: 400 },
+        );
+      }
+      const check = await NfeService.verificarNumeracao(companyId, {
+        serie,
+        numero: Number(dto.numero),
+        modelo,
+      });
+      if (!check.disponivel) {
+        throw Object.assign(new Error(check.mensagem), { status: 409 });
+      }
+      numero = Number(dto.numero);
+      await NfeService.sincronizarNumeracao(companyId, serie, modelo, numero);
+    } else {
+      numero = await NfeService.proximoNumero(companyId, serie, modelo);
+    }
 
     // Calcular totais — NCM no banco é VARCHAR(8) só dígitos (ex.: 84212300)
     const itensCalc = dto.itens.map((item, idx) => {
@@ -437,8 +569,15 @@ export class NfeService {
           status_motivo: result.motivo,
           ambiente:      result.ambiente,
         });
+        const dup =
+          result.cStat === '539' ||
+          /duplicidade/i.test(result.motivo || '');
         throw Object.assign(
-          new Error(`SEFAZ rejeitou a NF-e (${result.cStat || 's/ código'}): ${result.motivo}`),
+          new Error(
+            dup
+              ? `Número/série já emitido na SEFAZ (cStat ${result.cStat}): ${result.motivo}. Escolha o próximo número livre.`
+              : `SEFAZ rejeitou a NF-e (${result.cStat || 's/ código'}): ${result.motivo}`,
+          ),
           { status: 422 },
         );
       }

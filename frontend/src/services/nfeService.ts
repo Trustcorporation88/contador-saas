@@ -35,6 +35,8 @@ export interface NfeDestinatarioPayload {
 
 export interface CreateNfePayload {
   serie?: number;
+  numero?: number;
+  confirmar_numero_manual?: boolean;
   modelo?: number;
   natureza_operacao?: string;
   destinatario: NfeDestinatarioPayload;
@@ -43,6 +45,22 @@ export interface CreateNfePayload {
   valor_desconto?: number;
   forma_pagamento?: string;
   informacoes_adicionais?: string;
+}
+
+export interface NumeracaoCheckResult {
+  disponivel: boolean;
+  serie: number;
+  numero: number;
+  modelo: number;
+  mensagem: string;
+  local: { id: string; status: string; chave_acesso?: string } | null;
+  sefaz: {
+    online: boolean;
+    ja_emitida: boolean | null;
+    cStat: string;
+    motivo: string;
+    fonte: string;
+  };
 }
 
 export interface NfeRecord {
@@ -104,6 +122,17 @@ export class NfeService {
 
   static async create(companyId: string, payload: CreateNfePayload): Promise<NfeRecord> {
     const { data } = await api.post<NfeRecord>(this.base(companyId), payload);
+    return data;
+  }
+
+  static async verificarNumeracao(
+    companyId: string,
+    body: { serie: number; numero: number; modelo?: number },
+  ): Promise<NumeracaoCheckResult> {
+    const { data } = await api.post<NumeracaoCheckResult>(
+      `${this.base(companyId)}/verificar-numeracao`,
+      body,
+    );
     return data;
   }
 
