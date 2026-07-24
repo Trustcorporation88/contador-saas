@@ -18,6 +18,7 @@ import { getDatabase } from '../config/database';
 import { envConfig } from '../config/env';
 import { logger } from '../middleware/requestLogger';
 import { decryptSecret } from '../utils/certEncryption';
+import { materializePfxResilient } from '../utils/pfxMaterialize';
 
 export interface NfeEmissionResult {
   ok: boolean;
@@ -71,11 +72,15 @@ function digits(value: unknown): string {
   return String(value ?? '').replace(/\D/g, '');
 }
 
-/** CRT a partir do regime tributário da empresa. */
+/**
+ * CRT a partir do regime tributário da empresa.
+ * Regime (tax_regime) tem prioridade sobre `crt` solto no cadastro —
+ * evita emitir como Regime Normal (3) quando a empresa é Simples/MEI.
+ */
 function crtFromRegime(taxRegime: string | null | undefined, explicit?: string | null): string {
-  if (explicit) return String(explicit);
   const r = String(taxRegime || '').toLowerCase();
-  if (r === 'simples_nacional' || r === 'simples') return '1';
+  if (r === 'simples_nacional' || r === 'simples' || r === 'mei') return '1';
+  if (explicit === '1' || explicit === '2' || explicit === '3') return String(explicit);
   return '3'; // Lucro Real / Presumido → Regime Normal
 }
 
@@ -84,19 +89,12 @@ async function materializePfx(
   pfxPath: string,
   pfxData: string | null | undefined,
 ): Promise<string> {
-  if (pfxData) {
-    const target = path.join(getCertsDir(), `${companyId}.pfx`);
-    await fs.ensureDir(path.dirname(target));
-    await fs.writeFile(target, Buffer.from(pfxData, 'base64'));
-    return target;
-  }
-  if (pfxPath && (await fs.pathExists(pfxPath))) return pfxPath;
-  const fallback = path.join(os.tmpdir(), 'fiscal-certs', `${companyId}.pfx`);
-  if (await fs.pathExists(fallback)) return fallback;
-  throw Object.assign(
-    new Error('Certificado digital A1 não encontrado. Cadastre o .pfx da empresa em Captura Fiscal.'),
-    { status: 422 },
-  );
+  return materializePfxResilient({
+    companyId,
+    preferredPath: path.join(getCertsDir(), `${companyId}.pfx`),
+    pfxData,
+    existingPath: pfxPath,
+  });
 }
 
 interface CompanyRow {
@@ -335,6 +333,18 @@ export async function emitirNfeReal(
   if (!cert) {
     throw Object.assign(
       new Error('Certificado digital A1 não configurado. Cadastre o .pfx em Captura Fiscal.'),
+      { status: 422 },
+    );
+  }
+
+  const companyCnpj = digits(company.cnpj);
+  const certCnpj = digits(cert.cnpj);
+  if (companyCnpj && certCnpj && companyCnpj !== certCnpj) {
+    throw Object.assign(
+      new Error(
+        `Certificado A1 cadastrado para o CNPJ ${certCnpj}, mas o emitente é ${companyCnpj}. ` +
+          'Cadastre o .pfx correto da empresa em Captura Fiscal.',
+      ),
       { status: 422 },
     );
   }

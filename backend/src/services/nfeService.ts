@@ -559,7 +559,21 @@ export class NfeService {
       if (!company) throw Object.assign(new Error('Empresa não encontrada'), { status: 404 });
       const itens = await db('nfe_itens').where({ nfe_id: id }).orderBy('numero_item');
 
-      const result = await emitirNfeReal(company, nfe, itens);
+      let result;
+      try {
+        result = await emitirNfeReal(company, nfe, itens);
+      } catch (err: unknown) {
+        const e = err as Error & { status?: number };
+        // Erros pré-SEFAZ (certificado, cadastro, permissão): grava motivo e mantém RASCUNHO
+        if (e.status && e.status < 500) {
+          await db('nfe').where({ id, company_id: companyId }).update({
+            status_motivo: e.message,
+            ambiente: getAmbiente(),
+            updated_at: now,
+          });
+        }
+        throw err;
+      }
 
       if (!result.ok) {
         // Falha de autorização: registra motivo e mantém como PENDENTE
