@@ -6,11 +6,12 @@
 import { Router } from 'express';
 import { EFDController } from '../controllers/efdController';
 import { authenticateToken, authorize } from '../middleware/auth';
+import { validateTenantAccess } from '../middleware/multiTenant';
 
 const router = Router({ mergeParams: true });
 
-// Apply authentication middleware
-router.use(authenticateToken);
+// Apply authentication + tenant isolation middleware
+router.use(authenticateToken, validateTenantAccess);
 
 /**
  * GET /companies/:companyId/efd/months

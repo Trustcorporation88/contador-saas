@@ -200,26 +200,19 @@ export class CompanyService {
    * @returns Promise<CompanyResponse>
    * @throws Error se empresa não encontrada ou acesso negado
    */
-  static async getById(id: string, companyId?: string, userId?: string): Promise<CompanyResponse> {
+  static async getById(id: string, companyId?: string, userId?: string, role?: string): Promise<CompanyResponse> {
     const db = await getDatabase();
 
-    let query = db('companies').where('id', id).where('is_active', true);
-
-    // Se há companyId de tenant, validar que é a mesma
-    if (companyId && companyId !== id) {
-      query = query.orWhere('id', companyId);
-    }
-
-    const company = (await query.first()) as any;
+    const company = (await db('companies').where('id', id).where('is_active', true).first()) as any;
 
     if (!company) {
       throw new Error('Company not found');
     }
 
-    // Se há userId, validar acesso
-    if (userId) {
+    // Se há userId, validar acesso (admin acessa qualquer empresa)
+    if (userId && role !== 'admin') {
       const hasAccess = await TenantService.validateUserAccess(userId, id);
-      if (!hasAccess) {
+      if (!hasAccess.isValid) {
         throw new Error('Access denied');
       }
     }
@@ -243,6 +236,7 @@ export class CompanyService {
     data: UpdateCompanyDTO,
     userId?: string,
     companyId?: string,
+    role?: string,
   ): Promise<CompanyResponse> {
     const db = await getDatabase();
 
@@ -264,6 +258,14 @@ export class CompanyService {
 
     if (!existingCompany.is_active) {
       throw new Error('Cannot update inactive company');
+    }
+
+    // Validar acesso (admin atualiza qualquer empresa)
+    if (userId && role !== 'admin') {
+      const hasAccess = await TenantService.validateUserAccess(userId, id);
+      if (!hasAccess.isValid) {
+        throw new Error('Access denied');
+      }
     }
 
     // Preparar dados de atualização

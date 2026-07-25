@@ -76,7 +76,15 @@ export class EFDBuilderService {
       // 5. Calculate totals
       const totals = this.calculateTotals(records);
 
-      // 6. Update generation with records and totals
+      // 6. Update generation with records, totals and metadata
+      const metadata = {
+        cnpj: String(company.cnpj || '').replace(/[^\d]/g, ''),
+        company_name: company.legal_name || company.trade_name || '',
+        period_start: new Date(data.year, data.month - 1, 1).toISOString().slice(0, 10),
+        period_end: new Date(data.year, data.month, 0).toISOString().slice(0, 10),
+        version: this.EFD_VERSION,
+      };
+
       await db('efd_generations')
         .where({ id: generationId })
         .update({
@@ -87,6 +95,7 @@ export class EFDBuilderService {
           debit_credit_balanced: Math.abs(totals.debit - totals.credit) < 0.01,
           generated_at: new Date(),
           status: EFDStatus.GENERATED,
+          metadata: JSON.stringify(metadata),
         });
 
       // 7. Generate RFB format file
@@ -95,10 +104,22 @@ export class EFDBuilderService {
       // 8. Update with file path
       await db('efd_generations').where({ id: generationId }).update({ file_path: filePath });
 
-      // 9. Log successful generation
+      // 9. Validar antes de disponibilizar para download — não libera arquivo
+      // desbalanceado ou com erros de layout sem que o contador seja avisado.
+      const validation = await this.validateEFD(generationId, companyId);
+      if (!validation.is_valid) {
+        await db('efd_generations').where({ id: generationId }).update({
+          status: EFDStatus.VALIDATION_FAILED,
+          validation_errors: JSON.stringify(validation.errors),
+        });
+        await this.logAudit(generationId, 'generate_validation_failed', 'failed');
+        return await this.getGenerationById(generationId, companyId);
+      }
+
+      // 10. Log successful generation
       await this.logAudit(generationId, 'generate_complete', 'success');
 
-      return await this.getGenerationById(generationId);
+      return await this.getGenerationById(generationId, companyId);
     } catch (error) {
       // Update status to failed
       await db('efd_generations').where({ id: generationId }).update({
@@ -190,8 +211,8 @@ export class EFDBuilderService {
       fields: {
         sequence,
         record_type: 'E100',
-        company_name: company.company_name.substring(0, 100),
-        cnpj: company.cnpj.replace(/[^\d]/g, ''),
+        company_name: String(company.legal_name || company.trade_name || '').substring(0, 100),
+        cnpj: String(company.cnpj || '').replace(/[^\d]/g, ''),
         fiscal_period_start: this.formatDate(periodStart, 'DDMMYYYY'),
         fiscal_period_end: this.formatDate(periodEnd, 'DDMMYYYY'),
         layout_version: this.EFD_VERSION,
@@ -223,11 +244,12 @@ export class EFDBuilderService {
         .select();
 
       for (const item of items) {
+        const seq = sequence++;
         records.push({
           type: 'E110',
-          sequence: sequence++,
+          sequence: seq,
           fields: {
-            sequence,
+            sequence: seq,
             record_type: 'E110',
             product_code: item.id,
             product_description: item.name.substring(0, 100),
@@ -242,7 +264,7 @@ export class EFDBuilderService {
       return { records, nextSequence: sequence };
     } catch (error) {
       console.error('Error building E110 inventory:', error);
-      return { records, nextSequence: sequence };
+      throw error;
     }
   }
 
@@ -298,11 +320,12 @@ export class EFDBuilderService {
 
         // Create E200 records (one per debit/credit)
         if ((entry.debit_value || 0) > 0) {
+          const seq = sequence++;
           records.push({
             type: 'E200',
-            sequence: sequence++,
+            sequence: seq,
             fields: {
-              sequence,
+              sequence: seq,
               record_type: 'E200',
               entry_date: this.formatDate(new Date(entry.entry_date), 'DD/MM/YYYY'),
               account_code: accountFrom?.account_code || '',
@@ -317,11 +340,12 @@ export class EFDBuilderService {
         }
 
         if ((entry.credit_value || 0) > 0) {
+          const seq = sequence++;
           records.push({
             type: 'E200',
-            sequence: sequence++,
+            sequence: seq,
             fields: {
-              sequence,
+              sequence: seq,
               record_type: 'E200',
               entry_date: this.formatDate(new Date(entry.entry_date), 'DD/MM/YYYY'),
               account_code: accountTo?.account_code || '',
@@ -339,7 +363,7 @@ export class EFDBuilderService {
       return { records, nextSequence: sequence };
     } catch (error) {
       console.error('Error building E200 operations:', error);
-      return { records, nextSequence: sequence };
+      throw error;
     }
   }
 
@@ -429,6 +453,9 @@ export class EFDBuilderService {
       'fiscal_period_start',
       'fiscal_period_end',
       'layout_version',
+      'generated_date',
+      'generated_time',
+      'version',
       'account_code',
       'account_name',
       'entry_date',
@@ -436,12 +463,18 @@ export class EFDBuilderService {
       'debit_value',
       'credit_value',
       'document_number',
+      'nature_code',
+      'product_code',
       'product_description',
+      'unit_measure',
       'opening_balance',
       'unit_value',
+      'total_value',
       'total_records',
       'total_debit',
       'total_credit',
+      'debit_credit_diff',
+      'debit_credit_balanced',
       'hash',
     ];
 
@@ -462,14 +495,17 @@ export class EFDBuilderService {
    * - Dates within period
    * - Required fields present
    */
-  static async validateEFD(generationId: string): Promise<EFDValidationResult> {
+  static async validateEFD(generationId: string, companyId?: string): Promise<EFDValidationResult> {
     const db = await getDatabase();
     const errors: EFDValidationError[] = [];
     const warnings: string[] = [];
 
     try {
       // Get generation
-      const generation = await db('efd_generations').where({ id: generationId }).first();
+      const genQuery = companyId
+        ? { id: generationId, company_id: companyId }
+        : { id: generationId };
+      const generation = await db('efd_generations').where(genQuery).first();
       if (!generation) {
         throw new Error('Generation not found');
       }
@@ -599,9 +635,12 @@ export class EFDBuilderService {
   /**
    * Get generation by ID with all details
    */
-  static async getGenerationById(generationId: string): Promise<EFDGenerationResponse> {
+  static async getGenerationById(generationId: string, companyId?: string): Promise<EFDGenerationResponse> {
     const db = await getDatabase();
-    const generation = await db('efd_generations').where({ id: generationId }).first();
+    const query = companyId
+      ? { id: generationId, company_id: companyId }
+      : { id: generationId };
+    const generation = await db('efd_generations').where(query).first();
 
     if (!generation) {
       throw new Error('Generation not found');
@@ -620,6 +659,8 @@ export class EFDBuilderService {
       record_count: generation.record_count || 0,
       total_debit: generation.total_debit || 0,
       total_credit: generation.total_credit || 0,
+      debit_credit_diff: generation.debit_credit_diff || 0,
+      debit_credit_balanced: Boolean(generation.debit_credit_balanced),
       metadata: generation.metadata || {},
     };
   }
@@ -627,9 +668,12 @@ export class EFDBuilderService {
   /**
    * Download EFD file
    */
-  static async downloadEFD(generationId: string): Promise<Buffer> {
+  static async downloadEFD(generationId: string, companyId?: string): Promise<Buffer> {
     const db = await getDatabase();
-    const generation = await db('efd_generations').where({ id: generationId }).first();
+    const query = companyId
+      ? { id: generationId, company_id: companyId }
+      : { id: generationId };
+    const generation = await db('efd_generations').where(query).first();
 
     if (!generation || !generation.file_path) {
       throw new Error('EFD file not found');
@@ -690,6 +734,8 @@ export class EFDBuilderService {
         record_count: d.record_count || 0,
         total_debit: d.total_debit || 0,
         total_credit: d.total_credit || 0,
+        debit_credit_diff: d.debit_credit_diff || 0,
+        debit_credit_balanced: Boolean(d.debit_credit_balanced),
         metadata: d.metadata || {},
       })),
       total: typeof total?.count === 'number' ? total.count : parseInt(String(total?.count || 0), 10),
@@ -699,16 +745,28 @@ export class EFDBuilderService {
   /**
    * Get account balances for validation
    */
-  static async getAccountBalances(generationId: string): Promise<EFDAccountBalance[]> {
+  static async getAccountBalances(generationId: string, companyId?: string): Promise<EFDAccountBalance[]> {
     const db = await getDatabase();
+    if (companyId) {
+      const generation = await db('efd_generations')
+        .where({ id: generationId, company_id: companyId })
+        .first();
+      if (!generation) throw new Error('Generation not found');
+    }
     return await db('efd_account_balances').where({ generation_id: generationId }).select();
   }
 
   /**
    * Get journal entries included in EFD
    */
-  static async getJournalEntries(generationId: string): Promise<EFDJournalEntry[]> {
+  static async getJournalEntries(generationId: string, companyId?: string): Promise<EFDJournalEntry[]> {
     const db = await getDatabase();
+    if (companyId) {
+      const generation = await db('efd_generations')
+        .where({ id: generationId, company_id: companyId })
+        .first();
+      if (!generation) throw new Error('Generation not found');
+    }
     return await db('efd_journal_entries').where({ generation_id: generationId }).orderBy('sequence');
   }
 

@@ -4,6 +4,7 @@
  */
 
 import { getDatabase } from '../config/database';
+import { CompanyDTOValidator } from '../models/dtos/companyDTO';
 import {
   DocumentoFiscal,
   ItemDocumentoFiscal,
@@ -498,12 +499,9 @@ export class DocumentoFiscalService {
   private static validarCNPJ(cnpj: string): string | null {
     const limpo = cnpj.replace(/\D/g, '');
 
-    if (limpo.length !== 14) {
+    if (!CompanyDTOValidator.validateCNPJFormat(limpo)) {
       return null;
     }
-
-    // Validação de dígito verificador básica
-    // TODO: Implementar validação completa de CNPJ
 
     return limpo;
   }

@@ -7,6 +7,7 @@
 import { Knex } from 'knex';
 import { up as upContasReceber } from '../migrations/add_contas_receber';
 import { up as upContasPagar } from '../migrations/add_contas_pagar';
+import { up as upEfdTables } from '../migrations/add_efd_tables';
 
 // Track which migrations have been run
 const executedMigrations = new Set<string>();
@@ -492,6 +493,49 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
               (e as Error).message,
             );
           }
+        },
+      },
+      {
+        name: '017b_journal_entries_reversal_tracking',
+        up: async (db) => {
+          const hasTable = await db.schema.hasTable('journal_entries');
+          if (!hasTable) return;
+
+          const hasColumn = await db.schema.hasColumn('journal_entries', 'reverses_entry_id');
+          if (!hasColumn) {
+            console.log('[MIGRATIONS] Adding reverses_entry_id to journal_entries...');
+            await db.schema.alterTable('journal_entries', (table) => {
+              table.uuid('reverses_entry_id').nullable();
+            });
+          }
+
+          // Impede que o mesmo lançamento seja estornado mais de uma vez
+          try {
+            await db.raw(`
+              CREATE UNIQUE INDEX IF NOT EXISTS idx_journal_entries_reverses_unique
+              ON journal_entries (reverses_entry_id)
+              WHERE reverses_entry_id IS NOT NULL
+            `);
+            console.log('✓ 017b_journal_entries_reversal_tracking completed');
+          } catch (e) {
+            console.warn(
+              '[MIGRATIONS] Não foi possível criar índice único reverses_entry_id — verifique estornos duplicados existentes:',
+              (e as Error).message,
+            );
+          }
+        },
+      },
+      {
+        name: '018_efd_tables',
+        up: async (db) => {
+          const hasTable = await db.schema.hasTable('efd_generations');
+          if (hasTable) {
+            console.log('[MIGRATIONS] Skipping 018_efd_tables (already exists)');
+            return;
+          }
+          console.log('[MIGRATIONS] Creating EFD tables (efd_generations, efd_records, etc.)...');
+          await upEfdTables(db);
+          console.log('✓ 018_efd_tables completed');
         },
       },
     ];

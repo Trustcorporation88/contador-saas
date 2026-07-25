@@ -693,6 +693,30 @@ export class ReportService {
       .where('je.company_id', companyId)
       .where('je.is_posted', true);
 
+    // Saldo de abertura: soma de todos os lançamentos anteriores a dateFrom
+    let openingBalance = 0;
+    if (dateFrom) {
+      const priorRows = await db('journal_lines as jl')
+        .join('journal_entries as je', 'je.id', 'jl.journal_entry_id')
+        .where('jl.account_id', accountId)
+        .where('je.company_id', companyId)
+        .where('je.is_posted', true)
+        .where('je.entry_date', '<', dateFrom)
+        .select(
+          db.raw('COALESCE(SUM(jl.debit), 0) as total_debit'),
+          db.raw('COALESCE(SUM(jl.credit), 0) as total_credit'),
+        )
+        .first() as unknown as { total_debit: string | number; total_credit: string | number } | undefined;
+
+      if (priorRows) {
+        const priorDebit = Number(priorRows.total_debit) || 0;
+        const priorCredit = Number(priorRows.total_credit) || 0;
+        openingBalance = ['ASSET', 'EXPENSE'].includes(account.type)
+          ? priorDebit - priorCredit
+          : priorCredit - priorDebit;
+      }
+    }
+
     if (dateFrom) query = query.where('je.entry_date', '>=', dateFrom);
     if (dateTo) query = query.where('je.entry_date', '<=', dateTo);
 
@@ -708,8 +732,8 @@ export class ReportService {
         'jl.credit',
       );
 
-    // Calcular saldo acumulado
-    let runningBalance = 0;
+    // Calcular saldo acumulado (partindo do saldo de abertura)
+    let runningBalance = openingBalance;
     let totalDebit = 0;
     let totalCredit = 0;
 
@@ -738,7 +762,7 @@ export class ReportService {
       account_id: accountId,
       account_code: account.code,
       account_name: account.name,
-      opening_balance: 0,
+      opening_balance: openingBalance,
       entries,
       closing_balance: runningBalance,
       total_debit: totalDebit,

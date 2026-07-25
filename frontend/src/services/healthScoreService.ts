@@ -49,7 +49,9 @@ function dimStatus(score: number, max: number): HealthDimension['status'] {
 function calcLiquidez(balance: BalanceSheet | undefined): HealthDimension {
   const ac = sumItems(balance?.ativo?.circulante);
   const pc = sumItems(balance?.passivo?.circulante);
-  const lc = pc > 0 ? ac / pc : null;
+  // PC = 0 com AC > 0 é liquidez ótima (sem dívida de curto prazo), não ausência de dados.
+  const semDados = pc === 0 && ac === 0;
+  const lc = semDados ? null : pc > 0 ? ac / pc : Infinity;
 
   let score = 0;
   if      (lc === null) score = 0;
@@ -63,9 +65,10 @@ function calcLiquidez(balance: BalanceSheet | undefined): HealthDimension {
     label:       'Liquidez Corrente',
     score,
     maxScore:    250,
-    value:       lc !== null ? formatDecimalBR(lc, 'x') : '—',
+    value:       lc === null ? '—' : lc === Infinity ? 'Sem dívida CP' : formatDecimalBR(lc, 'x'),
     description: lc === null
       ? 'Sem dados suficientes'
+      : lc === Infinity ? 'Excelente: nenhuma dívida de curto prazo registrada'
       : lc >= 1.5 ? 'Excelente capacidade de pagar dívidas de curto prazo'
       : lc >= 1.0 ? 'Liquidez adequada para honrar compromissos'
       : 'Atenção: passivo circulante elevado em relação ao ativo',
@@ -143,9 +146,10 @@ function calcEficiencia(
   const ativo   = balance?.ativo?.total ?? 0;
   const giro    = ativo > 0 ? receita / ativo : null;
 
-  // Despesas operacionais como % da receita
+  // Despesas operacionais como % da receita (só quando o relatório detalha os valores)
+  const temDetalhamento = dre?.hasDetailedBreakdown !== false;
   const despesas = (dre?.custoVendas ?? 0) + (dre?.despesasFinanceiras ?? 0);
-  const efOp     = receita > 0 ? (1 - despesas / receita) * 100 : null;
+  const efOp     = temDetalhamento && receita > 0 ? (1 - despesas / receita) * 100 : null;
 
   let score = 0;
   if      (giro === null) score = 0;

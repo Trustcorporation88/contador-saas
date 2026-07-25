@@ -39,6 +39,24 @@ function resolveEntityType(path: string): string {
 }
 
 /**
+ * Remove/mascara campos sensíveis antes de persistir em audit_logs.
+ * Nunca deve ir para o banco em texto plano: senha, token, segredo de MFA.
+ */
+const SENSITIVE_KEYS = /password|senha|token|secret|segredo|mfaCode|mfa_code|otp|pfx|certSenha|cert_senha/i;
+
+function redactSensitive(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactSensitive);
+  if (value && typeof value === 'object') {
+    const output: Record<string, unknown> = {};
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      output[key] = SENSITIVE_KEYS.test(key) ? '[REDACTED]' : redactSensitive(nested);
+    }
+    return output;
+  }
+  return value;
+}
+
+/**
  * Middleware de auditoria automática
  * Captura respostas de sucesso (2xx) e grava no audit_logs
  * Configurável: apenas para métodos que modificam dados (POST, PUT, DELETE)
@@ -48,7 +66,16 @@ export function auditMiddleware(options?: {
   skipPaths?: RegExp[];
 }) {
   const methods = options?.methods || ['POST', 'PUT', 'PATCH', 'DELETE'];
-  const skipPaths = options?.skipPaths || [/\/auth\/refresh/, /\/status/, /\/audit/];
+  const skipPaths = options?.skipPaths || [
+    /\/auth\/login/,
+    /\/auth\/refresh/,
+    /\/auth\/forgot-password/,
+    /\/auth\/reset-password/,
+    /\/auth\/enable-mfa/,
+    /\/auth\/verify-mfa/,
+    /\/status/,
+    /\/audit/,
+  ];
 
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     const method = req.method.toUpperCase();
@@ -80,7 +107,7 @@ export function auditMiddleware(options?: {
           action,
           entityType,
           entityId,
-          newValue: method !== 'DELETE' && req.body ? req.body : undefined,
+          newValue: method !== 'DELETE' && req.body ? redactSensitive(req.body) as Record<string, unknown> : undefined,
           ipAddress: (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
             req.socket?.remoteAddress,
           userAgent: req.headers['user-agent'],

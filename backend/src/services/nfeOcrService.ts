@@ -28,16 +28,16 @@ const NF_PATTERNS = {
   nf_number: /NF-?e\s*(?:Nº|número|Número|nº):?\s*(\d{1,9})/i,
   
   // NF-e series: "Série 1" or "SÉRIE: 01"
-  nf_series: /série|series|série:?\s*(\d{1,3})/i,
-  
+  nf_series: /(?:s[ée]rie|series):?\s*(\d{1,3})/i,
+
   // Invoice key: 44-digit sequence
   invoice_key: /(?:chave|chave de acesso|chave nfe):?\s*(\d{44})/i,
-  
+
   // CNPJ: XX.XXX.XXX/XXXX-XX
   cnpj: /(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/g,
-  
-  // Total value: "R$ 1.234,56" or "Total: 1234.56"
-  total_value: /(?:total|valor total|vl\s*total|total\s*nf[e-]?):?\s*R?\$?\s*([\d.,]+)/i,
+
+  // Total value: "VALOR TOTAL DA NOTA: R$ 1.234,56" (rótulo padrão do DANFE) ou variações
+  total_value: /(?:valor\s*total\s*da\s*nota(?:\s*fiscal)?|total|vl\s*total|total\s*nf[e-]?)[^\d]{0,20}([\d.,]+)/i,
   
   // Emission date: DD/MM/YYYY or DD-MM-YYYY
   emission_date: /(?:emissão|data emissão|data de emissão):?\s*(\d{2}[/-]\d{2}[/-]\d{4})/i,
@@ -71,7 +71,12 @@ function parseDecimalValue(value: string | null): number | null {
       return parseFloat(cleaned.replace(/,/g, ''));
     }
   }
-  // If only one separator, assume it's decimal
+  // Apenas um separador: se houver exatamente 3 dígitos após ele, é provável
+  // que seja separador de milhar (padrão BR: "1.500" = R$ 1.500, não R$ 1,50)
+  const singleSepMatch = cleaned.match(/^(\d+)[.,](\d+)$/);
+  if (singleSepMatch && singleSepMatch[2].length === 3) {
+    return parseFloat(singleSepMatch[1] + singleSepMatch[2]);
+  }
   return parseFloat(cleaned.replace(/[.,]/, '.'));
 }
 
@@ -358,6 +363,7 @@ export class NfeOcrService {
     uploadId: string,
     companyId: string,
   ): Promise<NfeJournalEntryPreview> {
+    const db = await getDatabase();
     const upload = await this.getUpload(uploadId, companyId);
     const { ocr_data: data } = upload;
 
@@ -368,10 +374,19 @@ export class NfeOcrService {
       );
     }
 
-    // Determine transaction type based on context
-    // TODO: Could use issuer CNPJ lookup or user context to determine type
-    // For now, assume ENTRADA (purchase from supplier)
-    const type = 'entrada';
+    if (upload.status === 'error' || (upload.extraction_confidence ?? 0) <= 0.6) {
+      throw Object.assign(
+        new Error('Confiança de extração baixa (≤ 60%). Revise os dados manualmente antes de prosseguir.'),
+        { status: 422 },
+      );
+    }
+
+    // Determine transaction type: se o CNPJ emitente é o da própria empresa,
+    // é uma nota de saída/venda; caso contrário, é uma entrada/compra de terceiro.
+    const company = await db('companies').where({ id: companyId }).first();
+    const companyCnpj = String(company?.cnpj || '').replace(/\D/g, '');
+    const issuerCnpj = String(data.issuer_cnpj || '').replace(/\D/g, '');
+    const type = companyCnpj && issuerCnpj && companyCnpj === issuerCnpj ? 'saida' : 'entrada';
 
     const suggested_entries: NfeJournalEntryPreview['suggested_entries'] = [];
 
@@ -453,14 +468,21 @@ export class NfeOcrService {
     companyId: string,
     adjustments?: { debit_account?: string; credit_account?: string },
     labels?: string[],
-  ): Promise<{ journal_entry_id: string; nfe_status: 'processed' }> {
+  ): Promise<{ journal_entry_id: string; nfe_status: 'processed'; nf_number: string; total_value: number; created_at: string }> {
     const db = await getDatabase();
     const upload = await this.getUpload(uploadId, companyId);
 
-    if (!upload.ocr_data.nf_number || !upload.ocr_data.total_value) {
+    if (!upload.ocr_data.nf_number || !upload.ocr_data.total_value || !upload.ocr_data.issuer_cnpj) {
       throw Object.assign(
         new Error('Dados insuficientes para criar lançamento'),
         { status: 400 }
+      );
+    }
+
+    if (upload.status === 'error' || (upload.extraction_confidence ?? 0) <= 0.6) {
+      throw Object.assign(
+        new Error('Confiança de extração baixa (≤ 60%). Revise os dados manualmente antes de confirmar.'),
+        { status: 422 },
       );
     }
 
@@ -540,6 +562,9 @@ export class NfeOcrService {
       return {
         journal_entry_id: journalEntryId,
         nfe_status: 'processed' as const,
+        nf_number: upload.ocr_data.nf_number || '',
+        total_value: upload.ocr_data.total_value || 0,
+        created_at: now,
       };
     });
   }

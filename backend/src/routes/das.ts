@@ -5,8 +5,12 @@
 
 import { Router } from 'express';
 import { DASController } from '../controllers/dasController';
+import { authenticateToken } from '../middleware/auth';
+import { validateTenantAccess } from '../middleware/multiTenant';
 
 const router = Router({ mergeParams: true });
+
+router.use(authenticateToken, validateTenantAccess);
 
 /**
  * POST /companies/:companyId/das/generate

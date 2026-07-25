@@ -7,6 +7,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { getDatabase } from '../config/database';
 import { logger } from './requestLogger';
+import { TenantService } from '../services/tenantService';
 
 export async function applyCompanyContext(
   req: Request,
@@ -34,8 +35,8 @@ export async function applyCompanyContext(
       return;
     }
 
-    // Valida acesso. Por enquanto, exige que a empresa exista e esteja ativa.
-    // TODO: validar associação user↔company quando company_users existir.
+    // Valida que a empresa existe/está ativa E que o usuário tem vínculo
+    // real com ela em company_users (admin acessa qualquer empresa).
     const db = await getDatabase();
     const company = await db('companies')
       .where({ id: headerCompanyId, is_active: true })
@@ -52,6 +53,22 @@ export async function applyCompanyContext(
         code: 'COMPANY_NOT_ACCESSIBLE',
       });
       return;
+    }
+
+    if (req.user.role !== 'admin') {
+      const access = await TenantService.validateUserAccess(req.user.id, headerCompanyId);
+      if (!access.isValid) {
+        logger.warn('Usuário sem vínculo com a empresa do header X-Company-Id', {
+          userId: req.user.id,
+          headerCompanyId,
+        });
+        res.status(403).json({
+          success: false,
+          error: 'Empresa não acessível',
+          code: 'COMPANY_NOT_ACCESSIBLE',
+        });
+        return;
+      }
     }
 
     req.user.companyId = headerCompanyId;

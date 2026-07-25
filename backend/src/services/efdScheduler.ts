@@ -41,7 +41,7 @@ export class EFDSchedulerService {
    */
   static async scheduleCompanyEFD(config: any): Promise<void> {
     try {
-      const { company_id, day_of_month, hour, minute, timezone } = config;
+      const { company_id, day_of_month, hour, minute, timezone, enabled } = config;
 
       // Clear existing job if any
       if (this.scheduledJobs.has(company_id)) {
@@ -49,6 +49,12 @@ export class EFDSchedulerService {
         existingJob.stop();
         existingJob.destroy();
         this.scheduledJobs.delete(company_id);
+      }
+
+      // Não recria o job se a empresa desabilitou o agendamento automático
+      if (enabled === false) {
+        console.log(`[EFD Scheduler] Company ${company_id} has scheduling disabled — skipping`);
+        return;
       }
 
       // Create cron expression

@@ -1,8 +1,12 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { FiscalCaptureController } from '../controllers/fiscalCaptureController';
+import { authenticateToken } from '../middleware/auth';
+import { validateTenantAccess } from '../middleware/multiTenant';
 
 const router = Router({ mergeParams: true });
+
+router.use(authenticateToken, validateTenantAccess);
 
 const upload = multer({
   storage: multer.memoryStorage(),

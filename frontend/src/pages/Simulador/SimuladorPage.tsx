@@ -20,7 +20,7 @@ interface TaxResult {
 
 // ─── Lógica fiscal simplificada ───────────────────────────────────────────────
 
-function calcSimples(receita: number, rbt12: number): TaxResult {
+function calcSimples(receita: number, despesas: number, rbt12: number): TaxResult {
   // Simples Nacional – Anexo III (Serviços) — faixas 2025
   const faixas = [
     { limite: 180_000,    aliq: 0.060,  deducao: 0         },
@@ -34,13 +34,12 @@ function calcSimples(receita: number, rbt12: number): TaxResult {
   const faixa = faixas.find((f) => rbt12 <= f.limite) ?? faixas[faixas.length - 1];
   const aliqEfetiva = rbt12 > 0 ? (rbt12 * faixa.aliq - faixa.deducao) / rbt12 : faixa.aliq;
   const das = receita * Math.max(0, aliqEfetiva);
-  const lucro = receita * 0.3; // estimativa 30% de margem
 
   return {
     regime: 'Simples Nacional',
     receita,
-    despesas: receita * 0.7,
-    lucroLiquido: lucro - das,
+    despesas,
+    lucroLiquido: (receita - despesas) - das,
     impostoTotal: das,
     cargaTributaria: receita > 0 ? (das / receita) * 100 : 0,
     breakdown: [
@@ -51,9 +50,10 @@ function calcSimples(receita: number, rbt12: number): TaxResult {
 
 function calcLucroPresumido(receita: number, despesas: number, atividade: string): TaxResult {
   const pres = atividade === 'servicos' ? 0.32 : atividade === 'comercio' ? 0.08 : 0.16;
+  const presCSLL = atividade === 'servicos' ? 0.32 : 0.12;
   const baseIR = receita * pres;
   const irpj = baseIR * 0.15 + Math.max(0, baseIR - 20_000) * 0.10;
-  const csll = receita * 0.32 * 0.09;
+  const csll = receita * presCSLL * 0.09;
   const pis  = receita * 0.0065;
   const cofins = receita * 0.03;
   const total  = irpj + csll + pis + cofins;
@@ -84,7 +84,7 @@ function calcLucroReal(receita: number, despesas: number): TaxResult {
   const pis    = receita * 0.0165;
   const cofins = receita * 0.076;
   const total  = irpj + csll + pis + cofins;
-  const lucro  = lucroContabil - irpj - csll;
+  const lucro  = lucroContabil - irpj - csll - pis - cofins;
 
   return {
     regime: 'Lucro Real',
@@ -193,7 +193,7 @@ export default function SimuladorPage() {
   const [atividade,  setAtividade]  = useState<'servicos' | 'comercio' | 'industria'>('servicos');
 
   const results = useMemo<TaxResult[]>(() => [
-    calcSimples(receita, rbt12),
+    calcSimples(receita, despesas, rbt12),
     calcLucroPresumido(receita, despesas, atividade),
     calcLucroReal(receita, despesas),
   ], [receita, despesas, rbt12, atividade]);

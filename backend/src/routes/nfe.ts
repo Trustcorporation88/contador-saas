@@ -12,8 +12,12 @@
 
 import { Router } from 'express';
 import { NfeController } from '../controllers/nfeController';
+import { authenticateToken } from '../middleware/auth';
+import { validateTenantAccess } from '../middleware/multiTenant';
 
 const router = Router({ mergeParams: true });
+
+router.use(authenticateToken, validateTenantAccess);
 
 router.post  ('/',                 NfeController.create);
 router.post  ('/verificar-numeracao', NfeController.verificarNumeracao);

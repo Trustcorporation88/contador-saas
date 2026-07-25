@@ -131,6 +131,9 @@ function normalizeDRE(data: DRE | IncomeStatementReportShape): DRE {
     resultadoAntesIR: netIncome,
     impostos: 0,
     lucroLiquido: netIncome,
+    // Relatório de origem não detalha custo de vendas, despesas financeiras
+    // nem impostos separadamente — os zeros acima não são valores reais.
+    hasDetailedBreakdown: false,
   };
 }
 

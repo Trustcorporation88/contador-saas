@@ -9,6 +9,7 @@ import { initializeDatabase } from './config/database';
 import { logger } from './middleware/requestLogger';
 import { BackupService } from './services/backupService';
 import { DASScheduler } from './services/dasScheduler';
+import { EFDSchedulerService } from './services/efdScheduler';
 import cron from 'node-cron';
 import authService from './services/authService';
 import { bootstrapRegimeDemoUsers } from './services/bootstrapRegimeUsers';
@@ -107,6 +108,15 @@ async function startServer(): Promise<void> {
     }
 
     startBackgroundJobs();
+
+    try {
+      await EFDSchedulerService.initializeSchedules();
+      console.log('[EFD] Scheduler initialized');
+    } catch (error) {
+      logger.error('Failed to initialize EFD scheduler', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     logger.info('Server ready', {
       host: HOST,

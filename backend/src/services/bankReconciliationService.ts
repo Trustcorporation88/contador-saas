@@ -337,11 +337,12 @@ export class BankReconciliationService {
       return 1.0;
     }
 
-    // Quick loss: strings muito diferentes
-    if (
-      !normBank.includes(normJournal.split(' ')[0]) &&
-      !normJournal.includes(normBank.split(' ')[0])
-    ) {
+    // Quick loss: nenhuma palavra em comum entre as duas descrições
+    // (evita zerar o score só porque a 1ª palavra difere, ex.: ordem trocada)
+    const bankWords = new Set(normBank.split(' ').filter(Boolean));
+    const journalWords = normJournal.split(' ').filter(Boolean);
+    const hasCommonWord = journalWords.some(w => bankWords.has(w));
+    if (!hasCommonWord) {
       return 0.0;
     }
 
@@ -575,6 +576,13 @@ export class BankReconciliationService {
       .where('is_posted', true) // Apenas lançamentos postados
       .select('id', 'entry_date', 'description', 'total_debit', 'total_credit');
 
+    // Idempotência: remove sugestões anteriores ainda não reconciliadas antes de
+    // regerar, evitando duplicação a cada nova chamada (GET/refresh/retry).
+    await db('reconciliation_matches')
+      .where('upload_id', uploadId)
+      .where('is_reconciled', false)
+      .delete();
+
     // Gerar sugestões para cada transação
     const allSuggestions: ReconciliationSuggestion[] = [];
 
@@ -615,7 +623,11 @@ export class BankReconciliationService {
     const threshold = 0.7;
     const filteredSuggestions = allSuggestions.filter(s => s.confidence >= threshold);
 
-    const matchedCount = allSuggestions.filter(s => s.confidence > 0.5).length;
+    // Conta transações bancárias únicas com ao menos uma sugestão acima do
+    // limiar (uma transação pode ter múltiplas sugestões candidatas).
+    const matchedCount = new Set(
+      allSuggestions.filter(s => s.confidence > 0.5).map(s => s.bank_transaction_id),
+    ).size;
     const unmatchedCount = bankTransactions.length - matchedCount;
 
     return {
@@ -703,8 +715,22 @@ export class BankReconciliationService {
         .where('upload_id', uploadId)
         .count('* as count')
         .first();
+      const total = typeof totalTransactions?.count === 'string'
+        ? parseInt(totalTransactions.count, 10)
+        : Number(totalTransactions?.count || 0);
 
-      const unmatchedCount = (typeof totalTransactions.count === 'string' ? parseInt(totalTransactions.count, 10) : totalTransactions.count) - reconciledCount;
+      // Conta o total histórico de reconciliadas no banco (não apenas as
+      // aceitas nesta chamada), para refletir corretamente execuções incrementais.
+      const totalReconciled = await db('reconciliation_matches')
+        .where('upload_id', uploadId)
+        .where('is_reconciled', true)
+        .count('* as count')
+        .first();
+      const reconciledTotal = typeof totalReconciled?.count === 'string'
+        ? parseInt(totalReconciled.count, 10)
+        : Number(totalReconciled?.count || 0);
+
+      const unmatchedCount = total - reconciledTotal;
 
       logger.info('Bank reconciliation executed', {
         uploadId,
@@ -714,7 +740,7 @@ export class BankReconciliationService {
 
       return {
         upload_id: uploadId,
-        total_processed: typeof totalTransactions.count === 'string' ? parseInt(totalTransactions.count, 10) : totalTransactions.count,
+        total_processed: total,
         reconciled_count: reconciledCount,
         unmatched_count: unmatchedCount,
         status: 'reconciled',

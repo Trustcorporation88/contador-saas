@@ -252,7 +252,7 @@ export class CompanyController {
       const { id } = req.params;
 
       // Obter empresa
-      const company = await CompanyService.getById(id, req.user.companyId, req.user.id);
+      const company = await CompanyService.getById(id, req.user.companyId, req.user.id, req.user.role);
 
       logger.info('Company retrieved', {
         companyId: id,
@@ -369,6 +369,7 @@ export class CompanyController {
         },
         req.user.id,
         req.user.companyId,
+        req.user.role,
       );
 
       logger.info('Company updated successfully', {
@@ -541,7 +542,7 @@ export class CompanyController {
       const { id } = req.params;
 
       // Validar acesso
-      await CompanyService.getById(id, req.user.companyId, req.user.id);
+      await CompanyService.getById(id, req.user.companyId, req.user.id, req.user.role);
 
       // Obter estatísticas
       const stats = await CompanyService.getCompanyStats(id);

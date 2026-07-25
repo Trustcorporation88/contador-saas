@@ -470,6 +470,16 @@ export class JournalService {
       throw Object.assign(new Error('Lançamento sem linhas para estornar'), { status: 422 });
     }
 
+    const existingReversal = await db('journal_entries')
+      .where({ reverses_entry_id: entryId, company_id: companyId })
+      .first();
+    if (existingReversal) {
+      throw Object.assign(
+        new Error('Este lançamento já foi estornado anteriormente'),
+        { status: 409 },
+      );
+    }
+
     // Criar lançamento invertido
     const reversedLines = original.lines.map(l => ({
       account_id: l.account_id,
@@ -488,10 +498,18 @@ export class JournalService {
       lines: reversedLines,
     });
 
-    // Auto-postar o estorno
-    await db('journal_entries')
-      .where('id', reverseEntry.id)
-      .update({ is_posted: true });
+    // Auto-postar o estorno e vincular ao lançamento original (trava de unicidade
+    // no banco impede que dois estornos concorrentes sejam ambos aceitos)
+    try {
+      await db('journal_entries')
+        .where('id', reverseEntry.id)
+        .update({ is_posted: true, reverses_entry_id: entryId });
+    } catch (err) {
+      throw Object.assign(
+        new Error('Este lançamento já foi estornado anteriormente'),
+        { status: 409 },
+      );
+    }
 
     logger.info('Journal entry reversed', { companyId, originalId: entryId, reverseId: reverseEntry.id });
 

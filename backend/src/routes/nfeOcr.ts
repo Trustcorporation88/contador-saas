@@ -12,8 +12,12 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { NfeOcrController } from '../controllers/nfeOcrController';
+import { authenticateToken } from '../middleware/auth';
+import { validateTenantAccess } from '../middleware/multiTenant';
 
 const router = Router({ mergeParams: true });
+
+router.use(authenticateToken, validateTenantAccess);
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -23,7 +27,7 @@ const upload = multer({
     if (allowedMimes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Tipo de arquivo não permitido'));
+      cb(Object.assign(new Error('Tipo de arquivo não permitido'), { status: 400 }));
     }
   },
 });

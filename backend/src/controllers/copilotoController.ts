@@ -39,7 +39,7 @@ export class CopilotoController {
       return;
     }
 
-    const sessionId = ChatHistoryService.createSession(companyName);
+    const sessionId = ChatHistoryService.createSession(companyName, req.user!.id);
     res.json({ sessionId, companyName });
   }
 
@@ -51,7 +51,7 @@ export class CopilotoController {
     const { id } = req.params;
 
     const session = ChatHistoryService.getSession(id);
-    if (!session) {
+    if (!session || session.ownerUserId !== req.user!.id) {
       res.status(404).json({ error: 'Sessão não encontrada.' });
       return;
     }
@@ -81,7 +81,7 @@ export class CopilotoController {
     }
 
     const session = ChatHistoryService.getSession(sessionId);
-    if (!session) {
+    if (!session || session.ownerUserId !== req.user!.id) {
       res.status(404).json({ error: 'Sessão não encontrada.' });
       return;
     }
@@ -166,6 +166,12 @@ export class CopilotoController {
   static async exportSessionPDF(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
 
+    const session = ChatHistoryService.getSession(id);
+    if (!session || session.ownerUserId !== req.user!.id) {
+      res.status(404).json({ error: 'Sessão não encontrada' });
+      return;
+    }
+
     try {
       const pdfStream = PDFExportService.generateSessionPDF(id);
 
@@ -187,6 +193,12 @@ export class CopilotoController {
   static async exportAnalysisPDF(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
     const { financialData } = req.body;
+
+    const session = ChatHistoryService.getSession(id);
+    if (!session || session.ownerUserId !== req.user!.id) {
+      res.status(404).json({ error: 'Sessão não encontrada' });
+      return;
+    }
 
     try {
       const pdfStream = PDFExportService.generateAnalysisPDF(id, financialData);

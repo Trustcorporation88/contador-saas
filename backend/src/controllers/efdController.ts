@@ -70,6 +70,13 @@ export class EFDController {
         message: `EFD gerada com sucesso para ${month}/${year}`,
       });
     } catch (error) {
+      if ((error as any).code === '23505') {
+        res.status(409).json({
+          error: 'EFD already exists for this period',
+          code: 'EFD_EXISTS',
+        });
+        return;
+      }
       next(error);
     }
   }
@@ -117,9 +124,9 @@ export class EFDController {
    */
   static async getEFD(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { generationId } = req.params;
+      const { generationId, companyId } = req.params;
 
-      const generation = await EFDBuilderService.getGenerationById(generationId);
+      const generation = await EFDBuilderService.getGenerationById(generationId, companyId);
 
       res.status(200).json({
         success: true,
@@ -143,9 +150,9 @@ export class EFDController {
    */
   static async validateEFD(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { generationId } = req.params;
+      const { generationId, companyId } = req.params;
 
-      const validation = await EFDBuilderService.validateEFD(generationId);
+      const validation = await EFDBuilderService.validateEFD(generationId, companyId);
 
       res.status(200).json({
         success: true,
@@ -169,7 +176,7 @@ export class EFDController {
       const { format = 'txt' } = req.query;
 
       const db = await getDatabase();
-      const generation = await db('efd_generations').where({ id: generationId }).first();
+      const generation = await db('efd_generations').where({ id: generationId, company_id: companyId }).first();
 
       if (!generation) {
         res.status(404).json({
@@ -179,8 +186,17 @@ export class EFDController {
         return;
       }
 
+      if (generation.status === 'validation_failed') {
+        res.status(422).json({
+          error: 'EFD não pode ser baixada: falhou na validação (débito/crédito desbalanceado ou registros inválidos)',
+          code: 'VALIDATION_FAILED',
+          validation_errors: generation.validation_errors || [],
+        });
+        return;
+      }
+
       // Get file content
-      const fileBuffer = await EFDBuilderService.downloadEFD(generationId);
+      const fileBuffer = await EFDBuilderService.downloadEFD(generationId, companyId);
 
       // Set response headers for download
       const cnpj = generation.metadata?.cnpj || 'UNKNOWN';
@@ -202,9 +218,9 @@ export class EFDController {
    */
   static async getAccountBalances(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { generationId } = req.params;
+      const { generationId, companyId } = req.params;
 
-      const balances = await EFDBuilderService.getAccountBalances(generationId);
+      const balances = await EFDBuilderService.getAccountBalances(generationId, companyId);
 
       res.status(200).json({
         success: true,
@@ -222,9 +238,9 @@ export class EFDController {
    */
   static async getJournalEntries(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { generationId } = req.params;
+      const { generationId, companyId } = req.params;
 
-      const entries = await EFDBuilderService.getJournalEntries(generationId);
+      const entries = await EFDBuilderService.getJournalEntries(generationId, companyId);
 
       res.status(200).json({
         success: true,
@@ -242,10 +258,10 @@ export class EFDController {
    */
   static async cancelEFD(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { generationId } = req.params;
+      const { generationId, companyId } = req.params;
       const db = await getDatabase();
 
-      const generation = await db('efd_generations').where({ id: generationId }).first();
+      const generation = await db('efd_generations').where({ id: generationId, company_id: companyId }).first();
 
       if (!generation) {
         res.status(404).json({
@@ -263,7 +279,7 @@ export class EFDController {
         return;
       }
 
-      await db('efd_generations').where({ id: generationId }).update({
+      await db('efd_generations').where({ id: generationId, company_id: companyId }).update({
         status: 'cancelled',
         deleted_at: new Date(),
         updated_at: new Date(),
@@ -272,7 +288,7 @@ export class EFDController {
       res.status(200).json({
         success: true,
         message: 'EFD generation cancelled',
-        data: await EFDBuilderService.getGenerationById(generationId),
+        data: await EFDBuilderService.getGenerationById(generationId, companyId),
       });
     } catch (error) {
       next(error);

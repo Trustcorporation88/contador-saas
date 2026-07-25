@@ -24,6 +24,8 @@ export interface EFDGenerationResponse {
   record_count: number;
   total_debit: number;
   total_credit: number;
+  debit_credit_diff: number;
+  debit_credit_balanced: boolean;
   metadata: EFDMetadata;
 }
 

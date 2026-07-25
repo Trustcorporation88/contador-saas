@@ -131,12 +131,10 @@ export async function bootstrapRegimeDemoUsers(): Promise<void> {
       await db('users').insert(payload);
       user = { id: userId };
       logger.info('Regime demo user created', { email, taxRegime: demo.taxRegime });
-    } else {
-      const payload: Record<string, unknown> = { updated_at: new Date() };
-      if (hasPasswordHashColumn) payload.password_hash = passwordHash;
-      if (hasPasswordColumn) payload.password = passwordHash;
-      if (hasCompanyIdColumn) payload.company_id = companyId;
-      await db('users').where('id', user.id).update(payload);
+    } else if (hasCompanyIdColumn && !user.company_id) {
+      // Não sobrescreve a senha de um usuário já existente a cada restart —
+      // apenas garante o vínculo com a empresa demo se ainda não existir.
+      await db('users').where('id', user.id).update({ company_id: companyId, updated_at: new Date() });
     }
 
     if (hasCompanyUsers) {

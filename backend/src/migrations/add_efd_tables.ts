@@ -56,8 +56,15 @@ export async function up(knex: Knex): Promise<void> {
     table.index(['status']);
     table.index(['year', 'month']);
     table.index(['created_at']);
-    table.unique(['company_id', 'year', 'month']); // One EFD per company/month/year
+    // Nota: unicidade de (company_id, year, month) é aplicada via índice parcial
+    // abaixo, excluindo status 'cancelled' — permite regenerar EFD após cancelar.
   });
+
+  await knex.schema.raw(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_efd_company_period_unique
+    ON efd_generations(company_id, year, month)
+    WHERE status <> 'cancelled'
+  `);
 
   // Table: efd_records
   // Individual records in the EFD file (E100, E110, E200, E990, etc)

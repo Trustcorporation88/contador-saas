@@ -6,6 +6,7 @@ export interface ChatMessage {
 
 export interface ChatSession {
   id: string;
+  ownerUserId: string;
   companyName: string;
   messages: ChatMessage[];
   createdAt: Date;
@@ -18,10 +19,11 @@ export class ChatHistoryService {
   /**
    * Cria nova sessão de chat
    */
-  static createSession(companyName: string): string {
+  static createSession(companyName: string, ownerUserId: string): string {
     const id = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const session: ChatSession = {
       id,
+      ownerUserId,
       companyName,
       messages: [],
       createdAt: new Date(),

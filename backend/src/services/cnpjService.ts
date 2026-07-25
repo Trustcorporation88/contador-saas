@@ -354,7 +354,9 @@ export class CnpjService {
             razao_social: trustcorpResult.razao_social || brasilResult.razao_social,
             nome_fantasia: trustcorpResult.nome_fantasia || brasilResult.nome_fantasia,
             situacao: trustcorpResult.situacao || brasilResult.situacao,
-            ativa: trustcorpResult.ativa || brasilResult.ativa,
+            // BrasilAPI é a fonte oficial (Receita Federal) — tem precedência sobre
+            // o parser heurístico do TrustCorp para evitar reportar empresa baixada como ativa.
+            ativa: brasilResult.ativa,
             endereco: {
               logradouro: trustcorpResult.endereco.logradouro || brasilResult.endereco.logradouro,
               numero: trustcorpResult.endereco.numero || brasilResult.endereco.numero,

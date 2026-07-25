@@ -167,6 +167,12 @@ export interface DRE {
   resultadoAntesIR: number;
   impostos: number;
   lucroLiquido: number;
+  /**
+   * false quando custoVendas/despesasFinanceiras/impostos vieram zerados por
+   * falta de detalhamento no relatório de origem (não são valores reais de 0).
+   * Consumidores devem tratar esses campos como "sem dado" quando false.
+   */
+  hasDetailedBreakdown?: boolean;
 }
 
 // ─── Tax Calculation ─────────────────────────────────────────────────────────

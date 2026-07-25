@@ -69,8 +69,10 @@ function runRiskEngine(
     });
   }
 
+  const temDetalhamento = dre?.hasDetailedBreakdown !== false;
+
   // ── Regra 2: Custo acima de 95% da receita ───────────────────────────────
-  if (receita > 0 && custos / receita > 0.95) {
+  if (temDetalhamento && receita > 0 && custos / receita > 0.95) {
     items.push({
       id: 'CUSTO_ELEVADO',
       severity: 'critical',
@@ -83,7 +85,7 @@ function runRiskEngine(
   }
 
   // ── Regra 3: Impostos < 1% da receita (suspeita de subapuração) ──────────
-  if (receita > 50_000 && impostos / receita < 0.01) {
+  if (temDetalhamento && receita > 50_000 && impostos / receita < 0.01) {
     items.push({
       id: 'IMPOSTO_BAIXO',
       severity: 'warning',
@@ -130,7 +132,7 @@ function runRiskEngine(
   }
 
   // ── Regra 6: Resultado antes IR com sinal oposto ao IRPJ ─────────────────
-  if (dre) {
+  if (dre && temDetalhamento) {
     const resultadoAntes = dre.resultadoAntesIR ?? 0;
     const irpjRegistrado = dre.impostos ?? 0;
     if (resultadoAntes < 0 && irpjRegistrado > 0) {
