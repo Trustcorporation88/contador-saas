@@ -326,14 +326,29 @@ export class NfeService {
       .where({ company_id: companyId, serie, modelo, numero })
       .first();
 
+    // Qualquer registro local (inclusive RASCUNHO) ocupa o número: um rascunho
+    // representa uma intenção confirmada de uso daquele número e não pode ser
+    // reaproveitado por outra nota, mesmo que ainda não tenha sido transmitido à SEFAZ.
     let chaveLocal: string | null = null;
-    let jaEmitidaLocal = false;
+    const jaEmitidaLocal = Boolean(local);
     if (local) {
       chaveLocal = local.chave_acesso || null;
-      jaEmitidaLocal = ['AUTORIZADA', 'CANCELADA', 'DENEGADA', 'PENDENTE'].includes(
-        String(local.status),
-      );
     }
+
+    // Ordem cronológica: compara com o último número já confirmado nesta série/modelo.
+    // A SEFAZ não oferece consulta pública "por número" (só por chave de acesso),
+    // então a garantia de sequência é feita localmente com base no maior número
+    // já utilizado por este sistema para a empresa/série/modelo informados.
+    const numeracao = await db('nfe_numeracao')
+      .where({ company_id: companyId, serie, modelo })
+      .first();
+    const ultimoNumeroRegistrado: number | null = numeracao
+      ? Number(numeracao.ultimo_numero)
+      : null;
+    const foraDeOrdem =
+      ultimoNumeroRegistrado != null && numero <= ultimoNumeroRegistrado && !jaEmitidaLocal;
+    const saltoNumeracao =
+      ultimoNumeroRegistrado != null && numero > ultimoNumeroRegistrado + 1;
 
     const sefaz = await verificarNumeracaoSefaz({
       companyId,
@@ -348,14 +363,35 @@ export class NfeService {
     const disponivel =
       !jaEmitidaLocal &&
       !jaEmitidaSefaz &&
+      !foraDeOrdem &&
       sefaz.sefaz_online &&
       (sefaz.disponivel === true || sefaz.disponivel === null || sefaz.disponivel === undefined);
+
+    let mensagem: string;
+    if (jaEmitidaLocal) {
+      mensagem = `Número ${numero} série ${serie} já existe no ProContador (status ${local.status}).`;
+    } else if (jaEmitidaSefaz) {
+      mensagem = `SEFAZ confirma NF-e já emitida para número ${numero} série ${serie}.`;
+    } else if (foraDeOrdem) {
+      mensagem = `Fora de ordem cronológica: o último número confirmado nesta série foi ${ultimoNumeroRegistrado}. Use um número maior que ${ultimoNumeroRegistrado}.`;
+    } else if (!sefaz.sefaz_online) {
+      mensagem = `SEFAZ offline: ${sefaz.motivo}`;
+    } else if (saltoNumeracao) {
+      mensagem = `Atenção: há uma lacuna entre o último número emitido (${ultimoNumeroRegistrado}) e o número ${numero}. Se os números ${ultimoNumeroRegistrado! + 1} a ${numero - 1} não forem usados em outro sistema, eles precisarão ser inutilizados junto à SEFAZ.`;
+    } else if (sefaz.ja_emitida_sefaz === null) {
+      mensagem = `Número ${numero}/${serie} livre na base local e em ordem cronológica. ${sefaz.motivo}`;
+    } else {
+      mensagem = `Número ${numero}/${serie} disponível e em ordem cronológica.`;
+    }
 
     return {
       disponivel,
       serie,
       numero,
       modelo,
+      ultimo_numero_registrado: ultimoNumeroRegistrado,
+      fora_de_ordem: foraDeOrdem,
+      salto_numeracao: saltoNumeracao,
       local: local
         ? {
             id: local.id,
@@ -371,15 +407,7 @@ export class NfeService {
         motivo: sefaz.motivo,
         fonte: sefaz.fonte,
       },
-      mensagem: jaEmitidaLocal
-        ? `Número ${numero} série ${serie} já existe no ProContador (status ${local.status}).`
-        : jaEmitidaSefaz
-          ? `SEFAZ confirma NF-e já emitida para número ${numero} série ${serie}.`
-          : !sefaz.sefaz_online
-            ? `SEFAZ offline: ${sefaz.motivo}`
-            : sefaz.ja_emitida_sefaz === null
-              ? `Número ${numero}/${serie} livre na base local. ${sefaz.motivo}`
-              : `Número ${numero}/${serie} disponível.`,
+      mensagem,
     };
   }
 

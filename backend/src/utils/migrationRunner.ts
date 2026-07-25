@@ -471,6 +471,29 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           console.log('✓ 016_nfe_emission completed');
         },
       },
+      {
+        name: '017_nfe_numero_unique_constraint',
+        up: async (db) => {
+          const hasTable = await db.schema.hasTable('nfe');
+          if (!hasTable) return;
+
+          // Trava de segurança: impede duas NF-e com o mesmo número/série/modelo
+          // para a mesma empresa (mesmo em RASCUNHO). Não derruba o deploy caso
+          // já existam duplicidades nos dados — apenas registra o alerta.
+          try {
+            await db.raw(`
+              CREATE UNIQUE INDEX IF NOT EXISTS idx_nfe_company_serie_modelo_numero
+              ON nfe (company_id, serie, modelo, numero)
+            `);
+            console.log('✓ 017_nfe_numero_unique_constraint completed');
+          } catch (e) {
+            console.warn(
+              '[MIGRATIONS] Não foi possível criar índice único nfe(company_id,serie,modelo,numero) — verifique duplicidades existentes:',
+              (e as Error).message,
+            );
+          }
+        },
+      },
     ];
 
     for (const migration of migrations) {

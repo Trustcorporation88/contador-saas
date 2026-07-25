@@ -63,6 +63,7 @@ export default function NfeEmissaoPage() {
   const [confirmarNumeroManual, setConfirmarNumeroManual] = useState(false);
   const [checkNumeracao, setCheckNumeracao] = useState<string>('');
   const [checkOk, setCheckOk] = useState(false);
+  const [checkSalto, setCheckSalto] = useState(false);
   const [checkLoading, setCheckLoading] = useState(false);
   const [formaPagamento, setFormaPagamento] = useState('01');
   const [frete, setFrete] = useState(0);
@@ -425,6 +426,7 @@ export default function NfeEmissaoPage() {
             onChange={(e) => {
               setSerie(Number(e.target.value));
               setCheckOk(false);
+              setCheckSalto(false);
               setConfirmarNumeroManual(false);
               setCheckNumeracao('');
             }}
@@ -437,6 +439,7 @@ export default function NfeEmissaoPage() {
                 onChange={(e) => {
                   setUsarNumeroManual(e.target.checked);
                   setCheckOk(false);
+                  setCheckSalto(false);
                   setConfirmarNumeroManual(false);
                   setCheckNumeracao('');
                 }}
@@ -451,6 +454,7 @@ export default function NfeEmissaoPage() {
               onChange={(e) => {
                 setNumeroManual(e.target.value);
                 setCheckOk(false);
+                setCheckSalto(false);
                 setConfirmarNumeroManual(false);
                 setCheckNumeracao('');
               }}
@@ -487,6 +491,7 @@ export default function NfeEmissaoPage() {
                   setCheckLoading(true);
                   setCheckNumeracao('');
                   setCheckOk(false);
+                  setCheckSalto(false);
                   setConfirmarNumeroManual(false);
                   try {
                     const n = Number(numeroManual);
@@ -496,8 +501,10 @@ export default function NfeEmissaoPage() {
                     });
                     setCheckNumeracao(result.mensagem);
                     setCheckOk(result.disponivel);
+                    setCheckSalto(result.disponivel && result.salto_numeracao);
                   } catch (e) {
                     setCheckOk(false);
+                    setCheckSalto(false);
                     setCheckNumeracao(e instanceof Error ? e.message : 'Falha na verificação');
                   } finally {
                     setCheckLoading(false);
@@ -508,7 +515,11 @@ export default function NfeEmissaoPage() {
               </Button>
             </div>
             {checkNumeracao && (
-              <p className={`text-sm ${checkOk ? 'text-emerald-800' : 'text-red-700'}`}>
+              <p
+                className={`text-sm ${
+                  !checkOk ? 'text-red-700' : checkSalto ? 'text-amber-800' : 'text-emerald-800'
+                }`}
+              >
                 {checkNumeracao}
               </p>
             )}

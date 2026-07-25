@@ -53,6 +53,9 @@ export interface NumeracaoCheckResult {
   numero: number;
   modelo: number;
   mensagem: string;
+  ultimo_numero_registrado: number | null;
+  fora_de_ordem: boolean;
+  salto_numeracao: boolean;
   local: { id: string; status: string; chave_acesso?: string } | null;
   sefaz: {
     online: boolean;
