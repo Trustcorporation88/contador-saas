@@ -21,6 +21,20 @@ router.post('/generate', DASController.generate);
 router.post('/generate-auto', DASController.generateAuto);
 
 /**
+ * GET /companies/:companyId/das/agendamento/:regime
+ * Obter configuração de agendamento
+ * DEVE vir antes de /:dasId para evitar conflito de rotas
+ */
+router.get('/agendamento/:regime', DASController.obterAgendamento);
+
+/**
+ * PUT /companies/:companyId/das/agendamento/:regime
+ * Atualizar configuração de agendamento
+ * DEVE vir antes de /:dasId para evitar conflito de rotas
+ */
+router.put('/agendamento/:regime', DASController.atualizarAgendamento);
+
+/**
  * GET /companies/:companyId/das
  * Listar DAS com filtros
  */
@@ -49,17 +63,5 @@ router.post('/:dasId/pay', DASController.registrarPagamento);
  * Cancelar DAS
  */
 router.delete('/:dasId', DASController.cancelar);
-
-/**
- * GET /companies/:companyId/das/agendamento/:regime
- * Obter configuração de agendamento
- */
-router.get('/agendamento/:regime', DASController.obterAgendamento);
-
-/**
- * PUT /companies/:companyId/das/agendamento/:regime
- * Atualizar configuração de agendamento
- */
-router.put('/agendamento/:regime', DASController.atualizarAgendamento);
 
 export default router;

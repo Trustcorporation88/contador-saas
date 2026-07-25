@@ -1,4 +1,4 @@
-import { api } from '../config/api';
+import api from '../config/api';
 
 export type NfeStatus = 'RASCUNHO' | 'PENDENTE' | 'AUTORIZADA' | 'CANCELADA' | 'DENEGADA';
 

@@ -52,26 +52,31 @@ export class DASService {
       const dataInicio = new Date(anoFiscal, mesFiscal - 1, 1);
       const dataFim = new Date(anoFiscal, mesFiscal, 0);
 
-      const taxCalc = await db('tax_calculations')
-        .where({
-          company_id: companyId,
-          tax_regime: regime,
+      // Busca a soma de calculated_amount de todos os impostos do período para o regime
+      const taxCalcs = await db('tax_calculations')
+        .where({ company_id: companyId })
+        .where(function () {
+          this.whereBetween('period_start', [dataInicio, dataFim]).orWhereBetween(
+            'period_end',
+            [dataInicio, dataFim],
+          );
         })
-        .whereBetween('period_start', [dataInicio, dataFim])
-        .orWhereBetween('period_end', [dataInicio, dataFim])
-        .first();
+        .select('calculated_amount', 'tax_type');
 
-      if (!taxCalc) {
+      if (!taxCalcs || taxCalcs.length === 0) {
         throw new Error(
-          `Nenhuma apuração encontrada para ${mesFiscal}/${anoFiscal} em regime ${regime}`,
+          `Nenhuma apuração encontrada para ${mesFiscal}/${anoFiscal}`,
         );
       }
 
-      const valorBase = parseFloat(taxCalc.total_tax) || 0;
+      const valorBase = taxCalcs.reduce(
+        (sum: number, row: any) => sum + (parseFloat(row.calculated_amount) || 0),
+        0,
+      );
       const dataVencimento = this.calcularDataVencimento(mesFiscal, anoFiscal);
 
-      // Para o Simples Nacional, o valor já vem calculado
-      const aliquota = taxCalc.effective_rate || 0;
+      // Alíquota efetiva estimada sobre receita total (informativa)
+      const aliquota = 0;
 
       return {
         mes_competencia: mesFiscal,

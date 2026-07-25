@@ -76,8 +76,9 @@ export class CacheKeys {
   /**
    * Cache key para Livro Razão
    */
-  static ledger(companyId: string, dateFrom: string, dateTo: string): string {
-    return `${CacheNamespace.REPORTS}:${companyId}:${ReportType.LEDGER}:${sanitize(dateFrom)}:${sanitize(dateTo)}`;
+  static ledger(companyId: string, dateFrom: string, dateTo: string, accountId?: string): string {
+    const accountPart = accountId ? `:${sanitize(accountId)}` : '';
+    return `${CacheNamespace.REPORTS}:${companyId}:${ReportType.LEDGER}${accountPart}:${sanitize(dateFrom)}:${sanitize(dateTo)}`;
   }
 
   /**
@@ -113,8 +114,9 @@ export class CacheKeys {
    * Cache key para árvore de contas (hierarchy)
    * @param companyId - UUID da empresa
    */
-  static accountsTree(companyId: string): string {
-    return `${CacheNamespace.ACCOUNTS}:${companyId}:tree`;
+  static accountsTree(companyId: string, parentCode?: string): string {
+    const parentPart = parentCode ? `:${sanitize(parentCode)}` : '';
+    return `${CacheNamespace.ACCOUNTS}:${companyId}:tree${parentPart}`;
   }
 
   /**

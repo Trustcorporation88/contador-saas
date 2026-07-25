@@ -61,7 +61,7 @@ export class AccountController {
 
       // Determinar cache key baseado em hierarchy
       const cacheKey = filters.hierarchy
-        ? CacheKeys.accountsTree(companyId)
+        ? CacheKeys.accountsTree(companyId, filters.parent_code)
         : CacheKeys.accountsList(companyId, filters);
 
       // Try cache first

@@ -271,7 +271,8 @@ export class TaxCalculationService {
     const saved: SavedTaxCalculation[] = [];
 
     for (const tax of result.taxes) {
-      const amount = tax.amount + (tax.surcharge ?? 0);
+      // tax.amount já inclui a sobretaxa (surcharge) — não somar novamente
+      const amount = tax.amount;
       const [row] = await db('tax_calculations')
         .insert({
           company_id:        result.company_id,

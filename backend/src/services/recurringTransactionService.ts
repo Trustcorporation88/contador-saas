@@ -485,12 +485,14 @@ export class RecurringTransactionService {
     });
 
     // Inserir linhas
-    for (const line of journalDTO.lines) {
+    for (let i = 0; i < journalDTO.lines.length; i++) {
+      const line = journalDTO.lines[i];
       await trx('journal_lines').insert({
         journal_entry_id: id,
         account_id: line.account_id,
         debit: line.debit,
         credit: line.credit,
+        line_number: i + 1,
       });
     }
 

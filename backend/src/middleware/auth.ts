@@ -257,8 +257,8 @@ export function authorize(...allowedRoles: string[]) {
  * Generate JWT token with JTI (unique identifier for revocation)
  */
 export function generateToken(payload: Record<string, unknown>): string {
-  const { v4: uuidv4 } = require('crypto');
-  
+  const { v4: uuidv4 } = require('uuid');
+
   return jwt.sign(payload, envConfig.jwt.secret, {
     jwtid: uuidv4(), // Unique identifier para blacklist
     expiresIn: envConfig.jwt.expiry as any,
@@ -270,8 +270,8 @@ export function generateToken(payload: Record<string, unknown>): string {
  * Generate refresh token with JTI
  */
 export function generateRefreshToken(payload: Record<string, unknown>): string {
-  const { v4: uuidv4 } = require('crypto');
-  
+  const { v4: uuidv4 } = require('uuid');
+
   return jwt.sign(payload, envConfig.jwt.refreshSecret, {
     jwtid: uuidv4(), // Unique identifier para blacklist
     expiresIn: envConfig.jwt.refreshExpiry as any,

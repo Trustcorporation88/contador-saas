@@ -78,6 +78,8 @@ export class DASService {
     if (filters?.regime_tributario) params.append('regime_tributario', filters.regime_tributario);
     if (filters?.mes_competencia) params.append('mes_competencia', filters.mes_competencia.toString());
     if (filters?.ano_competencia) params.append('ano_competencia', filters.ano_competencia.toString());
+    if (filters?.data_vencimento_de) params.append('data_vencimento_de', filters.data_vencimento_de);
+    if (filters?.data_vencimento_ate) params.append('data_vencimento_ate', filters.data_vencimento_ate);
     if (filters?.somente_atrasadas) params.append('somente_atrasadas', 'true');
     if (filters?.somente_nao_pagos) params.append('somente_nao_pagos', 'true');
     if (filters?.limit) params.append('limit', filters.limit.toString());

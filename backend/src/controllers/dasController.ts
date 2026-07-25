@@ -5,6 +5,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { DASService } from '../services/dasService';
+import { getDatabase } from '../config/database';
 import { CreateDASDTO, ListDASFilters, RegisterPaymentDTO, UpdateDASDTO, GenerateDASFromTaxDTO, UpdateAgendamentoDASDTO } from '../models/dtos/dasDTO';
 import { logger } from '../middleware/requestLogger';
 
@@ -17,7 +18,7 @@ export class DASController {
   static async generate(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
     try {
       const companyId = req.params.companyId;
-      const userId = (req as any).userId;
+      const userId = req.user?.id ?? (req as any).userId ?? '';
 
       const dto: CreateDASDTO = {
         mes_competencia: req.body.mes_competencia,
@@ -38,8 +39,8 @@ export class DASController {
         });
       }
 
-      if (dto.valor_original <= 0) {
-        return res.status(400).json({ error: 'Valor original deve ser maior que zero' });
+      if (typeof dto.valor_original !== 'number' || !isFinite(dto.valor_original) || dto.valor_original <= 0) {
+        return res.status(400).json({ error: 'valor_original deve ser um número positivo' });
       }
 
       logger.info('Gerando DAS', { companyId, mes: dto.mes_competencia, ano: dto.ano_competencia });
@@ -61,7 +62,7 @@ export class DASController {
   static async generateAuto(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
     try {
       const companyId = req.params.companyId;
-      const userId = (req as any).userId;
+      const userId = req.user?.id ?? (req as any).userId ?? '';
       const dto: GenerateDASFromTaxDTO = req.body;
 
       if (!dto.tax_calculation_id) {
@@ -70,12 +71,23 @@ export class DASController {
 
       logger.info('Gerando DAS automaticamente', { companyId, taxCalcId: dto.tax_calculation_id });
 
-      // Aqui você faria a integração com TaxCalculationService
-      // Por agora, retornamos um erro indicando que deve ser implementado
-      return res.status(501).json({
-        error: 'Geração automática de DAS a partir de tax_calculation ainda não implementada',
-        hint: 'Use o endpoint /das/generate e passe os dados calculados manualmente',
-      });
+      const db = await getDatabase();
+      const taxCalcRow = await db('tax_calculations')
+        .where({ id: dto.tax_calculation_id, company_id: companyId })
+        .first();
+
+      if (!taxCalcRow) {
+        return res.status(404).json({ error: 'Apuração fiscal não encontrada para esta empresa' });
+      }
+
+      const mesDate = new Date(taxCalcRow.period_start);
+      const mesFiscal = mesDate.getMonth() + 1;
+      const anoFiscal = mesDate.getFullYear();
+      const regime: 'SIMPLES' | 'LUCRO_REAL' | 'LUCRO_PRESUMIDO' = 'SIMPLES';
+
+      const result = await DASService.gerarAutomaticamente(companyId, userId, mesFiscal, anoFiscal, regime);
+      const statusCode = result.success ? 201 : 400;
+      return res.status(statusCode).json(result);
     } catch (err) {
       logger.error('DAS generateAuto error', { error: (err as Error).message });
       return next(err);
@@ -144,7 +156,7 @@ export class DASController {
     try {
       const companyId = req.params.companyId;
       const dasId = req.params.dasId;
-      const userId = (req as any).userId;
+      const userId = req.user?.id ?? (req as any).userId ?? '';
 
       const dto: UpdateDASDTO = {
         juros: req.body.juros,
@@ -171,7 +183,7 @@ export class DASController {
     try {
       const companyId = req.params.companyId;
       const dasId = req.params.dasId;
-      const userId = (req as any).userId;
+      const userId = req.user?.id ?? (req as any).userId ?? '';
 
       const dto: RegisterPaymentDTO = {
         data_pagamento: req.body.data_pagamento,
@@ -207,7 +219,7 @@ export class DASController {
     try {
       const companyId = req.params.companyId;
       const dasId = req.params.dasId;
-      const userId = (req as any).userId;
+      const userId = req.user?.id ?? (req as any).userId ?? '';
       const motivo = req.body.motivo || 'Cancelamento sem motivo especificado';
 
       logger.info('Cancelando DAS', { dasId });
@@ -254,7 +266,7 @@ export class DASController {
     try {
       const companyId = req.params.companyId;
       const regime = req.params.regime as any;
-      const userId = (req as any).userId;
+      const userId = req.user?.id ?? (req as any).userId ?? '';
 
       if (!['SIMPLES', 'LUCRO_REAL', 'LUCRO_PRESUMIDO'].includes(regime)) {
         return res.status(400).json({ error: 'Regime inválido' });
@@ -269,7 +281,7 @@ export class DASController {
       const agendamento = await DASService.atualizarAgendamento(companyId, regime, userId, dto);
 
       if (!agendamento) {
-        return res.status(500).json({ error: 'Erro ao atualizar agendamento' });
+        return res.status(404).json({ error: 'Agendamento não encontrado ou erro ao atualizar' });
       }
 
       return res.status(200).json({

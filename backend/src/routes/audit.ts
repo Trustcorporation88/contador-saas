@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { AuditController } from '../controllers/auditController';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, authorize } from '../middleware/auth';
 
 /**
  * Audit Routes
@@ -15,6 +15,7 @@ import { authenticateToken } from '../middleware/auth';
 const router = Router();
 
 router.use(authenticateToken);
+router.use(authorize('admin'));
 
 /**
  * GET /audit/stats

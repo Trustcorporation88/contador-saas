@@ -253,7 +253,8 @@ export class ReportController {
       const cacheKey = CacheKeys.ledger(
         companyId,
         dateFrom || 'start',
-        dateTo || 'today'
+        dateTo || 'today',
+        accountId,
       );
       const cached = await cacheService.get(cacheKey);
 

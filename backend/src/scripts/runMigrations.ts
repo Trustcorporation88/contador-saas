@@ -15,9 +15,11 @@ async function main() {
 
   const db = knex({
     client: 'pg',
-    connection: url,
-    ssl: url.includes('railway') || url.includes('rlwy.net') ? { rejectUnauthorized: false } : false,
-  });
+    connection: {
+      connectionString: url,
+      ssl: url.includes('railway') || url.includes('rlwy.net') ? { rejectUnauthorized: false } : false,
+    },
+  } as any);
 
   try {
     await runMigrationsIfNeeded(db);

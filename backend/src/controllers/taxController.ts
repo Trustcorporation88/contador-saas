@@ -95,24 +95,23 @@ export class TaxController {
       }
 
        const result = await TaxCalculationService.calculate(dto);
-       const saved  = await TaxCalculationService.save(result);
        const guide = await TaxCalculationService.generateDASGuide(result);
 
        const guidesDir = path.resolve(process.cwd(), 'generated-guides');
-       if (!fs.existsSync(guidesDir)) {
-         fs.mkdirSync(guidesDir, { recursive: true });
-       }
+       await fs.promises.mkdir(guidesDir, { recursive: true });
        const filePath = path.join(guidesDir, guide.filename);
-       fs.writeFileSync(filePath, guide.buffer);
+       await fs.promises.writeFile(filePath, guide.buffer);
+
+       const saved = await TaxCalculationService.save(result);
 
        // INVALIDATE CACHE após salvar apuração
        const invalidatedCount = await cacheService.invalidateTaxes(companyId);
-       logger.info('Cache invalidated after tax appraisal save', { 
+       logger.info('Cache invalidated after tax appraisal save', {
          companyId,
-         invalidatedKeys: invalidatedCount 
+         invalidatedKeys: invalidatedCount,
        });
 
-       return res.status(201).json({ calculation: result, saved, guide: { filename: guide.filename, path: filePath } });
+       return res.status(201).json({ calculation: result, saved, guide: { filename: guide.filename } });
     } catch (err) {
       logger.error('Tax appraisal error', { error: (err as Error).message });
       return next(err);
