@@ -7,6 +7,7 @@ import { getDatabase } from '../config/database';
 import { envConfig } from '../config/env';
 import { logger } from '../middleware/requestLogger';
 import { decryptSecret, encryptSecret } from '../utils/certEncryption';
+import { materializePfxResilient } from '../utils/pfxMaterialize';
 
 export type FiscalDocType = 'nfe' | 'nfse';
 
@@ -99,25 +100,13 @@ async function materializePfxFile(
   pfxData: string | null | undefined,
   pfxBuffer?: Buffer,
 ): Promise<string> {
-  const targetDir = path.dirname(pfxPath);
-  await fs.ensureDir(targetDir);
-
-  if (pfxBuffer && pfxBuffer.length > 0) {
-    await fs.writeFile(pfxPath, pfxBuffer);
-    return pfxPath;
-  }
-
-  if (pfxData) {
-    await fs.writeFile(pfxPath, Buffer.from(pfxData, 'base64'));
-    return pfxPath;
-  }
-
-  const fallback = path.join(os.tmpdir(), 'fiscal-certs', `${companyId}.pfx`);
-  if (await fs.pathExists(fallback)) {
-    return fallback;
-  }
-
-  throw new Error('Certificado A1 não encontrado no servidor. Cadastre o .pfx novamente.');
+  return materializePfxResilient({
+    companyId,
+    preferredPath: pfxPath,
+    pfxData,
+    pfxBuffer,
+    existingPath: pfxPath,
+  });
 }
 
 export class FiscalCaptureService {
@@ -140,8 +129,23 @@ export class FiscalCaptureService {
     const pfxPath = path.join(certsDir, `${companyId}.pfx`);
     const pfxDataB64 = data.pfxBuffer.toString('base64');
 
+    const company = await db('companies').where({ id: companyId }).first();
+    if (company) {
+      const companyCnpj = onlyDigits(String(company.cnpj || ''));
+      if (companyCnpj && companyCnpj !== cnpj) {
+        throw Object.assign(
+          new Error(
+            `CNPJ do certificado (${cnpj}) difere do CNPJ da empresa (${companyCnpj}). ` +
+              'Use o .pfx emitido para esta empresa.',
+          ),
+          { status: 422 },
+        );
+      }
+    }
+
+    let savedPath = pfxPath;
     try {
-      await materializePfxFile(companyId, pfxPath, pfxDataB64, data.pfxBuffer);
+      savedPath = await materializePfxFile(companyId, pfxPath, pfxDataB64, data.pfxBuffer);
     } catch (error) {
       logger.warn('Falha ao gravar .pfx em disco; mantendo cópia no banco', {
         companyId,
@@ -157,7 +161,7 @@ export class FiscalCaptureService {
       company_id: companyId,
       cnpj,
       uf,
-      pfx_path: pfxPath,
+      pfx_path: savedPath,
       pfx_data: pfxDataB64,
       password_encrypted: encryptedPassword,
       cert_valid_until: data.certValidUntil ? new Date(data.certValidUntil) : null,

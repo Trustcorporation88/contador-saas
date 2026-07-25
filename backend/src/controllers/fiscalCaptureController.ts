@@ -47,8 +47,13 @@ export class FiscalCaptureController {
       logger.info('Certificado fiscal A1 cadastrado', { companyId, cnpj: saved.cnpj });
       res.status(201).json({ success: true, data: saved });
     } catch (error) {
-      const message = (error as Error).message;
+      const e = error as Error & { status?: number };
+      const message = e.message;
       logger.error('Erro ao cadastrar certificado fiscal', { error: message });
+      if (e.status && e.status < 500) {
+        res.status(e.status).json({ success: false, error: message });
+        return;
+      }
       res.status(500).json({
         success: false,
         error: message.includes('EACCES') || message.includes('permission denied')
