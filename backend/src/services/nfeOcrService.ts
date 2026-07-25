@@ -89,6 +89,37 @@ function parseDateString(dateStr: string | null): string | null {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * Valida a assinatura binária (magic bytes) do arquivo, em vez de confiar
+ * apenas no mimetype declarado pelo cliente (facilmente forjável).
+ */
+function matchesDeclaredFileType(buffer: Buffer, mimetype: string): boolean {
+  if (buffer.length < 4) return false;
+  const bytes = buffer.subarray(0, 8);
+
+  if (mimetype.includes('pdf')) {
+    return bytes.subarray(0, 5).toString('ascii') === '%PDF-';
+  }
+  if (mimetype === 'image/jpeg') {
+    return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  }
+  if (mimetype === 'image/png') {
+    return bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+  }
+  if (mimetype === 'image/tiff') {
+    const isLittleEndian = bytes[0] === 0x49 && bytes[1] === 0x49 && bytes[2] === 0x2a && bytes[3] === 0x00;
+    const isBigEndian = bytes[0] === 0x4d && bytes[1] === 0x4d && bytes[2] === 0x00 && bytes[3] === 0x2a;
+    return isLittleEndian || isBigEndian;
+  }
+  return false;
+}
+
+/** Sanitiza o nome do arquivo para uso como identificador interno (não como path real). */
+function sanitizeFileName(name: string): string {
+  const base = name.replace(/[/\\]/g, '_').replace(/\.\./g, '_');
+  return base.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200) || 'arquivo';
+}
+
 /** Validate NF-e key format (44 digits with check digit) */
 function validateInvoiceKey(key: string): boolean {
   if (!key || key.length !== 44) return false;
@@ -249,8 +280,15 @@ export class NfeOcrService {
     const fileType = file.mimetype.includes('pdf') ? 'pdf' : 'image';
     const dataBuffer = file.buffer;
 
+    if (!matchesDeclaredFileType(dataBuffer, file.mimetype)) {
+      throw Object.assign(
+        new Error('O conteúdo do arquivo não corresponde ao tipo declarado. Envie um PDF ou imagem válidos.'),
+        { status: 400 },
+      );
+    }
+
     try {
-      logger.info('Processing NF-e upload', { 
+      logger.info('Processing NF-e upload', {
         uploadId, 
         fileName: file.originalname, 
         fileType,
@@ -258,17 +296,26 @@ export class NfeOcrService {
       });
 
       let extractedText: string;
+      let imageOcrUnavailable = false;
       if (fileType === 'pdf') {
         extractedText = await this.extractTextFromPdf(dataBuffer);
       } else {
         extractedText = await this.extractTextFromImage(dataBuffer);
+        // Tesseract.js ainda não está instalado — texto sempre vazio para imagens.
+        // Não é "baixa confiança de extração", é recurso indisponível no momento.
+        imageOcrUnavailable = extractedText.length === 0;
       }
 
       // Step 2: Parse extracted text to structured data
       const ocrData = this.parseNfeFields(extractedText);
 
       // Step 3: Calculate confidence score
-      const confidence = estimateConfidence(ocrData);
+      const confidence = imageOcrUnavailable ? 0 : estimateConfidence(ocrData);
+      const errorMsg = imageOcrUnavailable
+        ? 'OCR de imagem indisponível no momento. Envie a NF-e em PDF.'
+        : confidence <= 0.6
+          ? 'Confiança de extração baixa'
+          : undefined;
 
       logger.info('NF-e extraction complete', {
         uploadId,
@@ -284,13 +331,13 @@ export class NfeOcrService {
         id: uploadId,
         company_id: companyId,
         file_name: file.originalname,
-        file_path: file.originalname,
+        file_path: sanitizeFileName(file.originalname),
         file_type: fileType,
         file_size: file.size,
         ocr_data: ocrData,
         status: confidence > 0.6 ? 'extracted' : 'error',
         extraction_confidence: confidence,
-        error_message: confidence <= 0.6 ? 'Confiança de extração baixa' : undefined,
+        error_message: errorMsg,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -306,7 +353,7 @@ export class NfeOcrService {
         ocr_data: ocrData,
         status: confidence > 0.6 ? 'extracted' : 'error',
         extraction_confidence: confidence,
-        error: confidence <= 0.6 ? 'Confiança de extração baixa (< 60%)' : undefined,
+        error: errorMsg,
         created_at: record.created_at,
       };
     } catch (error) {
@@ -321,7 +368,7 @@ export class NfeOcrService {
         id: uploadId,
         company_id: companyId,
         file_name: file.originalname,
-        file_path: file.originalname,
+        file_path: sanitizeFileName(file.originalname),
         file_type: fileType,
         file_size: file.size,
         ocr_data: {},
@@ -492,6 +539,20 @@ export class NfeOcrService {
     // Use adjustments if provided, otherwise use suggestions
     const debit_account = adjustments?.debit_account || preview.suggested_entries[0].account_code;
     const credit_account = adjustments?.credit_account || preview.suggested_entries[1].account_code;
+
+    // Valida que as contas informadas (manualmente ou sugeridas) realmente
+    // existem no plano de contas ativo desta empresa antes de gravar o lançamento.
+    const validAccounts = await db('accounts')
+      .whereIn('code', [debit_account, credit_account])
+      .where({ company_id: companyId, is_active: true })
+      .select('code');
+    const validCodes = new Set(validAccounts.map((a) => a.code));
+    if (!validCodes.has(debit_account) || !validCodes.has(credit_account)) {
+      throw Object.assign(
+        new Error('Conta contábil informada não existe ou está inativa no plano de contas desta empresa.'),
+        { status: 422 },
+      );
+    }
 
     // Create journal entry
     const journalEntryId = randomUUID();

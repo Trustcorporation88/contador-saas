@@ -13,13 +13,30 @@ export interface ChatSession {
   updatedAt: Date;
 }
 
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+
 export class ChatHistoryService {
   private static sessions: Map<string, ChatSession> = new Map();
+
+  /**
+   * Remove sessões inativas há mais de SESSION_TTL_MS. Executado de forma
+   * preguiçosa a cada criação de sessão — evita crescimento ilimitado do Map
+   * em memória (não há persistência/expiração automática nesta implementação).
+   */
+  private static purgeExpired(): void {
+    const now = Date.now();
+    for (const [id, session] of this.sessions) {
+      if (now - session.updatedAt.getTime() > SESSION_TTL_MS) {
+        this.sessions.delete(id);
+      }
+    }
+  }
 
   /**
    * Cria nova sessão de chat
    */
   static createSession(companyName: string, ownerUserId: string): string {
+    this.purgeExpired();
     const id = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const session: ChatSession = {
       id,

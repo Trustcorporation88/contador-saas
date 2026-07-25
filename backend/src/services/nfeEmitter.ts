@@ -17,7 +17,7 @@ import { randomUUID } from 'crypto';
 import { getDatabase } from '../config/database';
 import { envConfig } from '../config/env';
 import { logger } from '../middleware/requestLogger';
-import { decryptSecret } from '../utils/certEncryption';
+import { decryptSecret, decryptSecretWithLegacyFallback } from '../utils/certEncryption';
 
 export interface NfeEmissionResult {
   ok: boolean;
@@ -343,7 +343,7 @@ export async function emitirNfeReal(
   const certPath = await materializePfx(
     company.id,
     String(cert.pfx_path || ''),
-    cert.pfx_data as string | null | undefined,
+    cert.pfx_data ? decryptSecretWithLegacyFallback(cert.pfx_data as string) : null,
   );
 
   const payload = buildPayload(company, nfe, itens, ambiente, certPath, certSenha);
@@ -405,7 +405,7 @@ export async function verificarNumeracaoSefaz(opts: {
   const certPath = await materializePfx(
     opts.companyId,
     String(cert.pfx_path || ''),
-    cert.pfx_data as string | null | undefined,
+    cert.pfx_data ? decryptSecretWithLegacyFallback(cert.pfx_data as string) : null,
   );
 
   const payload = {

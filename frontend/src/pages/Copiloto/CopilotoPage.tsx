@@ -130,10 +130,13 @@ function answer(question: string, ctx: Context): string {
 // ─── Chamada à API DeepSeek via backend ──────────────────────────────────────
 
 async function callDeepSeekAPI(
+  sessionId: string | null,
   message: string,
   ctx: Context,
   history: Array<{ role: 'user' | 'assistant'; content: string }>,
 ): Promise<{ reply: string; tokens?: number } | null> {
+  if (!sessionId) return null;
+
   const b = ctx.balance;
   const d = ctx.dre;
 
@@ -158,7 +161,7 @@ async function callDeepSeekAPI(
   };
 
   try {
-    const res = await api.post('/copiloto/chat', { message, context, history });
+    const res = await api.post('/copiloto/chat', { sessionId, message, context, history });
     if (res.data.fallback) return null;
     return { reply: res.data.reply, tokens: res.data.tokens };
   } catch {
@@ -237,6 +240,7 @@ export default function CopilotoPage() {
   const [input,    setInput]    = useState('');
   const [loading,  setLoading]  = useState(false);
   const [aiMode,   setAiMode]   = useState<AiMode>('unknown');
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const monthStart = useMemo(() => format(new Date(), 'yyyy-MM-01'), []);
@@ -286,6 +290,20 @@ export default function CopilotoPage() {
     company: qCompany.data?.name ?? 'Empresa',
   };
 
+  // Cria a sessão de chat no backend assim que o nome da empresa estiver
+  // disponível — sem isso, /copiloto/chat sempre falha (sessionId obrigatório)
+  // e o app cai silenciosamente no motor local mesmo com o DeepSeek disponível.
+  useEffect(() => {
+    if (sessionId || !qCompany.data?.name) return;
+    let cancelled = false;
+    api.post('/copiloto/session', { companyName: qCompany.data.name })
+      .then((res) => {
+        if (!cancelled) setSessionId(res.data.sessionId);
+      })
+      .catch(() => { /* mantém sessionId null — send() cai no motor local */ });
+    return () => { cancelled = true; };
+  }, [qCompany.data?.name, sessionId]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -309,7 +327,7 @@ export default function CopilotoPage() {
 
     try {
       // Tenta API DeepSeek primeiro
-      const aiResult = await callDeepSeekAPI(text, ctx, historyForApi);
+      const aiResult = await callDeepSeekAPI(sessionId, text, ctx, historyForApi);
 
       if (aiResult) {
         setAiMode('deepseek');
@@ -334,7 +352,7 @@ export default function CopilotoPage() {
     } finally {
       setLoading(false);
     }
-  }, [ctx, historyForApi, loading]);
+  }, [ctx, historyForApi, loading, sessionId]);
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) {

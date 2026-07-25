@@ -13,7 +13,58 @@ import { DeepSeekService, FinancialContext, DeepSeekResponse } from '../services
 import { ValidationService } from '../services/validationService';
 import { ChatHistoryService } from '../services/chatHistoryService';
 import { PDFExportService } from '../services/pdfExportService';
+import { ReportService } from '../services/reportService';
 import { logger } from '../middleware/requestLogger';
+
+/**
+ * Busca os dados financeiros reais da empresa do usuário autenticado — nunca
+ * confia nos números de balance/dre que o cliente envie no body, pois
+ * permitiriam fabricar laudos com aparência oficial e dados falsos.
+ */
+async function loadRealFinancialContext(companyId: string): Promise<Pick<FinancialContext, 'balance' | 'dre'>> {
+  const today = new Date().toISOString().slice(0, 10);
+  const monthStart = `${today.slice(0, 7)}-01`;
+
+  const [balanco, dre] = await Promise.all([
+    ReportService.getBalanceSheet(companyId, today),
+    ReportService.getIncomeStatement(companyId, monthStart, today),
+  ]);
+
+  const sumItems = (items: { balance?: number }[]) => items.reduce((s, i) => s + (i.balance ?? 0), 0);
+
+  return {
+    balance: {
+      ativoTotal: balanco.total_assets,
+      passivoTotal: balanco.liabilities.total,
+      patrimonioLiquido: balanco.equity.total,
+      ativoCirculante: sumItems(balanco.assets.current),
+      passivoCirculante: sumItems(balanco.liabilities.current),
+    },
+    dre: {
+      receitaLiquida: dre.gross_revenue,
+      lucroLiquido: dre.net_income,
+      // Relatório simplificado não detalha custo de vendas/impostos separadamente
+      custoVendas: 0,
+      impostos: 0,
+    },
+  };
+}
+
+const MAX_MESSAGE_LENGTH = 4000;
+const MAX_COMPANY_NAME_LENGTH = 200;
+
+/**
+ * Sanitiza texto fornecido pelo cliente antes de interpolar no prompt do
+ * sistema enviado ao LLM — remove quebras de linha e aspas que poderiam ser
+ * usadas para tentar injetar novas instruções (prompt injection).
+ */
+function sanitizeForPrompt(value: string, maxLength: number): string {
+  return value
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/["'`]/g, '')
+    .trim()
+    .slice(0, maxLength);
+}
 
 export class CopilotoController {
   /**
@@ -39,8 +90,9 @@ export class CopilotoController {
       return;
     }
 
-    const sessionId = ChatHistoryService.createSession(companyName, req.user!.id);
-    res.json({ sessionId, companyName });
+    const cleanCompanyName = sanitizeForPrompt(companyName, MAX_COMPANY_NAME_LENGTH);
+    const sessionId = ChatHistoryService.createSession(cleanCompanyName, req.user!.id);
+    res.json({ sessionId, companyName: cleanCompanyName });
   }
 
   /**
@@ -91,11 +143,36 @@ export class CopilotoController {
       res.status(400).json({ error: 'message é obrigatório.' });
       return;
     }
+    if (message.trim().length > MAX_MESSAGE_LENGTH) {
+      res.status(400).json({
+        error: `message excede o limite de ${MAX_MESSAGE_LENGTH} caracteres.`,
+      });
+      return;
+    }
 
     // Validar context.companyName
     if (!context?.companyName) {
       res.status(400).json({ error: 'context.companyName é obrigatório.' });
       return;
+    }
+    // Sanitiza antes de interpolar no prompt do sistema (evita prompt injection via nome livre)
+    context.companyName = sanitizeForPrompt(context.companyName, MAX_COMPANY_NAME_LENGTH);
+
+    // Nunca confia em balance/dre vindos do cliente — busca os dados reais da
+    // empresa autenticada. Evita que o usuário fabrique números e gere uma
+    // "análise" com aparência oficial baseada em dados falsos.
+    if (req.user?.companyId) {
+      try {
+        const real = await loadRealFinancialContext(req.user.companyId);
+        context.balance = real.balance;
+        context.dre = real.dre;
+      } catch (err) {
+        logger.warn('Falha ao carregar dados financeiros reais para o Copiloto', {
+          error: (err as Error).message,
+        });
+        context.balance = undefined;
+        context.dre = undefined;
+      }
     }
 
     // Validar dados financeiros
@@ -192,12 +269,24 @@ export class CopilotoController {
    */
   static async exportAnalysisPDF(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
-    const { financialData } = req.body;
 
     const session = ChatHistoryService.getSession(id);
     if (!session || session.ownerUserId !== req.user!.id) {
       res.status(404).json({ error: 'Sessão não encontrada' });
       return;
+    }
+
+    // Ignora financialData enviado pelo cliente — o PDF exportado precisa
+    // refletir os dados reais da empresa, não números fabricados pelo usuário.
+    let financialData: Pick<FinancialContext, 'balance' | 'dre'> | Record<string, never> = {};
+    if (req.user?.companyId) {
+      try {
+        financialData = await loadRealFinancialContext(req.user.companyId);
+      } catch (err) {
+        logger.warn('Falha ao carregar dados financeiros reais para exportação de análise', {
+          error: (err as Error).message,
+        });
+      }
     }
 
     try {

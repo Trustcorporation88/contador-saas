@@ -51,7 +51,9 @@ export class NfeOcrController {
       // Process upload
       const result = await NfeOcrService.processUpload(companyId, req.file);
 
-      return res.status(201).json(result);
+      // 201 apenas quando a extração teve sucesso; extração com erro/baixa
+      // confiança é devolvida como 422 para o cliente tratar como falha real.
+      return res.status(result.status === 'extracted' ? 201 : 422).json(result);
     } catch (err: unknown) {
       const e = err as Error & { status?: number };
       if (e.status && e.status < 500) {

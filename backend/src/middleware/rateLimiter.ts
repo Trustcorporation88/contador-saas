@@ -132,6 +132,15 @@ const ENDPOINT_LIMITS: EndpointRateLimit[] = [
     limit: 10,
     windowMs: 60 * 1000,
   },
+
+  // Copiloto de IA: cada chamada consome tokens reais de API — limite restrito
+  // para evitar custo descontrolado por abuso ou bug de loop no frontend.
+  {
+    path: '/api/v1/copiloto/chat',
+    method: 'POST',
+    limit: 10,
+    windowMs: 60 * 1000, // 10 mensagens por minuto por usuário
+  },
 ];
 
 /**

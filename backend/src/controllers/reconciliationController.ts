@@ -41,6 +41,14 @@ export class ReconciliationController {
 
       const file = req.file;
 
+      const fileValidation = BankReconciliationValidator.validateUploadDTO({ file });
+      if (!fileValidation.isValid) {
+        return res.status(400).json({
+          error: 'Arquivo inválido',
+          errors: fileValidation.errors,
+        });
+      }
+
       logger.info('Processing bank statement upload', {
         fileName: file.originalname,
         fileSize: file.size,

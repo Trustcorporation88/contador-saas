@@ -5,10 +5,76 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { EFDBuilderService } from '../services/efdBuilderService';
+import { EFDSchedulerService } from '../services/efdScheduler';
 import { CreateEFDGenerationDTO, ListEFDFilters, EFDDownloadOptions, EFDStatus } from '../models/dtos/efdDTO';
 import { getDatabase } from '../config/database';
 
 export class EFDController {
+  /**
+   * GET /api/v1/companies/:companyId/efd/schedule
+   * Get automatic EFD scheduling config for the company
+   */
+  static async getSchedule(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { companyId } = req.params;
+      const config = await EFDSchedulerService.getSchedule(companyId);
+      res.status(200).json({ success: true, data: config });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PUT /api/v1/companies/:companyId/efd/schedule
+   * Create/update automatic EFD scheduling config for the company
+   */
+  static async updateSchedule(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { companyId } = req.params;
+      const {
+        enabled, day_of_month, hour, minute, timezone,
+        auto_generate, notify_on_completion, notify_on_error, notification_email,
+        include_operations, include_inventory, include_adjustments, retention_days,
+      } = req.body;
+
+      if (day_of_month != null && (day_of_month < 1 || day_of_month > 28)) {
+        res.status(400).json({ error: 'day_of_month deve estar entre 1 e 28', code: 'INVALID_DAY' });
+        return;
+      }
+
+      const rawPayload: Record<string, unknown> = {
+        enabled, day_of_month, hour, minute, timezone,
+        auto_generate, notify_on_completion, notify_on_error, notification_email,
+        include_operations, include_inventory, include_adjustments, retention_days,
+      };
+      const payload: Record<string, unknown> = { company_id: companyId };
+      for (const [key, value] of Object.entries(rawPayload)) {
+        if (value !== undefined) payload[key] = value;
+      }
+
+      await EFDSchedulerService.updateSchedule(payload);
+
+      const config = await EFDSchedulerService.getSchedule(companyId);
+      res.status(200).json({ success: true, data: config, message: 'Agendamento atualizado com sucesso' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/companies/:companyId/efd/schedule/disable
+   * Disable automatic EFD scheduling for the company
+   */
+  static async disableSchedule(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { companyId } = req.params;
+      await EFDSchedulerService.disableSchedule(companyId);
+      res.status(200).json({ success: true, message: 'Agendamento desabilitado' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /**
    * POST /api/v1/companies/:companyId/efd/generate
    * Generate EFD for specific month/year

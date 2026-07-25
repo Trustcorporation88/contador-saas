@@ -526,6 +526,23 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
         },
       },
       {
+        name: '017c_audit_logs_company_id',
+        up: async (db) => {
+          const hasTable = await db.schema.hasTable('audit_logs');
+          if (!hasTable) return;
+
+          const hasColumn = await db.schema.hasColumn('audit_logs', 'company_id');
+          if (!hasColumn) {
+            console.log('[MIGRATIONS] Adding company_id to audit_logs...');
+            await db.schema.alterTable('audit_logs', (table) => {
+              table.uuid('company_id').nullable();
+            });
+            await db.raw('CREATE INDEX IF NOT EXISTS idx_audit_logs_company_id ON audit_logs(company_id)');
+          }
+          console.log('✓ 017c_audit_logs_company_id completed');
+        },
+      },
+      {
         name: '018_efd_tables',
         up: async (db) => {
           const hasTable = await db.schema.hasTable('efd_generations');

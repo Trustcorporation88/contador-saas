@@ -14,7 +14,9 @@ export class BackupController {
     try {
       const backups = await BackupService.listBackups();
       const schedule = BackupService.getScheduleInfo();
-      return res.status(200).json({ schedule, backups });
+      // Nunca expor o caminho absoluto do filesystem do servidor na API pública
+      const sanitized = backups.map(({ path: _path, ...rest }) => rest);
+      return res.status(200).json({ schedule, backups: sanitized });
     } catch (err) {
       return next(err);
     }
@@ -28,7 +30,8 @@ export class BackupController {
       if (!result.success) {
         return res.status(500).json({ error: result.error, duration_ms: result.duration_ms });
       }
-      return res.status(201).json(result);
+      const { path: _path, ...sanitized } = result;
+      return res.status(201).json(sanitized);
     } catch (err) {
       return next(err);
     }

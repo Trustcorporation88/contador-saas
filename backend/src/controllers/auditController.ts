@@ -24,6 +24,7 @@ export class AuditController {
         page: req.query.page ? Number(req.query.page) : 1,
         limit: req.query.limit ? Number(req.query.limit) : 50,
         user_id: req.query.user_id as string | undefined,
+        company_id: req.query.company_id as string | undefined,
         action: req.query.action as string | undefined,
         entity_type: req.query.entity_type as string | undefined,
         entity_id: req.query.entity_id as string | undefined,
@@ -50,9 +51,12 @@ export class AuditController {
     try {
       const { entityId } = req.params;
       const entityType = req.query.entity_type as string | undefined;
+      const companyId = req.query.company_id as string | undefined;
+      const page = req.query.page ? Number(req.query.page) : 1;
+      const limit = req.query.limit ? Number(req.query.limit) : 50;
 
-      const history = await AuditService.getEntityHistory(entityId, entityType);
-      return res.status(200).json({ data: history, total: history.length });
+      const history = await AuditService.getEntityHistory(entityId, entityType, companyId, page, limit);
+      return res.status(200).json(history);
     } catch (err) {
       logger.error('Error fetching entity history', { error: (err as Error).message });
       return next(err);

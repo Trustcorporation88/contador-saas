@@ -58,22 +58,20 @@ export class AccountService {
       throw new Error(`Account code ${data.code} already exists in this company`);
     }
 
-    // Se parent_code foi informado, validar que existe e evitar ciclos
+    // Se parent_code foi informado, validar que existe e está ativa
     let parentId: string | null = null;
     if (data.parent_code) {
       const parentAccount = await db('accounts')
         .where('company_id', companyId)
         .where('code', data.parent_code)
+        .where('is_active', true)
         .first();
 
       if (!parentAccount) {
-        throw new Error(`Parent account with code ${data.parent_code} not found`);
+        throw new Error(`Parent account with code ${data.parent_code} not found or inactive`);
       }
 
       parentId = parentAccount.id;
-
-      // Validar se criaria ciclo (parent não pode ser descendente desta conta)
-      // Isso será feito após inserir e verificar a hierarquia
     }
 
     // Inserir nova conta
@@ -251,10 +249,11 @@ export class AccountService {
         const parentAccount = await db('accounts')
           .where('company_id', companyId)
           .where('code', data.parent_code)
+          .where('is_active', true)
           .first();
 
         if (!parentAccount) {
-          throw new Error(`Parent account with code ${data.parent_code} not found`);
+          throw new Error(`Parent account with code ${data.parent_code} not found or inactive`);
         }
 
         // Validar ciclo: parent não pode ser descendente desta conta
@@ -589,6 +588,11 @@ export class AccountService {
         const parent = map.get(account.parent_id);
         if (parent) {
           parent.children!.push(node);
+        } else {
+          // Pai inativo/inexistente no conjunto carregado: promove a raiz em
+          // vez de descartar silenciosamente a conta (que continuaria ativa
+          // e com lançamentos, mas sumiria da árvore).
+          roots.push(node);
         }
       } else {
         roots.push(node);

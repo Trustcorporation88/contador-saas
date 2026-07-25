@@ -27,7 +27,11 @@ const execAsync = promisify(exec);
 
 // ─── Configuração ─────────────────────────────────────────────────────────────
 
-const BACKUP_DIR      = process.env.BACKUP_DIR      ?? path.join(process.cwd(), 'backups');
+const DEFAULT_BACKUP_DIR = path.join(process.cwd(), 'backups');
+/** Lê BACKUP_DIR em runtime (não capturado no import) — permite override em testes. */
+function getBackupDir(): string {
+  return process.env.BACKUP_DIR ?? DEFAULT_BACKUP_DIR;
+}
 const RETENTION_DAYS  = parseInt(process.env.BACKUP_RETENTION_DAYS ?? '30');
 const CRON_SCHEDULE   = process.env.BACKUP_CRON     ?? '0 3 * * *';  // 03:00 todo dia
 const MIN_BACKUP_SIZE = 100; // bytes — sanity check para backup não vazio
@@ -79,8 +83,7 @@ export class BackupService {
 
   /** Garantir que o diretório de backups existe */
   static ensureBackupDir(): void {
-    // Lê process.env em tempo de execução (permite override em testes)
-    const dir = process.env.BACKUP_DIR ?? BACKUP_DIR;
+    const dir = getBackupDir();
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
       logger.info('Diretório de backups criado', { path: dir });
@@ -96,7 +99,7 @@ export class BackupService {
     const ts       = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const dbName   = process.env.DB_NAME ?? 'contador';
     const filename = `backup-${dbName}-${ts}.sql.gz`;
-    const filepath = path.join(BACKUP_DIR, filename);
+    const filepath = path.join(getBackupDir(), filename);
     const tmpSql   = filepath.replace('.gz', '');
 
     BackupService.ensureBackupDir();
@@ -158,10 +161,10 @@ export class BackupService {
     BackupService.ensureBackupDir();
     const dbName = process.env.DB_NAME ?? 'contador';
 
-    const files = fs.readdirSync(BACKUP_DIR)
+    const files = fs.readdirSync(getBackupDir())
       .filter(f => f.endsWith('.sql.gz') && f.startsWith('backup-'))
       .map(filename => {
-        const filepath = path.join(BACKUP_DIR, filename);
+        const filepath = path.join(getBackupDir(), filename);
         const stat     = fs.statSync(filepath);
         return {
           filename,
@@ -184,11 +187,11 @@ export class BackupService {
   static async purgeOldBackups(): Promise<number> {
     BackupService.ensureBackupDir();
     const cutoff = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
-    const files  = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.sql.gz'));
+    const files  = fs.readdirSync(getBackupDir()).filter(f => f.endsWith('.sql.gz'));
     let removed  = 0;
 
     for (const file of files) {
-      const filepath = path.join(BACKUP_DIR, file);
+      const filepath = path.join(getBackupDir(), file);
       const stat     = fs.statSync(filepath);
       if (stat.birthtimeMs < cutoff) {
         fs.unlinkSync(filepath);
@@ -209,7 +212,7 @@ export class BackupService {
     if (!/^backup-[\w\-]+\.sql\.gz$/.test(filename)) {
       throw Object.assign(new Error('Nome de arquivo inválido'), { status: 400 });
     }
-    const filepath = path.join(BACKUP_DIR, filename);
+    const filepath = path.join(getBackupDir(), filename);
     if (!fs.existsSync(filepath)) {
       throw Object.assign(new Error('Arquivo de backup não encontrado'), { status: 404 });
     }
@@ -230,7 +233,7 @@ export class BackupService {
       enabled:    BackupService.cronJob !== null,
       schedule:   CRON_SCHEDULE,
       next_run:   BackupService.cronJob ? 'Agendado' : 'Não agendado',
-      backup_dir: BACKUP_DIR,
+      backup_dir: getBackupDir(),
       retention:  `${RETENTION_DAYS} dias`,
     };
   }
@@ -259,7 +262,7 @@ export class BackupService {
     logger.info('Backup automático agendado', {
       schedule:  CRON_SCHEDULE,
       retention: `${RETENTION_DAYS} dias`,
-      dir:       BACKUP_DIR,
+      dir:       getBackupDir(),
     });
   }
 

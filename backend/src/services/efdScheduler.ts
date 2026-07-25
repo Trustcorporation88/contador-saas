@@ -5,6 +5,7 @@
  */
 
 import cron from 'node-cron';
+import { DateTime } from 'luxon';
 import { getDatabase } from '../config/database';
 import { EFDBuilderService } from './efdBuilderService';
 import { sendEmailNotification } from '../utils/emailService';
@@ -95,10 +96,13 @@ export class EFDSchedulerService {
 
       const db = await getDatabase();
 
-      // Get previous month (EFD is generated for the previous month)
-      const now = new Date();
-      const previousMonth = now.getMonth() === 0 ? 12 : now.getMonth();
-      const previousYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+      // Get previous month (EFD is generated for the previous month), no
+      // fuso horário configurado da empresa (evita erro perto da virada do mês
+      // quando o fuso do processo Node diverge do fuso local, ex.: UTC vs BRT).
+      const nowInTz = DateTime.now().setZone(config.timezone || 'America/Sao_Paulo');
+      const previousMonthDt = nowInTz.minus({ months: 1 });
+      const previousMonth = previousMonthDt.month;
+      const previousYear = previousMonthDt.year;
 
       // Check if EFD already exists
       const existing = await db('efd_generations')
@@ -132,10 +136,11 @@ export class EFDSchedulerService {
       const company = await db('companies').where({ id: companyId }).first();
 
       // Send notification email if configured
-      if (config.notify_on_completion && config.notification_email) {
+      const completionRecipient = config.notification_email || company?.email;
+      if (config.notify_on_completion && completionRecipient) {
         await this.sendCompletionEmail(
-          config.notification_email,
-          company.company_name,
+          completionRecipient,
+          company?.legal_name || company?.trade_name || '',
           generation,
           validation,
           config,
@@ -163,23 +168,47 @@ export class EFDSchedulerService {
         `[EFD Scheduler] Error during EFD generation for company ${companyId}: ${errorMessage}`,
       );
 
-      // Send error email if configured
-      if (config.notify_on_error && config.notification_email) {
-        await this.sendErrorEmail(config.notification_email, companyId, errorMessage, config);
+      // Falha na geração automática de uma obrigação fiscal não pode passar
+      // despercebida — notifica sempre que houver um e-mail disponível,
+      // independente da preferência notify_on_error (compliance > opt-out).
+      try {
+        const db = await getDatabase();
+        const company = await db('companies').where({ id: companyId }).first();
+        const errorRecipient = config.notification_email || company?.email;
+        if (errorRecipient) {
+          await this.sendErrorEmail(errorRecipient, companyId, errorMessage, config);
+        } else {
+          console.error(
+            `[EFD Scheduler] Nenhum e-mail configurado para notificar falha na empresa ${companyId} — verifique manualmente!`,
+          );
+        }
+      } catch (notifyError) {
+        console.error('[EFD Scheduler] Falha ao enviar e-mail de erro:', notifyError);
       }
 
       const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000);
 
-      // Log to database
-      const db = await getDatabase();
-      await db('efd_audit_log').insert({
-        id: crypto.randomUUID(),
-        action: 'auto_generate_error',
-        status: 'failed',
-        details: JSON.stringify({ execution_id: executionId, duration_seconds: duration }),
-        error_message: errorMessage,
-        performed_at: new Date(),
-      });
+      // Log to database (best-effort — não deve mascarar o erro original)
+      try {
+        const db = await getDatabase();
+        const lastGeneration = await db('efd_generations')
+          .where({ company_id: companyId })
+          .orderBy('created_at', 'desc')
+          .first();
+        if (lastGeneration) {
+          await db('efd_audit_log').insert({
+            id: crypto.randomUUID(),
+            generation_id: lastGeneration.id,
+            action: 'auto_generate_error',
+            status: 'failed',
+            details: JSON.stringify({ execution_id: executionId, duration_seconds: duration }),
+            error_message: errorMessage,
+            performed_at: new Date(),
+          });
+        }
+      } catch (logError) {
+        console.error('[EFD Scheduler] Falha ao registrar audit log de erro:', logError);
+      }
     }
   }
 
@@ -382,20 +411,42 @@ export class EFDSchedulerService {
   }
 
   /**
-   * Update schedule for a company
+   * Get schedule config for a company (null se nunca configurado)
+   */
+  static async getSchedule(companyId: string): Promise<any | null> {
+    const db = await getDatabase();
+    const config = await db('efd_scheduler_config').where({ company_id: companyId }).first();
+    return config || null;
+  }
+
+  /**
+   * Update (ou cria, se ainda não existir) o agendamento de uma empresa
    */
   static async updateSchedule(config: any): Promise<void> {
     try {
       const db = await getDatabase();
-
-      await db('efd_scheduler_config')
+      const existing = await db('efd_scheduler_config')
         .where({ company_id: config.company_id })
-        .update({
+        .first();
+
+      if (existing) {
+        await db('efd_scheduler_config')
+          .where({ company_id: config.company_id })
+          .update({ ...config, updated_at: new Date() });
+      } else {
+        await db('efd_scheduler_config').insert({
           ...config,
+          id: config.id || crypto.randomUUID(),
+          created_at: new Date(),
           updated_at: new Date(),
         });
+      }
 
-      await this.scheduleCompanyEFD(config);
+      const merged = await db('efd_scheduler_config')
+        .where({ company_id: config.company_id })
+        .first();
+
+      await this.scheduleCompanyEFD(merged);
       console.log(`[EFD Scheduler] Updated schedule for company ${config.company_id}`);
     } catch (error) {
       console.error('[EFD Scheduler] Error updating schedule:', error);
@@ -433,11 +484,13 @@ export class EFDSchedulerService {
    * Get all active jobs
    */
   static getActiveJobs(): any[] {
+    // Jobs só permanecem no Map enquanto ativos: scheduleCompanyEFD/disableSchedule
+    // removem a entrada ao parar/destruir o job — presença aqui já implica "ativo".
     const jobs: any[] = [];
-    for (const [companyId, job] of this.scheduledJobs) {
+    for (const companyId of this.scheduledJobs.keys()) {
       jobs.push({
         company_id: companyId,
-        active: !job._destroyed,
+        active: true,
       });
     }
     return jobs;

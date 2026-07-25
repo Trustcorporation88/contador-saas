@@ -7,7 +7,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuditService } from '../services/auditService';
 
-type AuthRequest = Request & { user?: { id: string; role?: string }; tenant?: { companyId: string } };
+type AuthRequest = Request & { user?: { id: string; role?: string; companyId?: string }; tenant?: { companyId: string } };
 
 /**
  * Mapeia método HTTP + path pattern para action do audit_log
@@ -104,6 +104,7 @@ export function auditMiddleware(options?: {
         // Log assíncrono (não bloqueia resposta)
         AuditService.log({
           userId,
+          companyId: req.tenant?.companyId || req.user?.companyId,
           action,
           entityType,
           entityId,
@@ -135,6 +136,7 @@ export async function logAudit(
 ): Promise<void> {
   await AuditService.log({
     userId: req.user?.id,
+    companyId: req.tenant?.companyId || req.user?.companyId,
     action,
     entityType,
     entityId,

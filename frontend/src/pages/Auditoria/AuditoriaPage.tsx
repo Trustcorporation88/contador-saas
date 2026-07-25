@@ -45,12 +45,20 @@ function actionBadge(action: string) {
 // ─── Stats bar ────────────────────────────────────────────────────────────────
 
 function StatsBar({ companyId }: { companyId: string | null }) {
-  const { data } = useQuery({
+  const { data, isError } = useQuery({
     queryKey:  ['audit-stats', companyId],
     queryFn:   () => AuditService.getStats(companyId ?? undefined),
     staleTime: 30_000,
     enabled:   true,
   });
+
+  if (isError) {
+    return (
+      <div className="card p-3 flex items-center gap-2 text-sm text-red-600">
+        <AlertTriangle className="h-4 w-4" /> Falha ao carregar estatísticas de auditoria.
+      </div>
+    );
+  }
 
   const items = [
     { label: 'Total de Logs',    value: data?.total_logs   ?? '—', icon: <Activity className="h-4 w-4 text-primary-500" /> },
@@ -153,7 +161,7 @@ function LogRow({ entry }: { entry: AuditLogEntry }) {
 
 function AccessAuditTab() {
   const [page, setPage] = useState(1);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey:  ['audit-access', page],
     queryFn:   () => AuditService.listAccessAudit({ page, limit: 50 }),
     staleTime: 30_000,
@@ -161,7 +169,11 @@ function AccessAuditTab() {
 
   return (
     <div className="space-y-3">
-      {isLoading ? (
+      {isError ? (
+        <div className="flex items-center gap-2 py-8 justify-center text-red-600 text-sm">
+          <AlertTriangle className="h-4 w-4" /> Falha ao carregar controle de acesso.
+        </div>
+      ) : isLoading ? (
         <div className="flex items-center gap-2 py-8 justify-center text-gray-400">
           <RefreshCw className="h-4 w-4 animate-spin" /> Carregando...
         </div>
@@ -235,7 +247,7 @@ function AuditLogsTab() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo]     = useState('');
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey:  ['audit-logs', page, action, status, dateFrom, dateTo],
     queryFn:   () => AuditService.listLogs({
       page, limit: 50,
@@ -284,7 +296,11 @@ function AuditLogsTab() {
         </button>
       </div>
 
-      {isLoading ? (
+      {isError ? (
+        <div className="flex items-center gap-2 py-8 justify-center text-red-600 text-sm">
+          <AlertTriangle className="h-4 w-4" /> Falha ao carregar logs de auditoria.
+        </div>
+      ) : isLoading ? (
         <div className="flex items-center gap-2 py-8 justify-center text-gray-400">
           <RefreshCw className="h-4 w-4 animate-spin" /> Carregando...
         </div>

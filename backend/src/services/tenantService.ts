@@ -179,6 +179,7 @@ export class TenantService {
   static async switchCompany(
     userId: string,
     newCompanyId: string,
+    currentCompanyId?: string,
   ): Promise<CompanySwitchResult> {
     try {
       const db = await getDatabase();
@@ -198,7 +199,7 @@ export class TenantService {
 
       // Buscar dados do usuário
       const user = await db('users')
-        .select('id', 'email', 'role')
+        .select('id', 'email', 'role', 'company_id')
         .where('id', userId)
         .first();
 
@@ -233,7 +234,7 @@ export class TenantService {
 
       logger.info('Company switch successful', {
         userId,
-        oldCompanyId: user.companyId,
+        oldCompanyId: currentCompanyId || user.company_id,
         newCompanyId,
       });
 
@@ -464,17 +465,16 @@ export class TenantService {
 
       // Check 2: Acesso a múltiplas empresas rapidamente
       const uniqueCompanies = await db('access_audit')
-        .distinct('company_id')
-        .count('* as count')
         .where('user_id', userId)
         .where('action', 'COMPANY_SWITCH')
         .where('timestamp', '>', oneHourAgo)
+        .countDistinct('company_id as count')
         .first();
 
-      if (uniqueCompanies?.count > 5) {
+      if (Number(uniqueCompanies?.count || 0) > 5) {
         logger.warn('SUSPICIOUS ACTIVITY: Multiple company switches in 1 hour', {
           userId,
-          switchCount: uniqueCompanies.count,
+          switchCount: uniqueCompanies?.count,
         });
         return true;
       }

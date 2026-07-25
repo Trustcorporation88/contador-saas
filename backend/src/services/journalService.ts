@@ -24,6 +24,58 @@ import {
  * Garante partidas dobradas: sum(debits) = sum(credits)
  */
 export class JournalService {
+  /**
+   * Calcula o hash de integridade (SHA-256) de um lançamento contábil.
+   * Inclui TODOS os campos relevantes (não só company_id/entry_date/lines)
+   * para que qualquer alteração — inclusive descrição/referência — invalide
+   * a assinatura anterior.
+   */
+  private static computeEntryHash(entry: {
+    company_id: string;
+    entry_date: string;
+    description?: string | null;
+    reference_type?: string | null;
+    reference_number?: string | null;
+    reference_issuer?: string | null;
+    lines: Array<{ account_id: string; debit: number | string; credit: number | string }>;
+  }): string {
+    const payload = JSON.stringify({
+      company_id: entry.company_id,
+      entry_date: entry.entry_date,
+      description: entry.description ?? null,
+      reference_type: entry.reference_type ?? null,
+      reference_number: entry.reference_number ?? null,
+      reference_issuer: entry.reference_issuer ?? null,
+      lines: entry.lines
+        .map(l => ({ account_id: l.account_id, debit: Number(l.debit), credit: Number(l.credit) }))
+        .sort((a, b) => a.account_id.localeCompare(b.account_id)),
+    });
+    return crypto.createHash('sha256').update(payload).digest('hex');
+  }
+
+  /**
+   * Recalcula o hash a partir dos dados atuais no banco e compara com o
+   * data_hash armazenado — detecta adulteração de lançamentos postados.
+   */
+  static async verifyIntegrity(entryId: string, companyId: string): Promise<boolean> {
+    const db = await getDatabase();
+    const entry = await db('journal_entries')
+      .where({ id: entryId, company_id: companyId })
+      .first();
+    if (!entry) return false;
+
+    const lines = await db('journal_lines').where('journal_entry_id', entryId);
+    const recomputed = this.computeEntryHash({
+      company_id: entry.company_id,
+      entry_date: entry.entry_date,
+      description: entry.description,
+      reference_type: entry.reference_type,
+      reference_number: entry.reference_number,
+      reference_issuer: entry.reference_issuer,
+      lines,
+    });
+    return recomputed === entry.data_hash;
+  }
 
   /**
    * Criar novo lançamento contábil
@@ -72,16 +124,15 @@ export class JournalService {
     const totalCredit = data.lines.reduce((s, l) => s + (Number(l.credit) || 0), 0);
 
     // 4. Gerar hash de integridade (SHA-256)
-    const hashPayload = JSON.stringify({
+    const dataHash = this.computeEntryHash({
       company_id: companyId,
       entry_date: data.entry_date,
-      lines: data.lines.map(l => ({
-        account_id: l.account_id,
-        debit: l.debit,
-        credit: l.credit,
-      })),
+      description: data.description,
+      reference_type: data.reference_type,
+      reference_number: data.reference_number,
+      reference_issuer: data.reference_issuer,
+      lines: data.lines,
     });
-    const dataHash = crypto.createHash('sha256').update(hashPayload).digest('hex');
 
     // 5. Inserir em transação
     const trx = await db.transaction();
@@ -349,14 +400,29 @@ export class JournalService {
       if (data.lines) {
         patch.total_debit = totalDebit;
         patch.total_credit = totalCredit;
+      }
 
-        // Atualizar hash
-        const hashPayload = JSON.stringify({
+      // Recalcula o hash sempre que QUALQUER campo relevante for alterado —
+      // não só quando as linhas mudam — para que a assinatura reflita o
+      // conteúdo real do lançamento.
+      const hasRelevantChange =
+        data.lines !== undefined ||
+        data.entry_date !== undefined ||
+        data.description !== undefined ||
+        data.reference_type !== undefined ||
+        data.reference_number !== undefined ||
+        data.reference_issuer !== undefined;
+
+      if (hasRelevantChange) {
+        patch.data_hash = this.computeEntryHash({
           company_id: companyId,
-          entry_date: data.entry_date ?? existing.entry_date,
-          lines: data.lines.map(l => ({ account_id: l.account_id, debit: l.debit, credit: l.credit })),
+          entry_date: (patch.entry_date as string) ?? existing.entry_date,
+          description: data.description !== undefined ? data.description : existing.description,
+          reference_type: data.reference_type !== undefined ? data.reference_type : existing.reference_type,
+          reference_number: data.reference_number !== undefined ? data.reference_number : existing.reference_number,
+          reference_issuer: data.reference_issuer !== undefined ? data.reference_issuer : existing.reference_issuer,
+          lines: data.lines ?? (await trx('journal_lines').where('journal_entry_id', entryId)),
         });
-        patch.data_hash = crypto.createHash('sha256').update(hashPayload).digest('hex');
       }
 
       const [updated] = await trx('journal_entries')

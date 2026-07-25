@@ -6,7 +6,7 @@ import { randomUUID } from 'crypto';
 import { getDatabase } from '../config/database';
 import { envConfig } from '../config/env';
 import { logger } from '../middleware/requestLogger';
-import { decryptSecret, encryptSecret } from '../utils/certEncryption';
+import { decryptSecret, encryptSecret, decryptSecretWithLegacyFallback } from '../utils/certEncryption';
 
 export type FiscalDocType = 'nfe' | 'nfse';
 
@@ -93,6 +93,15 @@ function onlyDigits(value: string): string {
   return value.replace(/\D/g, '');
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Garante que companyId é um UUID válido antes de usá-lo em caminhos de arquivo. */
+function assertValidCompanyId(companyId: string): void {
+  if (!UUID_RE.test(companyId)) {
+    throw Object.assign(new Error('companyId inválido'), { status: 400 });
+  }
+}
+
 async function materializePfxFile(
   companyId: string,
   pfxPath: string,
@@ -132,6 +141,7 @@ export class FiscalCaptureService {
       certValidUntil?: string | null;
     },
   ): Promise<FiscalCertificateRecord> {
+    assertValidCompanyId(companyId);
     const db = await getDatabase();
     const certsDir = getCertsDir();
 
@@ -150,6 +160,8 @@ export class FiscalCaptureService {
     }
 
     const encryptedPassword = encryptSecret(data.password);
+    // Certificado digital (chave privada) nunca deve ficar em texto claro no banco
+    const encryptedPfxData = encryptSecret(pfxDataB64);
     const now = new Date();
     const existing = await db('fiscal_certificates').where({ company_id: companyId }).first();
 
@@ -158,7 +170,7 @@ export class FiscalCaptureService {
       cnpj,
       uf,
       pfx_path: pfxPath,
-      pfx_data: pfxDataB64,
+      pfx_data: encryptedPfxData,
       password_encrypted: encryptedPassword,
       cert_valid_until: data.certValidUntil ? new Date(data.certValidUntil) : null,
       serpro_motor_enabled: Boolean(data.serproMotor),
@@ -261,6 +273,7 @@ export class FiscalCaptureService {
     stdout?: string;
     stderr?: string;
   }> {
+    assertValidCompanyId(companyId);
     const automationDir = getAutomationDir();
     const scriptCandidates = [
       path.join(automationDir, 'maintenance', 'reprocess_captures.py'),
@@ -292,6 +305,7 @@ export class FiscalCaptureService {
     stdout?: string;
     stderr?: string;
   }> {
+    assertValidCompanyId(companyId);
     const db = await getDatabase();
     const cert = await db('fiscal_certificates').where({ company_id: companyId, active: true }).first();
     if (!cert) {
@@ -302,10 +316,11 @@ export class FiscalCaptureService {
     const automationDir = getAutomationDir();
     const schedulerPath = path.join(automationDir, 'scheduler.py');
 
+    const pfxDataPlain = cert.pfx_data ? decryptSecretWithLegacyFallback(cert.pfx_data as string) : null;
     const pfxPath = await materializePfxFile(
       companyId,
       String(cert.pfx_path),
-      cert.pfx_data as string | null | undefined,
+      pfxDataPlain,
     );
 
     if (!(await fs.pathExists(schedulerPath))) {
@@ -316,7 +331,9 @@ export class FiscalCaptureService {
       };
     }
 
-    const configPath = path.join(automationDir, `.runtime-${companyId}.json`);
+    // Nome de arquivo único por execução: evita que duas sincronizações
+    // concorrentes da mesma empresa sobrescrevam/removam o config uma da outra.
+    const configPath = path.join(automationDir, `.runtime-${companyId}-${randomUUID()}.json`);
     const empresaConfig = [
       {
         company_id: companyId,

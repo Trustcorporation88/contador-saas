@@ -132,6 +132,7 @@ export default function ProvaHashPage() {
   const [proof, setProof] = useState<FinancialProof | null>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const monthStart = useMemo(() => format(new Date(), 'yyyy-MM-01'), []);
   const today      = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
@@ -153,9 +154,17 @@ export default function ProvaHashPage() {
   async function generate() {
     if (!companyId) return;
     setLoading(true);
+    setError(null);
     try {
       const p = await buildProof(qBalance.data, qDRE.data, companyId);
       setProof(p);
+    } catch (e) {
+      setProof(null);
+      setError(
+        e instanceof Error
+          ? `Falha ao gerar prova: ${e.message}`
+          : 'Falha ao gerar prova. Verifique se seu navegador suporta Web Crypto (contexto HTTPS).',
+      );
     } finally {
       setLoading(false);
     }
@@ -224,6 +233,11 @@ export default function ProvaHashPage() {
               : <><ShieldCheck className="h-4 w-4" /> Gerar Prova SHA-256</>
             }
           </button>
+          {error && (
+            <p className="text-sm text-red-600 flex items-center justify-center gap-1.5">
+              {error}
+            </p>
+          )}
         </div>
       )}
 

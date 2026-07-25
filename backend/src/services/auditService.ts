@@ -10,6 +10,7 @@ import { logger } from '../middleware/requestLogger';
 export interface AuditLogEntry {
   id: string;
   user_id?: string;
+  company_id?: string;
   action: string;
   entity_type?: string;
   entity_id?: string;
@@ -37,6 +38,7 @@ export interface AuditLogFilters {
   page?: number;
   limit?: number;
   user_id?: string;
+  company_id?: string;
   action?: string;
   entity_type?: string;
   entity_id?: string;
@@ -76,6 +78,7 @@ export class AuditService {
    */
   static async log(params: {
     userId?: string;
+    companyId?: string;
     action: string;
     entityType?: string;
     entityId?: string;
@@ -89,6 +92,7 @@ export class AuditService {
       const db = await getDatabase();
       await db('audit_logs').insert({
         user_id: params.userId || null,
+        company_id: params.companyId || null,
         action: params.action,
         entity_type: params.entityType || null,
         entity_id: params.entityId || null,
@@ -148,6 +152,7 @@ export class AuditService {
     let query = db('audit_logs');
 
     if (filters.user_id) query = query.where('user_id', filters.user_id);
+    if (filters.company_id) query = query.where('company_id', filters.company_id);
     if (filters.action) query = query.where('action', filters.action);
     if (filters.entity_type) query = query.where('entity_type', filters.entity_type);
     if (filters.entity_id) query = query.where('entity_id', filters.entity_id);
@@ -179,18 +184,35 @@ export class AuditService {
   static async getEntityHistory(
     entityId: string,
     entityType?: string,
-  ): Promise<AuditLogEntry[]> {
+    companyId?: string,
+    page = 1,
+    limit = 50,
+  ): Promise<PaginatedAuditResponse<AuditLogEntry>> {
     const db = await getDatabase();
+    const safePage = Math.max(1, Number(page) || 1);
+    const safeLimit = Math.min(200, Math.max(1, Number(limit) || 50));
+    const offset = (safePage - 1) * safeLimit;
 
     let query = db('audit_logs').where('entity_id', entityId);
     if (entityType) query = query.where('entity_type', entityType);
+    if (companyId) query = query.where('company_id', companyId);
+
+    const [{ count }] = await query.clone().count('* as count');
+    const total = Number(count);
 
     const rows = await query
       .orderBy('timestamp', 'desc')
-      .limit(500)
+      .limit(safeLimit)
+      .offset(offset)
       .select('*');
 
-    return rows.map(this.formatLog);
+    return {
+      data: rows.map(this.formatLog),
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
+    };
   }
 
   /**
@@ -242,25 +264,31 @@ export class AuditService {
     const since = new Date();
     since.setDate(since.getDate() - 30);
 
-    const logs = await db('audit_logs')
-      .where('user_id', userId)
-      .where('timestamp', '>=', since)
-      .orderBy('timestamp', 'desc')
-      .select('*');
+    const baseQuery = db('audit_logs').where('user_id', userId).where('timestamp', '>=', since);
+
+    const [{ count: totalActions }] = await baseQuery.clone().count('* as count');
+    const [{ count: failedActions }] = await baseQuery
+      .clone()
+      .where('status', 'FAILURE')
+      .count('* as count');
+
+    const actionBreakdownRows = await baseQuery
+      .clone()
+      .groupBy('action')
+      .select(db.raw('action, COUNT(*) as count'));
+
+    const recentLogs = await baseQuery.clone().orderBy('timestamp', 'desc').limit(20).select('*');
 
     const actionBreakdown: Record<string, number> = {};
-    let failedActions = 0;
-
-    for (const log of logs) {
-      actionBreakdown[log.action] = (actionBreakdown[log.action] || 0) + 1;
-      if (log.status === 'FAILURE') failedActions++;
+    for (const row of actionBreakdownRows as unknown as Array<{ action: string; count: string | number }>) {
+      actionBreakdown[row.action] = Number(row.count);
     }
 
     return {
-      totalActions: logs.length,
+      totalActions: Number(totalActions),
       actionBreakdown,
-      recentLogs: logs.slice(0, 20).map(this.formatLog),
-      failedActions,
+      recentLogs: recentLogs.map(this.formatLog),
+      failedActions: Number(failedActions),
     };
   }
 
@@ -268,17 +296,18 @@ export class AuditService {
    * Estatísticas gerais de auditoria (Admin dashboard)
    */
   static async getStats(companyId?: string): Promise<{
-    totalLogs: number;
-    todayLogs: number;
-    failedActions: number;
-    topActions: Array<{ action: string; count: number }>;
-    topEntities: Array<{ entity_type: string; count: number }>;
+    total_logs: number;
+    today_logs: number;
+    failed_actions: number;
+    top_actions: Array<{ action: string; count: number }>;
+    top_entities: Array<{ entity_type: string; count: number }>;
   }> {
     const db = await getDatabase();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     let baseQuery = db('audit_logs');
+    if (companyId) baseQuery = baseQuery.where('company_id', companyId);
 
     const [{ count: totalLogs }] = await baseQuery.clone().count('* as count');
     const [{ count: todayLogs }] = await baseQuery.clone()
@@ -288,13 +317,15 @@ export class AuditService {
       .where('status', 'FAILURE')
       .count('* as count');
 
-    const topActions = await db('audit_logs')
+    const topActions = await baseQuery
+      .clone()
       .groupBy('action')
       .orderByRaw('COUNT(*) DESC')
       .limit(10)
       .select(db.raw('action, COUNT(*) as count'));
 
-    const topEntities = await db('audit_logs')
+    const topEntities = await baseQuery
+      .clone()
       .whereNotNull('entity_type')
       .groupBy('entity_type')
       .orderByRaw('COUNT(*) DESC')
@@ -302,14 +333,14 @@ export class AuditService {
       .select(db.raw('entity_type, COUNT(*) as count'));
 
     return {
-      totalLogs: Number(totalLogs),
-      todayLogs: Number(todayLogs),
-      failedActions: Number(failedActions),
-      topActions: topActions.map((r: Record<string, unknown>) => ({
+      total_logs: Number(totalLogs),
+      today_logs: Number(todayLogs),
+      failed_actions: Number(failedActions),
+      top_actions: topActions.map((r: Record<string, unknown>) => ({
         action: r.action as string,
         count: Number(r.count),
       })),
-      topEntities: topEntities.map((r: Record<string, unknown>) => ({
+      top_entities: topEntities.map((r: Record<string, unknown>) => ({
         entity_type: r.entity_type as string,
         count: Number(r.count),
       })),
@@ -320,6 +351,7 @@ export class AuditService {
     return {
       id: row.id as string,
       user_id: row.user_id as string | undefined,
+      company_id: row.company_id as string | undefined,
       action: row.action as string,
       entity_type: row.entity_type as string | undefined,
       entity_id: row.entity_id as string | undefined,
