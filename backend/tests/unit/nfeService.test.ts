@@ -137,6 +137,7 @@ jest.mock('../../src/config/database', () => {
 
 jest.mock('../../src/services/nfeEmitter', () => ({
   emitirNfeReal: jest.fn(),
+  cancelarNfeReal: jest.fn(),
   getEmissionMode: jest.fn(() => 'mock'),
   getAmbiente: jest.fn(() => 'homologacao'),
   verificarNumeracaoSefaz: jest.fn().mockResolvedValue({
@@ -274,7 +275,7 @@ describe('NfeService', () => {
       ).rejects.toMatchObject({ status: 422 });
     });
 
-    it('deve cancelar NF-e AUTORIZADA com justificativa válida', async () => {
+    it('deve cancelar NF-e AUTORIZADA com justificativa válida (modo mock)', async () => {
       const { db } = require('../../src/config/database');
       db.first.mockResolvedValueOnce({ ...mockNfeRecord, status: 'AUTORIZADA' });
       db.returning.mockResolvedValueOnce([{
@@ -285,6 +286,63 @@ describe('NfeService', () => {
 
       const nfe = await NfeService.cancel('nfe-uuid-1', 'company-uuid-1', justificativa);
       expect(nfe.status).toBe('CANCELADA');
+    });
+
+    // Cobre o bug: cancel() usava SEMPRE o simulador local (mockSefazCancel),
+    // mesmo em modo 'real' — uma NF-e cancelada no ProContador continuava
+    // autorizada/válida de verdade na SEFAZ. Em modo 'real', o cancelamento
+    // precisa necessariamente passar por cancelarNfeReal() (evento SEFAZ).
+    describe('em modo real (NFE_EMISSION_MODE=real)', () => {
+      const { getEmissionMode, cancelarNfeReal } = require('../../src/services/nfeEmitter');
+
+      afterEach(() => {
+        (getEmissionMode as jest.Mock).mockReturnValue('mock');
+      });
+
+      it('cancela via cancelarNfeReal (SEFAZ de verdade), nunca via mock local', async () => {
+        (getEmissionMode as jest.Mock).mockReturnValue('real');
+        (cancelarNfeReal as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          ambiente: 'homologacao',
+          cStat: '135',
+          motivo: 'Evento registrado e vinculado a NF-e',
+          protocolo: '135260000000001',
+          xml_evento: '<retEvento>...</retEvento>',
+        });
+
+        const { db } = require('../../src/config/database');
+        db.first.mockResolvedValueOnce({ ...mockNfeRecord, status: 'AUTORIZADA' });
+        db.returning.mockResolvedValueOnce([{
+          ...mockNfeRecord,
+          status: 'CANCELADA',
+          status_sefaz: '135',
+          data_cancelamento: new Date().toISOString(),
+        }]);
+
+        const nfe = await NfeService.cancel('nfe-uuid-1', 'company-uuid-1', justificativa);
+
+        expect(cancelarNfeReal).toHaveBeenCalledTimes(1);
+        expect(nfe.status).toBe('CANCELADA');
+        expect((nfe as any).status_sefaz).toBe('135');
+      });
+
+      it('não marca como cancelada se a SEFAZ rejeitar o evento de cancelamento', async () => {
+        (getEmissionMode as jest.Mock).mockReturnValue('real');
+        (cancelarNfeReal as jest.Mock).mockResolvedValueOnce({
+          ok: false,
+          ambiente: 'homologacao',
+          cStat: '573',
+          motivo: 'Duplicidade de evento',
+          protocolo: '',
+        });
+
+        const { db } = require('../../src/config/database');
+        db.first.mockResolvedValueOnce({ ...mockNfeRecord, status: 'AUTORIZADA' });
+
+        await expect(
+          NfeService.cancel('nfe-uuid-1', 'company-uuid-1', justificativa),
+        ).rejects.toMatchObject({ status: 422 });
+      });
     });
   });
 

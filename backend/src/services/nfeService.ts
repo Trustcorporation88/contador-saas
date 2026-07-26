@@ -1,15 +1,20 @@
 /**
- * NF-e Service — Nota Fiscal Eletrônica (Mock SEFAZ Layout 4.00)
+ * NF-e Service — Nota Fiscal Eletrônica (Layout SEFAZ 4.00)
  *
  * Implementa o ciclo de vida completo da NF-e:
  *  - Geração de número sequencial por empresa/série
  *  - Geração de chave de acesso (44 dígitos)
  *  - Geração de XML NF-e (layout 4.00 simplificado)
- *  - Mock de autorização/cancelamento SEFAZ
+ *  - Autorização e cancelamento junto à SEFAZ
  *
- * ATENÇÃO: Esta é uma integração MOCK para desenvolvimento.
- * Para produção, substituir `mockSefazAuthorize` pela chamada real
- * ao WebService SEFAZ via certificado digital A1/A3.
+ * Modo de emissão (getEmissionMode(), env NFE_EMISSION_MODE):
+ *  - 'real' (padrão): assina com o certificado A1 e transmite de verdade à
+ *    SEFAZ via pynfe (nfeEmitter.ts) — tanto na autorização quanto no
+ *    cancelamento (evento 110111). Não há nenhuma simulação neste modo.
+ *  - 'mock': usa `mockSefazAuthorize`/`mockSefazCancel` abaixo, que geram
+ *    protocolos aleatórios sem contato com a SEFAZ. Existe apenas para
+ *    desenvolvimento local sem certificado digital — NUNCA deve ser usado
+ *    em produção.
  */
 
 import { randomUUID } from 'crypto';
@@ -23,7 +28,13 @@ import {
   NfeListFilters,
   SefazResponse,
 } from '../models/dtos/nfeDTO';
-import { emitirNfeReal, getEmissionMode, getAmbiente, verificarNumeracaoSefaz } from './nfeEmitter';
+import {
+  emitirNfeReal,
+  cancelarNfeReal,
+  getEmissionMode,
+  getAmbiente,
+  verificarNumeracaoSefaz,
+} from './nfeEmitter';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -773,8 +784,51 @@ export class NfeService {
       );
     }
 
+    const now = new Date().toISOString();
+    const mode = getEmissionMode();
+
+    // ── Modo real: envia o evento de cancelamento (110111) de verdade à SEFAZ ──
+    if (mode === 'real') {
+      const company = await db('companies').where({ id: companyId }).first();
+      if (!company) throw Object.assign(new Error('Empresa não encontrada'), { status: 404 });
+
+      const result = await cancelarNfeReal(
+        company,
+        { chave_acesso: nfe.chave_acesso, protocolo: nfe.protocolo, modelo: nfe.modelo },
+        justificativa.trim(),
+      );
+
+      if (!result.ok) {
+        throw Object.assign(
+          new Error(
+            `SEFAZ rejeitou o cancelamento (${result.cStat || 's/ código'}): ${result.motivo}`,
+          ),
+          { status: 422 },
+        );
+      }
+
+      const [updated] = await db('nfe')
+        .where({ id, company_id: companyId })
+        .update({
+          status:                     NfeStatus.CANCELADA,
+          status_sefaz:               result.cStat,
+          status_motivo:              result.motivo,
+          xml_cancelamento:           result.xml_evento,
+          data_cancelamento:          now,
+          justificativa_cancelamento: justificativa.trim(),
+        })
+        .returning('*');
+
+      logger.info('NF-e cancelada (real)', {
+        id,
+        cStat: result.cStat,
+        justificativa: justificativa.slice(0, 30),
+      });
+      return updated as NfeRecord;
+    }
+
+    // ── Modo mock: simulador (desenvolvimento) ──
     const sefaz = await mockSefazCancel(nfe.chave_acesso, justificativa);
-    const now   = new Date().toISOString();
 
     const [updated] = await db('nfe')
       .where({ id, company_id: companyId })
@@ -787,7 +841,7 @@ export class NfeService {
       })
       .returning('*');
 
-    logger.info('NF-e cancelada', { id, justificativa: justificativa.slice(0, 30) });
+    logger.info('NF-e cancelada (mock)', { id, justificativa: justificativa.slice(0, 30) });
     return updated as NfeRecord;
   }
 

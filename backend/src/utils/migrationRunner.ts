@@ -653,6 +653,26 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           }
         },
       },
+      {
+        name: '020_nfe_xml_cancelamento',
+        up: async (db) => {
+          const hasNfe = await db.schema.hasTable('nfe');
+          if (!hasNfe) return;
+
+          // Guarda o XML do evento de cancelamento (110111) retornado pela SEFAZ
+          // — prova/comprovante do cancelamento real, análogo ao xml_proc da
+          // autorização. Sem isso não há como auditar depois se um cancelamento
+          // foi de fato registrado junto à SEFAZ.
+          const hasColumn = await db.schema.hasColumn('nfe', 'xml_cancelamento');
+          if (!hasColumn) {
+            console.log('[MIGRATIONS] Adding nfe.xml_cancelamento...');
+            await db.schema.alterTable('nfe', (table) => {
+              table.text('xml_cancelamento');
+            });
+          }
+          console.log('✓ 020_nfe_xml_cancelamento completed');
+        },
+      },
     ];
 
     for (const migration of migrations) {
