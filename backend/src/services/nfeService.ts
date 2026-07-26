@@ -1,15 +1,20 @@
 /**
- * NF-e Service — Nota Fiscal Eletrônica (Mock SEFAZ Layout 4.00)
+ * NF-e Service — Nota Fiscal Eletrônica (Layout SEFAZ 4.00)
  *
  * Implementa o ciclo de vida completo da NF-e:
  *  - Geração de número sequencial por empresa/série
  *  - Geração de chave de acesso (44 dígitos)
  *  - Geração de XML NF-e (layout 4.00 simplificado)
- *  - Mock de autorização/cancelamento SEFAZ
+ *  - Autorização e cancelamento junto à SEFAZ
  *
- * ATENÇÃO: Esta é uma integração MOCK para desenvolvimento.
- * Para produção, substituir `mockSefazAuthorize` pela chamada real
- * ao WebService SEFAZ via certificado digital A1/A3.
+ * Modo de emissão (getEmissionMode(), env NFE_EMISSION_MODE):
+ *  - 'real' (padrão): assina com o certificado A1 e transmite de verdade à
+ *    SEFAZ via pynfe (nfeEmitter.ts) — tanto na autorização quanto no
+ *    cancelamento (evento 110111). Não há nenhuma simulação neste modo.
+ *  - 'mock': usa `mockSefazAuthorize`/`mockSefazCancel` abaixo, que geram
+ *    protocolos aleatórios sem contato com a SEFAZ. Existe apenas para
+ *    desenvolvimento local sem certificado digital — NUNCA deve ser usado
+ *    em produção.
  */
 
 import { randomUUID } from 'crypto';
@@ -23,7 +28,13 @@ import {
   NfeListFilters,
   SefazResponse,
 } from '../models/dtos/nfeDTO';
-import { emitirNfeReal, getEmissionMode, getAmbiente, verificarNumeracaoSefaz } from './nfeEmitter';
+import {
+  emitirNfeReal,
+  cancelarNfeReal,
+  getEmissionMode,
+  getAmbiente,
+  verificarNumeracaoSefaz,
+} from './nfeEmitter';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -246,6 +257,77 @@ function calcularImpostosItem(item: NfeItemDTO): {
 
 export class NfeService {
 
+  /**
+   * Maior número de NF-e (série/modelo) emitido por esta empresa e encontrado
+   * nas notas capturadas automaticamente da SEFAZ (Distribuição DFe).
+   *
+   * Cobre o caso de números emitidos fora do ProContador (ex.: outro emissor,
+   * emissão manual no portal da SEFAZ) que a captura automática identificou:
+   * sem isso, `nfe_numeracao` (que só é atualizada por notas emitidas AQUI)
+   * fica desatualizada e o sistema acusa uma "lacuna" para um número que na
+   * verdade já existe — mesmo aparecendo na lista de notas capturadas.
+   */
+  private static async maxNumeroCapturado(
+    companyId: string,
+    serie: number,
+    modelo: number,
+  ): Promise<number | null> {
+    try {
+      const db = await getDatabase();
+      const rows = await db('fiscal_xml_captures')
+        .where({ company_id: companyId, doc_type: 'nfe', direcao: 'saida' })
+        .whereRaw("modelo ~ '^[0-9]+$'")
+        .whereRaw("serie ~ '^[0-9]+$'")
+        .whereRaw("numero ~ '^[0-9]+$'")
+        .andWhereRaw('modelo::int = ?', [modelo])
+        .andWhereRaw('serie::int = ?', [serie])
+        .select('numero');
+
+      if (!Array.isArray(rows) || rows.length === 0) return null;
+      const numeros = rows.map((r) => Number(r.numero)).filter((n) => Number.isFinite(n));
+      return numeros.length > 0 ? Math.max(...numeros) : null;
+    } catch (error) {
+      logger.warn('Falha ao consultar máximo de numeração capturada da SEFAZ', {
+        companyId,
+        serie,
+        modelo,
+        error: (error as Error).message,
+      });
+      return null;
+    }
+  }
+
+  /** Verifica se um número/série/modelo específico já aparece nas notas capturadas da SEFAZ. */
+  private static async numeroJaCapturado(
+    companyId: string,
+    serie: number,
+    modelo: number,
+    numero: number,
+  ): Promise<boolean> {
+    try {
+      const db = await getDatabase();
+      const row = await db('fiscal_xml_captures')
+        .where({ company_id: companyId, doc_type: 'nfe', direcao: 'saida' })
+        .whereRaw("modelo ~ '^[0-9]+$'")
+        .whereRaw("serie ~ '^[0-9]+$'")
+        .whereRaw("numero ~ '^[0-9]+$'")
+        .andWhereRaw('modelo::int = ?', [modelo])
+        .andWhereRaw('serie::int = ?', [serie])
+        .andWhereRaw('numero::int = ?', [numero])
+        .first();
+      return Boolean(row);
+    } catch (error) {
+      logger.warn('Falha ao consultar captura da SEFAZ por número', {
+        companyId,
+        serie,
+        modelo,
+        numero,
+        error: (error as Error).message,
+      });
+      return false;
+    }
+  }
+
   /** Próximo número de NF-e para empresa/série */
   private static async proximoNumero(
     companyId: string,
@@ -256,17 +338,19 @@ export class NfeService {
     const row = await db('nfe_numeracao')
       .where({ company_id: companyId, serie, modelo })
       .first();
+    const capturado = await NfeService.maxNumeroCapturado(companyId, serie, modelo);
 
     if (!row) {
+      const inicial = Math.max(capturado ?? 0, 0) + 1;
       await db('nfe_numeracao').insert({
         company_id: companyId,
         serie,
         modelo,
-        ultimo_numero: 1,
+        ultimo_numero: inicial,
       });
-      return 1;
+      return inicial;
     }
-    const next = row.ultimo_numero + 1;
+    const next = Math.max(Number(row.ultimo_numero), capturado ?? 0) + 1;
     await db('nfe_numeracao')
       .where({ company_id: companyId, serie, modelo })
       .update({ ultimo_numero: next });
@@ -337,16 +421,35 @@ export class NfeService {
 
     // Ordem cronológica: compara com o último número já confirmado nesta série/modelo.
     // A SEFAZ não oferece consulta pública "por número" (só por chave de acesso),
-    // então a garantia de sequência é feita localmente com base no maior número
-    // já utilizado por este sistema para a empresa/série/modelo informados.
+    // então a garantia de sequência combina o contador local (notas emitidas
+    // AQUI) com o maior número já visto nas notas capturadas da SEFAZ — senão o
+    // sistema acusa uma "lacuna" para números que na verdade já foram emitidos
+    // (só que por fora do ProContador) e aparecem na lista de capturas.
     const numeracao = await db('nfe_numeracao')
       .where({ company_id: companyId, serie, modelo })
       .first();
-    const ultimoNumeroRegistrado: number | null = numeracao
+    const maxCapturado = await NfeService.maxNumeroCapturado(companyId, serie, modelo);
+
+    // Notas emitidas pela própria empresa fora do ProContador (outro emissor,
+    // portal da SEFAZ, etc.) e trazidas pela captura automática (Distribuição
+    // DFe) também ocupam o número, mesmo sem registro na tabela `nfe` local.
+    const jaEmitidaCapturada = !jaEmitidaLocal
+      ? await NfeService.numeroJaCapturado(companyId, serie, modelo, numero)
+      : false;
+    let ultimoNumeroRegistrado: number | null = numeracao
       ? Number(numeracao.ultimo_numero)
       : null;
+    if (maxCapturado != null) {
+      ultimoNumeroRegistrado =
+        ultimoNumeroRegistrado != null
+          ? Math.max(ultimoNumeroRegistrado, maxCapturado)
+          : maxCapturado;
+    }
     const foraDeOrdem =
-      ultimoNumeroRegistrado != null && numero <= ultimoNumeroRegistrado && !jaEmitidaLocal;
+      ultimoNumeroRegistrado != null &&
+      numero <= ultimoNumeroRegistrado &&
+      !jaEmitidaLocal &&
+      !jaEmitidaCapturada;
     const saltoNumeracao =
       ultimoNumeroRegistrado != null && numero > ultimoNumeroRegistrado + 1;
 
@@ -362,6 +465,7 @@ export class NfeService {
     const jaEmitidaSefaz = sefaz.ja_emitida_sefaz === true;
     const disponivel =
       !jaEmitidaLocal &&
+      !jaEmitidaCapturada &&
       !jaEmitidaSefaz &&
       !foraDeOrdem &&
       sefaz.sefaz_online &&
@@ -370,6 +474,8 @@ export class NfeService {
     let mensagem: string;
     if (jaEmitidaLocal) {
       mensagem = `Número ${numero} série ${serie} já existe no ProContador (status ${local.status}).`;
+    } else if (jaEmitidaCapturada) {
+      mensagem = `Número ${numero} série ${serie} já foi emitido por esta empresa — encontrado nas notas capturadas da SEFAZ. Escolha outro número.`;
     } else if (jaEmitidaSefaz) {
       mensagem = `SEFAZ confirma NF-e já emitida para número ${numero} série ${serie}.`;
     } else if (foraDeOrdem) {
@@ -392,6 +498,7 @@ export class NfeService {
       ultimo_numero_registrado: ultimoNumeroRegistrado,
       fora_de_ordem: foraDeOrdem,
       salto_numeracao: saltoNumeracao,
+      ja_emitida_capturada: jaEmitidaCapturada,
       local: local
         ? {
             id: local.id,
@@ -677,8 +784,51 @@ export class NfeService {
       );
     }
 
+    const now = new Date().toISOString();
+    const mode = getEmissionMode();
+
+    // ── Modo real: envia o evento de cancelamento (110111) de verdade à SEFAZ ──
+    if (mode === 'real') {
+      const company = await db('companies').where({ id: companyId }).first();
+      if (!company) throw Object.assign(new Error('Empresa não encontrada'), { status: 404 });
+
+      const result = await cancelarNfeReal(
+        company,
+        { chave_acesso: nfe.chave_acesso, protocolo: nfe.protocolo, modelo: nfe.modelo },
+        justificativa.trim(),
+      );
+
+      if (!result.ok) {
+        throw Object.assign(
+          new Error(
+            `SEFAZ rejeitou o cancelamento (${result.cStat || 's/ código'}): ${result.motivo}`,
+          ),
+          { status: 422 },
+        );
+      }
+
+      const [updated] = await db('nfe')
+        .where({ id, company_id: companyId })
+        .update({
+          status:                     NfeStatus.CANCELADA,
+          status_sefaz:               result.cStat,
+          status_motivo:              result.motivo,
+          xml_cancelamento:           result.xml_evento,
+          data_cancelamento:          now,
+          justificativa_cancelamento: justificativa.trim(),
+        })
+        .returning('*');
+
+      logger.info('NF-e cancelada (real)', {
+        id,
+        cStat: result.cStat,
+        justificativa: justificativa.slice(0, 30),
+      });
+      return updated as NfeRecord;
+    }
+
+    // ── Modo mock: simulador (desenvolvimento) ──
     const sefaz = await mockSefazCancel(nfe.chave_acesso, justificativa);
-    const now   = new Date().toISOString();
 
     const [updated] = await db('nfe')
       .where({ id, company_id: companyId })
@@ -691,7 +841,7 @@ export class NfeService {
       })
       .returning('*');
 
-    logger.info('NF-e cancelada', { id, justificativa: justificativa.slice(0, 30) });
+    logger.info('NF-e cancelada (mock)', { id, justificativa: justificativa.slice(0, 30) });
     return updated as NfeRecord;
   }
 

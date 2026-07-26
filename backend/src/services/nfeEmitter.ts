@@ -365,6 +365,156 @@ export async function emitirNfeReal(
   }
 }
 
+export interface NfeCancelamentoResult {
+  ok: boolean;
+  ambiente: string;
+  cStat: string;
+  motivo: string;
+  protocolo: string;
+  dhRegEvento?: string;
+  xml_evento?: string;
+  raw?: string;
+}
+
+function spawnCancelar(payloadFile: string): Promise<NfeCancelamentoResult> {
+  const automationDir = getAutomationDir();
+  const scriptPath = path.join(automationDir, 'cancelar_nfe.py');
+  const python = getPythonBin();
+
+  return new Promise((resolve) => {
+    const child = spawn(python, [scriptPath, payloadFile], {
+      cwd: automationDir,
+      env: {
+        ...process.env,
+        DATABASE_URL: envConfig.database.url,
+        PYTHONIOENCODING: 'utf-8',
+      },
+    });
+
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (c) => (stdout += c.toString()));
+    child.stderr.on('data', (c) => (stderr += c.toString()));
+
+    child.on('error', (error) => {
+      resolve({
+        ok: false,
+        ambiente: getAmbiente(),
+        cStat: '',
+        motivo: `Falha ao executar o motor de cancelamento (${python}): ${error.message}`,
+        protocolo: '',
+      });
+    });
+
+    child.on('close', () => {
+      const line = stdout.split('\n').find((l) => l.startsWith('NFE_CANCEL_RESULT:'));
+      if (!line) {
+        resolve({
+          ok: false,
+          ambiente: getAmbiente(),
+          cStat: '',
+          motivo: 'Motor de cancelamento não retornou resultado. ' + (stderr.slice(-400) || ''),
+          protocolo: '',
+        });
+        return;
+      }
+      try {
+        const parsed = JSON.parse(line.replace('NFE_CANCEL_RESULT:', '').trim());
+        resolve({
+          ok: Boolean(parsed.ok),
+          ambiente: parsed.ambiente || getAmbiente(),
+          cStat: parsed.cStat || '',
+          motivo: parsed.motivo || '',
+          protocolo: parsed.protocolo || '',
+          dhRegEvento: parsed.dhRegEvento,
+          xml_evento: parsed.xml_evento,
+          raw: parsed.raw,
+        });
+      } catch (e) {
+        resolve({
+          ok: false,
+          ambiente: getAmbiente(),
+          cStat: '',
+          motivo: 'Resposta inválida do motor de cancelamento: ' + (e as Error).message,
+          protocolo: '',
+        });
+      }
+    });
+  });
+}
+
+/**
+ * Cancela uma NF-e real junto à SEFAZ (evento 110111 — Cancelamento).
+ * Não há simulação aqui: se a nota foi autorizada em produção, o
+ * cancelamento também é registrado em produção, de forma definitiva.
+ */
+export async function cancelarNfeReal(
+  company: CompanyRow,
+  nfe: { chave_acesso: string | null; protocolo: string | null; modelo: number },
+  justificativa: string,
+): Promise<NfeCancelamentoResult> {
+  const db = await getDatabase();
+  const ambiente = getAmbiente();
+
+  if (!nfe.chave_acesso) {
+    throw Object.assign(
+      new Error('NF-e sem chave de acesso registrada; não é possível cancelar junto à SEFAZ.'),
+      { status: 422 },
+    );
+  }
+  if (!nfe.protocolo) {
+    throw Object.assign(
+      new Error('NF-e sem protocolo de autorização registrado; não é possível cancelar junto à SEFAZ.'),
+      { status: 422 },
+    );
+  }
+
+  const cert = await db('fiscal_certificates')
+    .where({ company_id: company.id, active: true })
+    .first();
+  if (!cert) {
+    throw Object.assign(
+      new Error('Certificado digital A1 não configurado. Cadastre o .pfx em Captura Fiscal.'),
+      { status: 422 },
+    );
+  }
+
+  const certSenha = decryptSecret(cert.password_encrypted);
+  const certPath = await materializePfx(
+    company.id,
+    String(cert.pfx_path || ''),
+    cert.pfx_data ? decryptSecretWithLegacyFallback(cert.pfx_data as string) : null,
+  );
+
+  const payload = {
+    ambiente,
+    cert_path: certPath,
+    cert_senha: certSenha,
+    uf: company.state,
+    cnpj: digits(company.cnpj),
+    chave: nfe.chave_acesso,
+    protocolo: nfe.protocolo,
+    justificativa,
+    modelo: nfe.modelo,
+  };
+
+  const payloadFile = path.join(os.tmpdir(), `nfe-cancel-${randomUUID()}.json`);
+  await fs.writeJson(payloadFile, payload, { spaces: 0 });
+
+  try {
+    const result = await spawnCancelar(payloadFile);
+    logger.info('NF-e cancelamento real', {
+      companyId: company.id,
+      ambiente,
+      ok: result.ok,
+      cStat: result.cStat,
+    });
+    return result;
+  } finally {
+    await fs.remove(payloadFile).catch(() => undefined);
+  }
+}
+
 export type NumeracaoCheckResult = {
   ok: boolean;
   sefaz_online: boolean;

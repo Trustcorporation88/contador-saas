@@ -1,7 +1,13 @@
 /**
  * Testes unitários — NfeService
  * Cobre: geração de chave de acesso, cálculo de impostos, ciclo de vida
+ *
+ * Usa NFE_EMISSION_MODE=mock: o modo 'real' (assinatura A1 + transmissão à
+ * SEFAZ via pynfe, em nfeEmitter.ts) tem cobertura própria em
+ * automacao-xml/tests/ e depende de infraestrutura (certificado, rede) fora
+ * do escopo de um teste unitário do NfeService.
  */
+process.env.NFE_EMISSION_MODE = 'mock';
 
 jest.mock('../../src/middleware/requestLogger', () => ({
   logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
@@ -56,7 +62,7 @@ jest.mock('../../src/config/database', () => {
     cep: '01310100', logradouro: 'Av Paulista', numero_endereco: '1000',
     municipio: 'São Paulo', codigo_municipio: '3550308',
   };
-  const mockNumeracao = { proximo_numero: 1, serie: 1 };
+  const mockNumeracao = { serie: 1, modelo: 55, ultimo_numero: 0 };
 
   const mockTrx: any = jest.fn().mockImplementation(() => mockTrx);
   Object.assign(mockTrx, {
@@ -74,10 +80,20 @@ jest.mock('../../src/config/database', () => {
     _currentTable = table ?? _currentTable;
     return mockDb;
   });
+  // Estado configurável das "notas capturadas" (fiscal_xml_captures) por teste:
+  // números já emitidos pela empresa e trazidos pela captura automática da
+  // SEFAZ (Distribuição DFe), independente do que foi emitido pelo ProContador.
+  const fiscalCapturesState: { numeros: string[] } = { numeros: [] };
+
   Object.assign(mockDb, {
     where:       jest.fn().mockReturnValue(mockDb),
     andWhere:    jest.fn().mockReturnValue(mockDb),
-    select:      jest.fn().mockReturnValue(mockDb),
+    select:      jest.fn().mockImplementation(() => {
+      if (_currentTable === 'fiscal_xml_captures') {
+        return Promise.resolve(fiscalCapturesState.numeros.map((numero) => ({ numero })));
+      }
+      return mockDb;
+    }),
     orderBy:     jest.fn().mockReturnValue(mockDb),
     limit:       jest.fn().mockReturnValue(mockDb),
     offset:      jest.fn().mockReturnValue(mockDb),
@@ -92,13 +108,50 @@ jest.mock('../../src/config/database', () => {
     first:       jest.fn().mockImplementation(() => {
       if (_currentTable === 'nfe_numeracao') return Promise.resolve(mockNumeracao);
       if (_currentTable === 'companies')     return Promise.resolve(mockCompany);
+      if (_currentTable === 'fiscal_xml_captures') {
+        const calls = mockDb.andWhereRaw.mock.calls as unknown[][];
+        const ultimaChamada = calls[calls.length - 1] as [string, unknown[]] | undefined;
+        const numeroConsultado = ultimaChamada?.[1]?.[0];
+        const encontrado = fiscalCapturesState.numeros.some(
+          (n) => Number(n) === Number(numeroConsultado),
+        );
+        return Promise.resolve(encontrado ? { id: 'capture-1' } : null);
+      }
       return Promise.resolve(nfeRecord);
     }),
     transaction: jest.fn().mockImplementation(async (cb: any) => cb(mockTrx)),
+    whereRaw:    jest.fn().mockReturnValue(mockDb),
+    andWhereRaw: jest.fn().mockReturnValue(mockDb),
   });
 
-  return { db: mockDb };
+  // O código de produção usa `getDatabase()` (assíncrono); os testes seguem
+  // acessando `db` (o mesmo mock) diretamente para configurar expectativas.
+  return {
+    db: mockDb,
+    getDatabase: jest.fn().mockResolvedValue(mockDb),
+    __setFiscalCapturas: (numeros: (number | string)[]) => {
+      fiscalCapturesState.numeros = numeros.map(String);
+    },
+  };
 });
+
+jest.mock('../../src/services/nfeEmitter', () => ({
+  emitirNfeReal: jest.fn(),
+  cancelarNfeReal: jest.fn(),
+  getEmissionMode: jest.fn(() => 'mock'),
+  getAmbiente: jest.fn(() => 'homologacao'),
+  verificarNumeracaoSefaz: jest.fn().mockResolvedValue({
+    ok: true,
+    sefaz_online: true,
+    ja_emitida_sefaz: null,
+    disponivel: null,
+    cStat: '107',
+    motivo: 'SEFAZ online. Sem chave de acesso para consultar previamente.',
+    fonte: 'sefaz_status',
+    serie: 1,
+    numero: 1,
+  }),
+}));
 
 import { NfeService } from '../../src/services/nfeService';
 import { NfeStatus }  from '../../src/models/dtos/nfeDTO';
@@ -222,7 +275,7 @@ describe('NfeService', () => {
       ).rejects.toMatchObject({ status: 422 });
     });
 
-    it('deve cancelar NF-e AUTORIZADA com justificativa válida', async () => {
+    it('deve cancelar NF-e AUTORIZADA com justificativa válida (modo mock)', async () => {
       const { db } = require('../../src/config/database');
       db.first.mockResolvedValueOnce({ ...mockNfeRecord, status: 'AUTORIZADA' });
       db.returning.mockResolvedValueOnce([{
@@ -233,6 +286,130 @@ describe('NfeService', () => {
 
       const nfe = await NfeService.cancel('nfe-uuid-1', 'company-uuid-1', justificativa);
       expect(nfe.status).toBe('CANCELADA');
+    });
+
+    // Cobre o bug: cancel() usava SEMPRE o simulador local (mockSefazCancel),
+    // mesmo em modo 'real' — uma NF-e cancelada no ProContador continuava
+    // autorizada/válida de verdade na SEFAZ. Em modo 'real', o cancelamento
+    // precisa necessariamente passar por cancelarNfeReal() (evento SEFAZ).
+    describe('em modo real (NFE_EMISSION_MODE=real)', () => {
+      const { getEmissionMode, cancelarNfeReal } = require('../../src/services/nfeEmitter');
+
+      afterEach(() => {
+        (getEmissionMode as jest.Mock).mockReturnValue('mock');
+      });
+
+      it('cancela via cancelarNfeReal (SEFAZ de verdade), nunca via mock local', async () => {
+        (getEmissionMode as jest.Mock).mockReturnValue('real');
+        (cancelarNfeReal as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          ambiente: 'homologacao',
+          cStat: '135',
+          motivo: 'Evento registrado e vinculado a NF-e',
+          protocolo: '135260000000001',
+          xml_evento: '<retEvento>...</retEvento>',
+        });
+
+        const { db } = require('../../src/config/database');
+        db.first.mockResolvedValueOnce({ ...mockNfeRecord, status: 'AUTORIZADA' });
+        db.returning.mockResolvedValueOnce([{
+          ...mockNfeRecord,
+          status: 'CANCELADA',
+          status_sefaz: '135',
+          data_cancelamento: new Date().toISOString(),
+        }]);
+
+        const nfe = await NfeService.cancel('nfe-uuid-1', 'company-uuid-1', justificativa);
+
+        expect(cancelarNfeReal).toHaveBeenCalledTimes(1);
+        expect(nfe.status).toBe('CANCELADA');
+        expect((nfe as any).status_sefaz).toBe('135');
+      });
+
+      it('não marca como cancelada se a SEFAZ rejeitar o evento de cancelamento', async () => {
+        (getEmissionMode as jest.Mock).mockReturnValue('real');
+        (cancelarNfeReal as jest.Mock).mockResolvedValueOnce({
+          ok: false,
+          ambiente: 'homologacao',
+          cStat: '573',
+          motivo: 'Duplicidade de evento',
+          protocolo: '',
+        });
+
+        const { db } = require('../../src/config/database');
+        db.first.mockResolvedValueOnce({ ...mockNfeRecord, status: 'AUTORIZADA' });
+
+        await expect(
+          NfeService.cancel('nfe-uuid-1', 'company-uuid-1', justificativa),
+        ).rejects.toMatchObject({ status: 422 });
+      });
+    });
+  });
+
+  // ── Verificação de numeração ─────────────────────────────────────────────
+  // Cobre o bug relatado: "há uma lacuna entre o último número emitido (7) e
+  // o número 822" quando o 822 já havia sido emitido pela empresa (fora do
+  // ProContador) e aparecia nas notas capturadas da SEFAZ.
+
+  describe('verificarNumeracao()', () => {
+    const setup = (opts: {
+      capturados?: (number | string)[];
+      localEncontrado?: unknown;
+      ultimoNumeroLocal?: number;
+    }) => {
+      const { db, __setFiscalCapturas } = require('../../src/config/database');
+      __setFiscalCapturas(opts.capturados ?? []);
+      // Ordem de chamadas .first() dentro de verificarNumeracao(): companies, nfe, nfe_numeracao.
+      db.first.mockResolvedValueOnce(mockCompanyForTests);
+      db.first.mockResolvedValueOnce(opts.localEncontrado ?? null);
+      db.first.mockResolvedValueOnce({
+        serie: 1,
+        modelo: 55,
+        ultimo_numero: opts.ultimoNumeroLocal ?? 7,
+      });
+    };
+
+    const mockCompanyForTests = {
+      id: 'company-uuid-1', cnpj: '11222333000181', legal_name: 'EMPRESA TESTE LTDA', state: 'SP',
+    };
+
+    it('detecta número já emitido via captura da SEFAZ e bloqueia a disponibilidade', async () => {
+      setup({ capturados: [7, 822], ultimoNumeroLocal: 7 });
+
+      const resultado = await NfeService.verificarNumeracao('company-uuid-1', {
+        serie: 1,
+        numero: 822,
+      });
+
+      expect(resultado.disponivel).toBe(false);
+      expect((resultado as any).ja_emitida_capturada).toBe(true);
+      expect(resultado.mensagem).toMatch(/notas capturadas/i);
+    });
+
+    it('não acusa lacuna de numeração quando o maior número já veio de nota capturada (emitida fora do ProContador)', async () => {
+      // Cenário do bug: local só confirma até 7, mas 822 já existe via captura.
+      // Pedir o 823 (próximo depois do maior número real) não deve soar alarme de "lacuna".
+      setup({ capturados: [7, 822], ultimoNumeroLocal: 7 });
+
+      const resultado = await NfeService.verificarNumeracao('company-uuid-1', {
+        serie: 1,
+        numero: 823,
+      });
+
+      expect(resultado.salto_numeracao).toBe(false);
+      expect(resultado.ultimo_numero_registrado).toBe(822);
+    });
+
+    it('sem notas capturadas, mantém o comportamento anterior de acusar lacuna', async () => {
+      setup({ capturados: [], ultimoNumeroLocal: 7 });
+
+      const resultado = await NfeService.verificarNumeracao('company-uuid-1', {
+        serie: 1,
+        numero: 822,
+      });
+
+      expect(resultado.salto_numeracao).toBe(true);
+      expect(resultado.ultimo_numero_registrado).toBe(7);
     });
   });
 
