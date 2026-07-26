@@ -198,12 +198,17 @@ def _emitir(payload: dict) -> dict:
     from pynfe.utils.flags import NAMESPACE_NFE
     from lxml import etree
 
+    from common.nfe_utils import modelo_pynfe
+
     ambiente = str(payload.get("ambiente", "homologacao")).lower()
     homologacao = ambiente != "producao"
     cert_path = payload["cert_path"]
     cert_senha = payload["cert_senha"]
-    modelo = int(payload.get("modelo", 55))
     uf = str(payload["emitente"]["uf"]).upper()
+    # A ComunicacaoSefaz exige modelo="nfe"/"nfce" (string) para montar a URL do
+    # webservice; já a entidade NotaFiscal (em _construir_nota) usa o código
+    # numérico 55/65. São conversões independentes — não trocar uma pela outra.
+    modelo = modelo_pynfe(payload.get("modelo", 55))
 
     # Serialização -> assinatura -> transmissão
     xml = montar_xml(payload)
