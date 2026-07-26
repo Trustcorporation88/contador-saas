@@ -25,6 +25,7 @@ import {
   Lock,
   Users,
   X,
+  Scale,
 } from 'lucide-react';
 
 // â”€â”€â”€ Nav structure â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -67,13 +68,14 @@ const navItems: NavItem[] = [
   { label: 'Simulador Fiscal',   icon: Sliders,     path: '/simulador',    badge: 'âœ¦' },
   { label: 'Benchmark Setorial', icon: GitCompareArrows, path: '/benchmark', badge: 'âœ¦' },
   { label: 'Risco Fiscal SPED',  icon: ShieldAlert, path: '/risco-fiscal', badge: 'âœ¦' },
+  { label: 'Reforma Tributária', icon: Scale,       path: '/reforma-tributaria', badge: 'âœ¦' },
   { label: 'Open Finance',       icon: Landmark,    path: '/open-finance', badge: 'âœ¦' },
   { label: 'Copiloto IA',        icon: Bot,         path: '/copiloto',     badge: 'âœ¦' },
   { label: 'Prova Criptográfica',icon: Lock,        path: '/prova-hash',   badge: 'âœ¦' },
 ];
 
 // â”€â”€â”€ Divider between standard and innovative â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const INNOVATIVE_PATHS = ['/saude', '/simulador', '/benchmark', '/risco-fiscal', '/open-finance', '/copiloto', '/prova-hash'];
+const INNOVATIVE_PATHS = ['/saude', '/simulador', '/benchmark', '/risco-fiscal', '/reforma-tributaria', '/open-finance', '/copiloto', '/prova-hash'];
 
 // â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 

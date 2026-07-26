@@ -7,6 +7,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { TaxCalculationService } from '../services/taxCalculationService';
 import { TaxRegime, TaxStatus, TaxType, CalculateTaxDTO } from '../models/dtos/taxDTO';
+import { ReformaTributariaService } from '../services/reformaTributariaService';
+import { ReformaTaxType, RateNature, CalculateReformaDTO, ProjecaoReformaDTO } from '../models/dtos/reformaTributariaDTO';
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../middleware/requestLogger';
@@ -178,6 +180,189 @@ export class TaxController {
       return res.status(200).json(updated);
     } catch (err) {
       logger.error('Tax status update error', { error: (err as Error).message });
+      return next(err);
+    }
+  }
+
+  // ─── Reforma Tributária (CBS/IBS) ─────────────────────────────────────────
+
+  /**
+   * POST /companies/:companyId/taxes/reforma/calculate
+   * Calcula CBS/IBS de um único ano-calendário (2026 em diante)
+   * Body: { ano, tax_regime, period_start?, period_end?, revenues? }
+   */
+  static async calculateReforma(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+    try {
+      const companyId = req.params.companyId;
+      const ano = Number(req.body.ano);
+      const regime = req.body.tax_regime as TaxRegime;
+
+      if (!ano || !Number.isInteger(ano)) {
+        return res.status(400).json({ error: 'ano é obrigatório (ex.: 2026)' });
+      }
+      if (!regime || !Object.values(TaxRegime).includes(regime)) {
+        return res.status(400).json({ error: `tax_regime inválido. Use: ${Object.values(TaxRegime).join(', ')}` });
+      }
+
+      const dto: CalculateReformaDTO = {
+        company_id: companyId,
+        ano,
+        regime,
+        period_start: req.body.period_start,
+        period_end: req.body.period_end,
+        revenues: req.body.revenues,
+        icms_iss_legado_amount: req.body.icms_iss_legado_amount,
+      };
+
+      const cacheKey = CacheKeys.reformaCalculation(companyId, ano, regime);
+      const cached = await cacheService.get(cacheKey);
+      if (cached) {
+        return res.status(200).json(cached);
+      }
+
+      const result = await ReformaTributariaService.calculate(dto);
+      await cacheService.set(cacheKey, result, TTL_CONFIG.TAXES);
+
+      return res.status(200).json(result);
+    } catch (err) {
+      logger.error('Reforma calculate error', { error: (err as Error).message });
+      return next(err);
+    }
+  }
+
+  /**
+   * POST /companies/:companyId/taxes/reforma/projecao
+   * Projeta CBS/IBS ano a ano (ex.: 2026-2033)
+   * Body: { ano_inicio, ano_fim, tax_regime, revenues? }
+   */
+  static async projetarReforma(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+    try {
+      const companyId = req.params.companyId;
+      const anoInicio = Number(req.body.ano_inicio);
+      const anoFim = Number(req.body.ano_fim);
+      const regime = req.body.tax_regime as TaxRegime;
+
+      if (!anoInicio || !anoFim || !Number.isInteger(anoInicio) || !Number.isInteger(anoFim)) {
+        return res.status(400).json({ error: 'ano_inicio e ano_fim são obrigatórios' });
+      }
+      if (Math.abs(anoFim - anoInicio) > 20) {
+        return res.status(400).json({ error: 'Intervalo de projeção muito amplo (máx. 20 anos)' });
+      }
+      if (!regime || !Object.values(TaxRegime).includes(regime)) {
+        return res.status(400).json({ error: `tax_regime inválido. Use: ${Object.values(TaxRegime).join(', ')}` });
+      }
+
+      const dto: ProjecaoReformaDTO = {
+        company_id: companyId,
+        regime,
+        ano_inicio: anoInicio,
+        ano_fim: anoFim,
+        revenues: req.body.revenues,
+        period_start: req.body.period_start,
+        period_end: req.body.period_end,
+      };
+
+      const cacheKey = CacheKeys.reformaProjecao(companyId, regime, anoInicio, anoFim);
+      const cached = await cacheService.get(cacheKey);
+      if (cached) {
+        return res.status(200).json(cached);
+      }
+
+      const result = await ReformaTributariaService.projetar(dto);
+      await cacheService.set(cacheKey, result, TTL_CONFIG.TAXES);
+
+      return res.status(200).json(result);
+    } catch (err) {
+      logger.error('Reforma projecao error', { error: (err as Error).message });
+      return next(err);
+    }
+  }
+
+  /**
+   * POST /companies/:companyId/taxes/reforma/appraisal
+   * Calcula e persiste CBS/IBS de um ano em tax_calculations
+   * Body: { ano, tax_regime, period_start, period_end, revenues? }
+   */
+  static async appraisalReforma(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+    try {
+      const companyId = req.params.companyId;
+      const ano = Number(req.body.ano);
+      const regime = req.body.tax_regime as TaxRegime;
+      const periodStart = req.body.period_start;
+      const periodEnd = req.body.period_end;
+
+      if (!ano || !regime || !periodStart || !periodEnd) {
+        return res.status(400).json({ error: 'ano, tax_regime, period_start e period_end são obrigatórios' });
+      }
+
+      const result = await ReformaTributariaService.calculate({
+        company_id: companyId,
+        ano,
+        regime,
+        period_start: periodStart,
+        period_end: periodEnd,
+        revenues: req.body.revenues,
+      });
+
+      if (!result.applicable) {
+        return res.status(422).json({ error: result.motivo_nao_aplicavel });
+      }
+
+      const saved = await ReformaTributariaService.save(result, companyId, periodStart, periodEnd);
+
+      const invalidatedCount = await cacheService.invalidateTaxes(companyId);
+      logger.info('Cache invalidated after reforma appraisal save', { companyId, invalidatedKeys: invalidatedCount });
+
+      return res.status(201).json({ calculation: result, saved });
+    } catch (err: unknown) {
+      const e = err as Error & { status?: number };
+      if (e.status && e.status < 500) return res.status(e.status).json({ error: e.message });
+      logger.error('Reforma appraisal error', { error: (err as Error).message });
+      return next(err);
+    }
+  }
+
+  /**
+   * PUT /companies/:companyId/taxes/reforma/aliquotas
+   * Cadastra/atualiza a alíquota de CBS/IBS/IS de um ano-calendário.
+   * Endpoint restrito a admin (authorize('admin') na rota) — mecanismo de
+   * atualização sem deploy, já que o governo publica as alíquotas anualmente.
+   * Body: { ano, tax_type, aliquota, natureza, aplicavel_simples?, fonte_legal? }
+   */
+  static async upsertAliquotaReforma(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+    try {
+      const ano = Number(req.body.ano);
+      const taxType = req.body.tax_type as ReformaTaxType;
+      const aliquota = Number(req.body.aliquota);
+      const natureza = req.body.natureza as RateNature;
+
+      if (!ano || !Number.isInteger(ano)) {
+        return res.status(400).json({ error: 'ano é obrigatório' });
+      }
+      if (!Object.values(ReformaTaxType).includes(taxType)) {
+        return res.status(400).json({ error: `tax_type inválido. Use: ${Object.values(ReformaTaxType).join(', ')}` });
+      }
+      if (!Number.isFinite(aliquota) || aliquota < 0 || aliquota > 1) {
+        return res.status(400).json({ error: 'aliquota deve ser um número entre 0 e 1 (ex.: 0.009 = 0,9%)' });
+      }
+      if (!Object.values(RateNature).includes(natureza)) {
+        return res.status(400).json({ error: `natureza inválida. Use: ${Object.values(RateNature).join(', ')}` });
+      }
+
+      const saved = await ReformaTributariaService.upsertAliquota({
+        ano,
+        tax_type: taxType,
+        aliquota,
+        natureza,
+        aplicavel_simples: req.body.aplicavel_simples,
+        fonte_legal: req.body.fonte_legal,
+        vigencia_inicio: req.body.vigencia_inicio,
+        vigencia_fim: req.body.vigencia_fim,
+      });
+
+      return res.status(200).json(saved);
+    } catch (err) {
+      logger.error('Reforma upsert aliquota error', { error: (err as Error).message });
       return next(err);
     }
   }

@@ -64,6 +64,7 @@ export function canAccessPath(
       "/simulador",
       "/benchmark",
       "/risco-fiscal",
+      "/reforma-tributaria",
       "/open-finance",
       "/copiloto",
       "/prova-hash",

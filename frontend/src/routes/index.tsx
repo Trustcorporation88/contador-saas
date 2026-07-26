@@ -66,6 +66,9 @@ const BenchmarkPage = lazy(() => import("../pages/Benchmark/BenchmarkPage"));
 const RiscoFiscalPage = lazy(
   () => import("../pages/RiscoFiscal/RiscoFiscalPage"),
 );
+const SimuladorReformaPage = lazy(
+  () => import("../pages/ReformaTributaria/SimuladorReformaPage"),
+);
 const OpenFinancePage = lazy(
   () => import("../pages/OpenFinance/OpenFinancePage"),
 );
@@ -414,6 +417,16 @@ const router = createBrowserRouter([
               <RoleRoute allowedPath="/risco-fiscal">
                 <Suspense fallback={<LoadingScreen />}>
                   <RiscoFiscalPage />
+                </Suspense>
+              </RoleRoute>
+            ),
+          },
+          {
+            path: "reforma-tributaria",
+            element: (
+              <RoleRoute allowedPath="/reforma-tributaria">
+                <Suspense fallback={<LoadingScreen />}>
+                  <SimuladorReformaPage />
                 </Suspense>
               </RoleRoute>
             ),

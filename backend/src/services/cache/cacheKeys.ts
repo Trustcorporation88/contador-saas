@@ -173,6 +173,20 @@ export class CacheKeys {
     return `${CacheNamespace.TAXES}:${companyId}:appraisal:${sanitize(appraisalId)}`;
   }
 
+  /**
+   * Cache key para cálculo de CBS/IBS (Reforma Tributária) de um ano
+   */
+  static reformaCalculation(companyId: string, ano: number, regime: string): string {
+    return `${CacheNamespace.TAXES}:${companyId}:reforma:calculation:${ano}:${sanitize(regime)}`;
+  }
+
+  /**
+   * Cache key para projeção multi-ano de CBS/IBS (Reforma Tributária)
+   */
+  static reformaProjecao(companyId: string, regime: string, anoInicio: number, anoFim: number): string {
+    return `${CacheNamespace.TAXES}:${companyId}:reforma:projecao:${sanitize(regime)}:${anoInicio}-${anoFim}`;
+  }
+
   // ============================================
   // DASHBOARD CACHE KEYS
   // ============================================

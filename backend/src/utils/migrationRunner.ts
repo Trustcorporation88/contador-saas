@@ -555,6 +555,104 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           console.log('✓ 018_efd_tables completed');
         },
       },
+      {
+        name: '019_reforma_tributaria_tables',
+        up: async (db) => {
+          // Alíquotas de CBS/IBS/IS versionadas por ano-calendário — a reforma
+          // tributária (EC 132/2023 + LC 214/2025) só fixou por lei os valores
+          // de 2026 (fase de testes); alíquotas de referência pós-2027 dependem
+          // de cálculo anual do Comitê Gestor do IBS + Receita Federal, então
+          // NUNCA devem ser hardcoded no código — apenas nesta tabela.
+          const hasAliquotas = await db.schema.hasTable('reforma_aliquotas_anuais');
+          if (!hasAliquotas) {
+            console.log('[MIGRATIONS] Creating reforma_aliquotas_anuais...');
+            await db.schema.createTable('reforma_aliquotas_anuais', (table) => {
+              table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+              table.integer('ano').notNullable();
+              table.string('tax_type', 10).notNullable();
+              table.decimal('aliquota', 8, 6).notNullable();
+              table.string('natureza', 20).notNullable().defaultTo('DEVIDO');
+              table.boolean('aplicavel_simples').notNullable().defaultTo(false);
+              table.text('fonte_legal').nullable();
+              table.date('vigencia_inicio').nullable();
+              table.date('vigencia_fim').nullable();
+              table.timestamp('created_at').defaultTo(db.fn.now());
+              table.timestamp('updated_at').defaultTo(db.fn.now());
+              table.unique(['ano', 'tax_type']);
+            });
+            await db.raw(`
+              ALTER TABLE reforma_aliquotas_anuais
+              ADD CONSTRAINT chk_reforma_tax_type CHECK (tax_type IN ('CBS','IBS','IS')),
+              ADD CONSTRAINT chk_reforma_natureza CHECK (natureza IN ('INFORMATIVO','DEVIDO'))
+            `);
+          }
+
+          const hasTransicao = await db.schema.hasTable('reforma_transicao_icms_iss');
+          if (!hasTransicao) {
+            console.log('[MIGRATIONS] Creating reforma_transicao_icms_iss...');
+            await db.schema.createTable('reforma_transicao_icms_iss', (table) => {
+              table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+              table.integer('ano').notNullable().unique();
+              table.decimal('percentual_ibs', 5, 4).notNullable();
+              table.decimal('percentual_icms_iss_legado', 5, 4).notNullable();
+              table.text('fonte_legal').nullable();
+              table.timestamp('created_at').defaultTo(db.fn.now());
+              table.timestamp('updated_at').defaultTo(db.fn.now());
+            });
+          }
+
+          // Seed idempotente — apenas fatos legais já confirmados hoje (2026,
+          // fase de testes). Não semeia 2027+ (alíquotas ainda não fixadas).
+          await db('reforma_aliquotas_anuais')
+            .insert([
+              {
+                ano: 2026,
+                tax_type: 'CBS',
+                aliquota: 0.009,
+                natureza: 'INFORMATIVO',
+                aplicavel_simples: false,
+                fonte_legal: 'LC 214/2025, art. 348 — fase de testes',
+              },
+              {
+                ano: 2026,
+                tax_type: 'IBS',
+                aliquota: 0.001,
+                natureza: 'INFORMATIVO',
+                aplicavel_simples: false,
+                fonte_legal: 'LC 214/2025, art. 348 — fase de testes',
+              },
+            ])
+            .onConflict(['ano', 'tax_type'])
+            .ignore();
+
+          console.log('✓ 019_reforma_tributaria_tables completed');
+        },
+      },
+      {
+        name: '019b_tax_calculations_reforma_types',
+        up: async (db) => {
+          const hasTable = await db.schema.hasTable('tax_calculations');
+          if (!hasTable) return;
+
+          // Estende o CHECK constraint existente para aceitar CBS/IBS/IS,
+          // reaproveitando a tabela de apurações já existente (save/list/
+          // updateStatus do TaxCalculationService continuam funcionando sem
+          // alteração — só o conjunto de valores aceitos em tax_type muda).
+          try {
+            await db.raw(`ALTER TABLE tax_calculations DROP CONSTRAINT IF EXISTS chk_tax_type_valid`);
+            await db.raw(`
+              ALTER TABLE tax_calculations ADD CONSTRAINT chk_tax_type_valid
+              CHECK (tax_type IN ('IRPJ','CSLL','PIS','COFINS','ICMS','ISS','CBS','IBS','IS'))
+            `);
+            console.log('✓ 019b_tax_calculations_reforma_types completed');
+          } catch (e) {
+            console.warn(
+              '[MIGRATIONS] Não foi possível estender chk_tax_type_valid — verifique manualmente:',
+              (e as Error).message,
+            );
+          }
+        },
+      },
     ];
 
     for (const migration of migrations) {
