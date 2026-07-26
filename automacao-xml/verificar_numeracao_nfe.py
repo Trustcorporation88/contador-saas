@@ -26,12 +26,15 @@ def _check(payload: dict) -> dict:
     from pynfe.utils.flags import NAMESPACE_NFE
     from lxml import etree
 
+    from common.nfe_utils import modelo_pynfe
+
     ambiente = str(payload.get("ambiente", "homologacao")).lower()
     homologacao = ambiente != "producao"
     cert_path = payload["cert_path"]
     cert_senha = payload["cert_senha"]
     uf = str(payload["uf"]).upper()
-    modelo = int(payload.get("modelo", 55))
+    modelo_raw = payload.get("modelo", 55)
+    modelo = modelo_pynfe(modelo_raw)  # "nfe" ou "nfce" — exigido pelo pynfe
     serie = int(payload.get("serie", 1))
     numero = int(payload["numero"])
     chave = _digits(payload.get("chave"))
