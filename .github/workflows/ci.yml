@@ -91,6 +91,28 @@ jobs:
           path: backend/coverage/
           retention-days: 7
 
+  test-automacao-xml:
+    runs-on: ubuntu-latest
+    name: 🐍 Automação XML Tests (pynfe)
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: automacao-xml/requirements.txt
+
+      - name: Install automacao-xml dependencies
+        working-directory: automacao-xml
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests
+        working-directory: automacao-xml
+        run: python -m unittest discover -s tests -v
+
   test-frontend:
     runs-on: ubuntu-latest
     name: 🖼️ Frontend Lint, TypeCheck & Build
@@ -238,7 +260,7 @@ jobs:
   docker-build:
     runs-on: ubuntu-latest
     name: 🐳 Docker Build Validation
-    needs: [test-backend, test-frontend]
+    needs: [test-backend, test-frontend, test-automacao-xml]
 
     steps:
       - uses: actions/checkout@v4
@@ -281,7 +303,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     name: 🚀 Deploy — Render + Vercel
-    needs: [test-backend, test-frontend, e2e-tests, docker-build]
+    needs: [test-backend, test-frontend, test-automacao-xml, e2e-tests, docker-build]
     if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && github.event_name == 'push'
 
     environment:
