@@ -112,32 +112,42 @@ curl https://SEU-BACKEND.up.railway.app/api/v1/health
 
 ---
 
-## Passo 4 — Frontend no Railway (`www.procontador.com.br`)
+## Passo 4 — Frontend
 
-Serviço **contador-saas** (pasta `frontend/`):
+### Produção atual (recomendado)
 
-1. **Root Directory:** `frontend`
+| Camada | Onde | URL |
+|--------|------|-----|
+| Frontend | **Vercel** | `https://www.procontador.com.br` |
+| API | **Railway** `contador-api` | `https://contador-api-production.up.railway.app` |
+| Proxy `/api` | rewrite em `frontend/vercel.json` | Vercel → Railway |
+
+DNS de `www.procontador.com.br` aponta para **Vercel** (`cname.vercel-dns.com`).
+
+### Frontend opcional no Railway (`contador-saas`)
+
+Serviço **contador-saas** (pasta `frontend/`) — espelho/nginx, não é o DNS principal hoje:
+
+1. **Root Directory:** `frontend` (obrigatório — senão usa o `railway.toml` da raiz e tenta buildar o backend)
 2. **Builder:** Dockerfile via `frontend/railway.toml`
 3. **Variáveis:**
    - `BACKEND_URL` = `https://contador-api-production.up.railway.app`
    - `PORT` = injetado pelo Railway (nginx usa `${PORT}`)
 
-O nginx faz proxy de `/api/*` para o backend. O React usa mesma origem em `procontador.com.br`.
+O nginx faz proxy de `/api/*` para o backend.
 
 **URL temporária:** https://contador-saas-production.up.railway.app
 
-### DNS (Cloudflare / Hostinger)
+### DNS (Cloudflare / Hostinger) — se quiser apontar www de volta ao Railway
 
 | Tipo | Nome | Valor |
 |------|------|-------|
 | CNAME | `www` | `kju4cq0u.up.railway.app` |
 | CNAME | `@` | `f89wuuss.up.railway.app` |
-| TXT | `_railway-verify.www` | `railway-verify=f13dc8e7e096e0a9e9e5fb63b29146c838d2bc912ecab260ea4fea08b9f17005` |
-| TXT | `_railway-verify` | `railway-verify=e326a1fa5c410759f62ada424081244de64edc979b0dff97f9d2ed38fcf5ba81` |
 
 Use **DNS only** (nuvem cinza) no Cloudflare ao configurar.
 
-Depois de propagar, pode suspender o projeto na Vercel.
+Com www na Vercel (estado atual), o Railway frontend é opcional.
 
 ---
 
