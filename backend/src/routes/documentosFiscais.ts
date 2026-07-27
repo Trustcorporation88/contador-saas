@@ -3,7 +3,7 @@
  * GET/POST /api/v1/documentos
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { DocumentoFiscalController } from '../controllers/documentoFiscalController';
 import { authenticateToken } from '../middleware/auth';
 import { applyCompanyContext } from '../middleware/companyContext';
@@ -20,56 +20,42 @@ router.use(applyCompanyContext);
  * GET /api/v1/documentos
  * Listar documentos com filtros
  */
-router.get('/', (req: Request, res: Response) => {
-  DocumentoFiscalController.listar(req, res);
-});
+router.get('/', DocumentoFiscalController.listar);
 
 /**
  * POST /api/v1/documentos
  * Criar novo documento
  */
-router.post('/', (req: Request, res: Response) => {
-  DocumentoFiscalController.criar(req, res);
-});
+router.post('/', DocumentoFiscalController.criar);
 
 /**
  * GET /api/v1/documentos/stats/estatisticas
  * Obter estatísticas (deve vir ANTES do /:id)
  */
-router.get('/stats/estatisticas', (req: Request, res: Response) => {
-  DocumentoFiscalController.getEstatisticas(req, res);
-});
+router.get('/stats/estatisticas', DocumentoFiscalController.getEstatisticas);
 
 /**
  * GET /api/v1/documentos/:id
  * Obter documento específico
  */
-router.get('/:id', (req: Request, res: Response) => {
-  DocumentoFiscalController.obter(req, res);
-});
+router.get('/:id', DocumentoFiscalController.obter);
 
 /**
  * PUT /api/v1/documentos/:id
  * Atualizar documento (rascunho)
  */
-router.put('/:id', (req: Request, res: Response) => {
-  DocumentoFiscalController.atualizar(req, res);
-});
+router.put('/:id', DocumentoFiscalController.atualizar);
 
 /**
  * POST /api/v1/documentos/:id/registrar
  * Registrar documento (rascunho -> registrado)
  */
-router.post('/:id/registrar', (req: Request, res: Response) => {
-  DocumentoFiscalController.registrar(req, res);
-});
+router.post('/:id/registrar', DocumentoFiscalController.registrar);
 
 /**
  * DELETE /api/v1/documentos/:id
  * Cancelar documento
  */
-router.delete('/:id', (req: Request, res: Response) => {
-  DocumentoFiscalController.cancelar(req, res);
-});
+router.delete('/:id', DocumentoFiscalController.cancelar);
 
 export default router;

@@ -21,7 +21,7 @@ export class NfeOcrController {
       if (!req.file) {
         return res.status(400).json({ 
           error: 'Arquivo não fornecido',
-          details: 'Faça upload de um PDF ou imagem de NF-e'
+          details: 'Faça upload de um PDF ou imagem de NF-e',
         });
       }
 
@@ -108,7 +108,7 @@ export class NfeOcrController {
         uploadId,
         companyId,
         adjustments,
-        labels
+        labels,
       );
 
       return res.status(201).json({

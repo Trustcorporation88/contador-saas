@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { authenticateToken } from '../middleware/auth';
 import { applyCompanyContext } from '../middleware/companyContext';
 import { ContasReceberController } from '../controllers/contasReceberController';
@@ -8,32 +8,12 @@ const router = Router();
 router.use(authenticateToken);
 router.use(applyCompanyContext);
 
-router.get('/', (req: Request, res: Response) => {
-  ContasReceberController.listar(req, res);
-});
-
-router.post('/', (req: Request, res: Response) => {
-  ContasReceberController.criar(req, res);
-});
-
-router.get('/stats/estatisticas', (req: Request, res: Response) => {
-  ContasReceberController.getEstatisticas(req, res);
-});
-
-router.get('/:id', (req: Request, res: Response) => {
-  ContasReceberController.obter(req, res);
-});
-
-router.put('/:id', (req: Request, res: Response) => {
-  ContasReceberController.atualizar(req, res);
-});
-
-router.post('/:id/recebimentos', (req: Request, res: Response) => {
-  ContasReceberController.registrarRecebimento(req, res);
-});
-
-router.delete('/:id', (req: Request, res: Response) => {
-  ContasReceberController.cancelar(req, res);
-});
+router.get('/', ContasReceberController.listar);
+router.post('/', ContasReceberController.criar);
+router.get('/stats/estatisticas', ContasReceberController.getEstatisticas);
+router.get('/:id', ContasReceberController.obter);
+router.put('/:id', ContasReceberController.atualizar);
+router.post('/:id/recebimentos', ContasReceberController.registrarRecebimento);
+router.delete('/:id', ContasReceberController.cancelar);
 
 export default router;

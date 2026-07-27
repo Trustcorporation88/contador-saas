@@ -209,7 +209,7 @@ export class BackupService {
    */
   static deleteBackup(filename: string): boolean {
     // Segurança: apenas aceitar nomes de arquivo seguros (sem path traversal)
-    if (!/^backup-[\w\-]+\.sql\.gz$/.test(filename)) {
+    if (!/^backup-[\w-]+\.sql\.gz$/.test(filename)) {
       throw Object.assign(new Error('Nome de arquivo inválido'), { status: 400 });
     }
     const filepath = path.join(getBackupDir(), filename);
@@ -228,7 +228,7 @@ export class BackupService {
     next_run:   string;
     backup_dir: string;
     retention:  string;
-  } {
+    } {
     return {
       enabled:    BackupService.cronJob !== null,
       schedule:   CRON_SCHEDULE,

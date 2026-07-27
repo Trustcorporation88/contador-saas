@@ -4,6 +4,7 @@
  * Implementa validações, isolamento por tenant e auditoria
  */
 
+import { randomUUID } from 'crypto';
 import { getDatabase } from '../config/database';
 import { logger } from '../middleware/requestLogger';
 import {
@@ -52,7 +53,7 @@ export class CompanyService {
 
     // Iniciar transação
     return db.transaction(async (trx) => {
-      const companyId = require("crypto").randomUUID();
+      const companyId = randomUUID();
       const now = new Date().toISOString();
 
       // Preparar dados da empresa
@@ -90,7 +91,7 @@ export class CompanyService {
 
       // Auto-associar admin se fornecido
       if (adminUserId) {
-        const companyUserId = require("crypto").randomUUID();
+        const companyUserId = randomUUID();
         await trx('company_users').insert({
           id: companyUserId,
           user_id: adminUserId,
@@ -434,7 +435,7 @@ export class CompanyService {
       const db = await getDatabase();
 
       await db('audit_logs').insert({
-        id: require("crypto").randomUUID(),
+        id: randomUUID(),
         user_id: userId,
         action,
         entity_type: 'company',

@@ -23,7 +23,7 @@ export class ValidationService {
 
     if (diferenca > 0.01) {
       errors.push(
-        `❌ Ativo (R$ ${ativoTotal}) ≠ Passivo (R$ ${passivoTotal}) + PL (R$ ${pl})`
+        `❌ Ativo (R$ ${ativoTotal}) ≠ Passivo (R$ ${passivoTotal}) + PL (R$ ${pl})`,
       );
     }
 
@@ -36,26 +36,26 @@ export class ValidationService {
 
     if (difLucro > 0.01) {
       errors.push(
-        `❌ Lucro calculado (R$ ${lucroCalculado.toFixed(2)}) ≠ Lucro reportado (R$ ${lucroReportado.toFixed(2)})`
+        `❌ Lucro calculado (R$ ${lucroCalculado.toFixed(2)}) ≠ Lucro reportado (R$ ${lucroReportado.toFixed(2)})`,
       );
     }
 
     if (b.ativoCirculante > b.ativoTotal) {
-      errors.push(`❌ Ativo Circulante > Ativo Total`);
+      errors.push('❌ Ativo Circulante > Ativo Total');
     }
 
     if (b.passivoCirculante > b.passivoTotal) {
-      errors.push(`❌ Passivo Circulante > Passivo Total`);
+      errors.push('❌ Passivo Circulante > Passivo Total');
     }
 
-    if (ativoTotal < 0) errors.push(`❌ Ativo Total negativo`);
-    if (passivoTotal < 0) errors.push(`❌ Passivo Total negativo`);
-    if (pl < 0) warnings.push(`⚠️ Patrimônio Líquido negativo`);
-    if (receitaLiquida < 0) errors.push(`❌ Receita Líquida negativa`);
-    if (lucroReportado < 0) warnings.push(`⚠️ Lucro Líquido negativo`);
+    if (ativoTotal < 0) errors.push('❌ Ativo Total negativo');
+    if (passivoTotal < 0) errors.push('❌ Passivo Total negativo');
+    if (pl < 0) warnings.push('⚠️ Patrimônio Líquido negativo');
+    if (receitaLiquida < 0) errors.push('❌ Receita Líquida negativa');
+    if (lucroReportado < 0) warnings.push('⚠️ Lucro Líquido negativo');
 
     if (custoVendas === 0 && receitaLiquida > 0) {
-      warnings.push(`⚠️ Custo das Vendas = 0. Verifique se é correto.`);
+      warnings.push('⚠️ Custo das Vendas = 0. Verifique se é correto.');
     }
 
     if (receitaLiquida > 0) {

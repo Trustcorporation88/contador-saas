@@ -782,14 +782,14 @@ export class EFDBuilderService {
     const day = pad(d.getDate());
 
     switch (format) {
-      case 'DDMMYYYY':
-        return `${day}${month}${year}`;
-      case 'DD/MM/YYYY':
-        return `${day}/${month}/${year}`;
-      case 'YYYY-MM-DD':
-        return `${year}-${month}-${day}`;
-      default:
-        return d.toISOString();
+    case 'DDMMYYYY':
+      return `${day}${month}${year}`;
+    case 'DD/MM/YYYY':
+      return `${day}/${month}/${year}`;
+    case 'YYYY-MM-DD':
+      return `${year}-${month}-${day}`;
+    default:
+      return d.toISOString();
     }
   }
 

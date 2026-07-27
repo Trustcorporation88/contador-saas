@@ -49,7 +49,7 @@ export class TaxController {
         companyId,
         dto.period_start,
         dto.period_end,
-        dto.tax_regime
+        dto.tax_regime,
       );
       const cached = await cacheService.get(cacheKey);
 
@@ -96,24 +96,24 @@ export class TaxController {
         return res.status(400).json({ error: 'tax_regime, period_start e period_end são obrigatórios' });
       }
 
-       const result = await TaxCalculationService.calculate(dto);
-       const guide = await TaxCalculationService.generateDASGuide(result);
+      const result = await TaxCalculationService.calculate(dto);
+      const guide = await TaxCalculationService.generateDASGuide(result);
 
-       const guidesDir = path.resolve(process.cwd(), 'generated-guides');
-       await fs.promises.mkdir(guidesDir, { recursive: true });
-       const filePath = path.join(guidesDir, guide.filename);
-       await fs.promises.writeFile(filePath, guide.buffer);
+      const guidesDir = path.resolve(process.cwd(), 'generated-guides');
+      await fs.promises.mkdir(guidesDir, { recursive: true });
+      const filePath = path.join(guidesDir, guide.filename);
+      await fs.promises.writeFile(filePath, guide.buffer);
 
-       const saved = await TaxCalculationService.save(result);
+      const saved = await TaxCalculationService.save(result);
 
-       // INVALIDATE CACHE após salvar apuração
-       const invalidatedCount = await cacheService.invalidateTaxes(companyId);
-       logger.info('Cache invalidated after tax appraisal save', {
-         companyId,
-         invalidatedKeys: invalidatedCount,
-       });
+      // INVALIDATE CACHE após salvar apuração
+      const invalidatedCount = await cacheService.invalidateTaxes(companyId);
+      logger.info('Cache invalidated after tax appraisal save', {
+        companyId,
+        invalidatedKeys: invalidatedCount,
+      });
 
-       return res.status(201).json({ calculation: result, saved, guide: { filename: guide.filename } });
+      return res.status(201).json({ calculation: result, saved, guide: { filename: guide.filename } });
     } catch (err) {
       logger.error('Tax appraisal error', { error: (err as Error).message });
       return next(err);

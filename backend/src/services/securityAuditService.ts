@@ -80,7 +80,7 @@ export async function logSecurityEvent(event: SecurityAuditEvent): Promise<void>
 
     // Log também no Winston para observabilidade imediata
     const logLevel = event.severity === SecuritySeverity.CRITICAL ? 'error' : 
-                     event.severity === SecuritySeverity.WARNING ? 'warn' : 'info';
+      event.severity === SecuritySeverity.WARNING ? 'warn' : 'info';
     
     logger[logLevel]('Security event', {
       event: event.eventType,

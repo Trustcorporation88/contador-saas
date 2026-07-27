@@ -10,6 +10,7 @@ import crypto from 'crypto';
 import { envConfig } from '../config/env';
 import { getDatabase } from '../config/database';
 import { logger } from '../middleware/requestLogger';
+import { addToBlacklist } from './cache/tokenBlacklist';
 import {
   JWTPayload,
   LoginResponse,
@@ -532,12 +533,11 @@ export class AuthService {
       // Adiciona token ao blacklist
       const jti = (decoded as any).jti;
       if (jti) {
-        const { addToBlacklist } = require('./cache/tokenBlacklist');
         await addToBlacklist(jti, userId, decoded.exp, 'logout', {
           email: decoded.email,
           companyId: decoded.companyId,
         });
-        logger.info(`Refresh token blacklisted on logout`, { userId, jti });
+        logger.info('Refresh token blacklisted on logout', { userId, jti });
       }
 
       const storedToken = this.findRefreshTokenByUserAndHash(userId, refreshToken);

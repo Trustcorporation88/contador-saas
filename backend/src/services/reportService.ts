@@ -557,7 +557,7 @@ export class ReportService {
           expenses: dre.total_expenses,
           net_income: dre.net_income,
         };
-      })
+      }),
     );
 
     const totals = dreSeries.reduce((acc, point) => {

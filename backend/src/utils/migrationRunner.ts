@@ -639,7 +639,7 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           // updateStatus do TaxCalculationService continuam funcionando sem
           // alteração — só o conjunto de valores aceitos em tax_type muda).
           try {
-            await db.raw(`ALTER TABLE tax_calculations DROP CONSTRAINT IF EXISTS chk_tax_type_valid`);
+            await db.raw('ALTER TABLE tax_calculations DROP CONSTRAINT IF EXISTS chk_tax_type_valid');
             await db.raw(`
               ALTER TABLE tax_calculations ADD CONSTRAINT chk_tax_type_valid
               CHECK (tax_type IN ('IRPJ','CSLL','PIS','COFINS','ICMS','ISS','CBS','IBS','IS'))

@@ -56,7 +56,10 @@ export class DASService {
       const taxCalcs = await db('tax_calculations')
         .where({ company_id: companyId })
         .where(function () {
-          this.whereBetween('period_start', [dataInicio, dataFim]).orWhereBetween(
+          // Knex QueryBuilder é "thenable" (implementa .then), então o
+          // eslint-plugin-typescript acha que é uma Promise não aguardada —
+          // aqui é só a montagem da cláusula WHERE (uso normal do Knex).
+          void this.whereBetween('period_start', [dataInicio, dataFim]).orWhereBetween(
             'period_end',
             [dataInicio, dataFim],
           );
@@ -88,7 +91,7 @@ export class DASService {
         percentual_aliquota: aliquota * 100,
         observacoes: [
           `DAS gerado automaticamente da apuração de ${regime}`,
-          `Vencimento: 20º dia do mês seguinte`,
+          'Vencimento: 20º dia do mês seguinte',
         ],
       };
     } catch (error) {

@@ -42,6 +42,44 @@ export default [
     },
   },
   {
+    // Arquivos de teste ficam fora do tsconfig.json (ver "exclude" em
+    // tsconfig.json) para não entrarem no build de produção. Sem uma config
+    // própria aqui, eles caem no parser padrão do ESLint (espree), que não
+    // entende sintaxe TypeScript como "as const" — daí o erro de parsing
+    // "Unexpected token as". Usamos o parser TS normalmente, só sem
+    // "project" (regras type-aware não fazem sentido fora do tsconfig).
+    files: ['src/**/__tests__/**/*.{ts,tsx}', 'src/**/*.test.{ts,tsx}'],
+    languageOptions: {
+      ecmaVersion: 2021,
+      sourceType: 'module',
+      globals: { ...globals.browser, ...globals.node },
+      parser: typescriptParser,
+      parserOptions: {
+        ecmaFeatures: { jsx: true },
+      },
+    },
+    plugins: {
+      '@typescript-eslint': typescript,
+      react,
+      'react-hooks': reactHooks,
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      ...typescript.configs.recommended.rules,
+      ...react.configs.recommended.rules,
+      ...reactHooks.configs.recommended.rules,
+      'react/react-in-jsx-scope': 'off',
+      'react/prop-types': 'off',
+      'no-undef': 'off',
+      '@typescript-eslint/explicit-function-return-types': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+    },
+    settings: {
+      react: { version: 'detect' },
+    },
+  },
+  {
     files: ['*.js', '*.jsx'],
     languageOptions: {
       ecmaVersion: 2021,

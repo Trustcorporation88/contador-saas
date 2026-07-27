@@ -13,6 +13,9 @@ import { RedisHealth } from './types';
  */
 let logger: any;
 try {
+  // Fallback deliberado: um import estático quebraria o módulo inteiro se
+  // requestLogger falhar ao carregar; aqui isso só desativa o logging.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const loggerModule = require('../../middleware/requestLogger');
   logger = loggerModule.logger;
 } catch {
