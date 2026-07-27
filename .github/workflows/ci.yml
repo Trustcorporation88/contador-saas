@@ -231,6 +231,11 @@ jobs:
           # de teste efêmero do CI, nunca chegam perto de produção.
           ADMIN_BOOTSTRAP_EMAIL: admin@contador.dev
           ADMIN_BOOTSTRAP_PASSWORD: Admin@123
+          # Login endpoint = 5 req/min. Cada spec chama loginAs no beforeEach
+          # (+ retries do Playwright) → "Rate limit exceeded for endpoint tier"
+          # e o teste fica preso em /login. Em CI o banco é efêmero; desligar
+          # o rate limit só neste job não afeta produção.
+          ENABLE_RATE_LIMITING: 'false'
         run: nohup npm start >/tmp/backend.log 2>&1 &
 
       - name: Wait for backend

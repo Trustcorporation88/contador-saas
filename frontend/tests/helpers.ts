@@ -18,8 +18,18 @@ export async function loginAs(page: Page, email = ADMIN_EMAIL, password = ADMIN_
   // 'textbox' desambigua para o input de verdade.
   await page.getByRole('textbox', { name: /senha/i }).fill(password);
   await page.getByRole('button', { name: /entrar/i }).click();
-  // Aguarda sair da página de login
-  await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 15_000 });
+
+  // Se o login falhar (credenciais / rate limit), a URL não muda — captura
+  // a mensagem do alert para o log do CI em vez de um TimeoutError opaco.
+  try {
+    await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 15_000 });
+  } catch (err) {
+    const alertText = await page.getByRole('alert').textContent().catch(() => null);
+    throw new Error(
+      `Login não saiu de /login${alertText ? `: ${alertText.trim()}` : ''}`,
+      { cause: err },
+    );
+  }
 }
 
 /**
