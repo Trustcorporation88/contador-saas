@@ -38,8 +38,8 @@ const allowedOrigins = Array.from(
       .split(',')
       .map((item) => item.trim())
       .filter(Boolean)
-      .concat(fallbackOrigins)
-  )
+      .concat(fallbackOrigins),
+  ),
 );
 const allowedOriginPatterns: RegExp[] = [
   /^https:\/\/[a-z0-9-]+\.vercel\.app$/i,
@@ -87,7 +87,14 @@ app.use(
         callback(null, true);
         return;
       }
-      callback(new Error('Not allowed by CORS'));
+      // status/code aqui são lidos genericamente pelo errorHandler — sem
+      // eles, o cors encaminha um Error "pelado" que cai no branch de 500
+      // (erro interno) em vez do 403 esperado para uma origem bloqueada
+      // deliberadamente (não é uma falha do servidor).
+      callback(Object.assign(new Error('Not allowed by CORS'), {
+        status: 403,
+        code: 'ORIGIN_NOT_ALLOWED',
+      }));
     },
     credentials: envConfig.corsCredentials,
     optionsSuccessStatus: 200,
