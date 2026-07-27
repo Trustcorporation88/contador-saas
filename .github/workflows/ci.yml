@@ -266,7 +266,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build backend image
-        run: docker build -t ocontador-backend:ci ./backend
+        # O Dockerfile do backend copia caminhos relativos à raiz do repo
+        # (backend/src, automacao-xml/ etc. — usado assim no deploy real via
+        # Railway, com Root Directory = "/"). Build context precisa ser a
+        # raiz (.), não ./backend, senão os COPY não encontram os arquivos.
+        run: docker build -t ocontador-backend:ci -f backend/Dockerfile .
 
       - name: Build frontend image
         run: docker build -t ocontador-frontend:ci ./frontend
