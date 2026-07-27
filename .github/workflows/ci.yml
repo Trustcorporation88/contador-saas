@@ -13,7 +13,11 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: '18'
+  # Vite 7 (frontend) exige Node 20.19+/22.12+ para o dev server usado pelo
+  # Playwright (config.webServer) — com Node 18 ele falha com "crypto.hash is
+  # not a function" antes mesmo de subir. O backend aceita >=18 (ver
+  # package.json > engines), então subir a versão aqui é seguro para os dois.
+  NODE_VERSION: '20'
 
 jobs:
   test-backend:
