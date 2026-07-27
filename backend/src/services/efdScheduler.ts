@@ -294,12 +294,12 @@ export class EFDSchedulerService {
     <div class="section">
       <div class="section-title">✓ Validação</div>
       ${
-        validation.is_valid
-          ? `<div class="success">✅ EFD validada com sucesso! Nenhum erro encontrado.</div>`
-          : `<div class="errors">⚠️ EFD com ${validation.errors.length} erro(s) encontrado(s):<br><br>
+  validation.is_valid
+    ? '<div class="success">✅ EFD validada com sucesso! Nenhum erro encontrado.</div>'
+    : `<div class="errors">⚠️ EFD com ${validation.errors.length} erro(s) encontrado(s):<br><br>
             ${validation.errors.map((e: any) => `• ${e.message}`).join('<br>')}
           </div>`
-      }
+}
     </div>
 
     <div class="section">
@@ -341,7 +341,7 @@ export class EFDSchedulerService {
     config: any,
   ): Promise<void> {
     try {
-      const emailSubject = `❌ Erro na Geração de EFD - Ação Requerida`;
+      const emailSubject = '❌ Erro na Geração de EFD - Ação Requerida';
 
       const emailBody = `
 <!DOCTYPE html>

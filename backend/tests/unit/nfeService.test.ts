@@ -235,7 +235,7 @@ describe('NfeService', () => {
       expect(nfe.protocolo).toBeDefined();
     });
 
-    it('deve lançar 422 se status não for RASCUNHO', async () => {
+    it('deve lançar 422 se status não for RASCUNHO nem PENDENTE', async () => {
       const { db } = require('../../src/config/database');
       db.first.mockResolvedValueOnce({ ...mockNfeRecord, status: 'AUTORIZADA' });
 
@@ -251,6 +251,19 @@ describe('NfeService', () => {
       await expect(
         NfeService.authorize('inexistente', 'company-uuid-1')
       ).rejects.toMatchObject({ status: 404 });
+    });
+
+    // Cobre o bug: uma NF-e que falhou uma vez (status PENDENTE, ex.: SEFAZ
+    // rejeitou, rede caiu) ficava travada para sempre — authorize() só
+    // aceitava RASCUNHO, cancel() só aceitava AUTORIZADA, e não existe
+    // endpoint de exclusão/edição. O número/série ficava bloqueado sem
+    // nenhuma saída para o usuário ("não consigo editar ela para continuar").
+    it('deve permitir nova tentativa de autorização em status PENDENTE', async () => {
+      const { db } = require('../../src/config/database');
+      db.first.mockResolvedValueOnce({ ...mockNfeRecord, status: 'PENDENTE' });
+
+      const nfe = await NfeService.authorize('nfe-uuid-1', 'company-uuid-1');
+      expect(nfe.status).toBe('AUTORIZADA');
     });
   });
 

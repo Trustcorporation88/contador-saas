@@ -158,4 +158,4 @@ async function startServer(): Promise<void> {
   }
 }
 
-startServer();
+void startServer();

@@ -103,7 +103,11 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: javascript, typescript
-          config-file: ./.github/codeql/codeql-config.yml
+          # Sem config-file: o arquivo ./.github/codeql/codeql-config.yml
+          # referenciado aqui nunca existiu no repo — o job falhava sempre
+          # com "configuration file ... does not exist" antes de rodar
+          # qualquer análise. queries: security-and-quality já cobre o
+          # conjunto de regras desejado sem precisar de um config próprio.
           queries: security-and-quality
 
       - name: Executar análise CodeQL

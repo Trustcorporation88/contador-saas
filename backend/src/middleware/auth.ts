@@ -5,6 +5,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
 import { envConfig } from '../config/env';
 import { ERROR_CODES, HTTP_STATUS } from '../config/constants';
 import { logger } from './requestLogger';
@@ -257,8 +258,6 @@ export function authorize(...allowedRoles: string[]) {
  * Generate JWT token with JTI (unique identifier for revocation)
  */
 export function generateToken(payload: Record<string, unknown>): string {
-  const { v4: uuidv4 } = require('uuid');
-
   return jwt.sign(payload, envConfig.jwt.secret, {
     jwtid: uuidv4(), // Unique identifier para blacklist
     expiresIn: envConfig.jwt.expiry as any,
@@ -270,8 +269,6 @@ export function generateToken(payload: Record<string, unknown>): string {
  * Generate refresh token with JTI
  */
 export function generateRefreshToken(payload: Record<string, unknown>): string {
-  const { v4: uuidv4 } = require('uuid');
-
   return jwt.sign(payload, envConfig.jwt.refreshSecret, {
     jwtid: uuidv4(), // Unique identifier para blacklist
     expiresIn: envConfig.jwt.refreshExpiry as any,

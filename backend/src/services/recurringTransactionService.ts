@@ -509,15 +509,15 @@ export class RecurringTransactionService {
     const next = new Date(currentDate);
 
     switch (frequency) {
-      case RecurringTransactionFrequency.DIARIO:
-        next.setDate(next.getDate() + 1);
-        break;
-      case RecurringTransactionFrequency.MENSAL:
-        next.setMonth(next.getMonth() + 1);
-        break;
-      case RecurringTransactionFrequency.ANUAL:
-        next.setFullYear(next.getFullYear() + 1);
-        break;
+    case RecurringTransactionFrequency.DIARIO:
+      next.setDate(next.getDate() + 1);
+      break;
+    case RecurringTransactionFrequency.MENSAL:
+      next.setMonth(next.getMonth() + 1);
+      break;
+    case RecurringTransactionFrequency.ANUAL:
+      next.setFullYear(next.getFullYear() + 1);
+      break;
     }
 
     return next.toISOString().split('T')[0]; // Retornar como YYYY-MM-DD

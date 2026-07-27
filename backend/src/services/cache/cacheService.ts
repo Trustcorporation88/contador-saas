@@ -19,6 +19,9 @@ import {
  */
 let logger: any;
 try {
+  // Fallback deliberado: um import estático quebraria o módulo inteiro se
+  // requestLogger falhar ao carregar; aqui isso só desativa o logging.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const loggerModule = require('../../middleware/requestLogger');
   logger = loggerModule.logger;
 } catch {
@@ -118,7 +121,7 @@ class CacheService implements ICacheService {
   public async set<T>(
     key: string,
     value: T,
-    ttlSeconds?: number
+    ttlSeconds?: number,
   ): Promise<void> {
     if (!this.isEnabled) {
       logger.debug('Cache disabled, skipping SET', { key });
@@ -203,7 +206,7 @@ class CacheService implements ICacheService {
           'MATCH',
           pattern,
           'COUNT',
-          100
+          100,
         );
 
         cursor = nextCursor;

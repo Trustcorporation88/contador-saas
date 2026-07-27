@@ -179,7 +179,7 @@ export class NfeOcrService {
       logger.error('PDF parsing error', { error: (error as Error).message });
       throw Object.assign(
         new Error('Falha ao extrair texto do PDF'),
-        { status: 400 }
+        { status: 400 },
       );
     }
   }
@@ -395,7 +395,7 @@ export class NfeOcrService {
     if (!record) {
       throw Object.assign(
         new Error('Upload não encontrado'),
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -417,7 +417,7 @@ export class NfeOcrService {
     if (!data.nf_number || !data.total_value || !data.issuer_cnpj) {
       throw Object.assign(
         new Error('Dados insuficientes para gerar preview. Campos obrigatórios faltando.'),
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -449,7 +449,7 @@ export class NfeOcrService {
           account_code: '2.1.1.1', // Fornecedores
           account_name: 'Fornecedores',
           credit: data.total_value,
-        }
+        },
       );
     } else {
       // Saída: Debit Accounts Receivable, Credit Revenue
@@ -463,7 +463,7 @@ export class NfeOcrService {
           account_code: '3.1.1.1', // Receita de Vendas
           account_name: 'Receita de Vendas',
           credit: data.total_value,
-        }
+        },
       );
     }
 
@@ -522,7 +522,7 @@ export class NfeOcrService {
     if (!upload.ocr_data.nf_number || !upload.ocr_data.total_value || !upload.ocr_data.issuer_cnpj) {
       throw Object.assign(
         new Error('Dados insuficientes para criar lançamento'),
-        { status: 400 }
+        { status: 400 },
       );
     }
 

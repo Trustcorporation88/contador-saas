@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2, FileText, Download, Ban, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Plus, Trash2, FileText, Download, Ban, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -157,6 +157,20 @@ export default function NfeEmissaoPage() {
     mutationFn: async ({ id, justificativa }: { id: string; justificativa: string }) =>
       NfeService.cancel(companyId, id, justificativa),
     onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['nfe-list', companyId] });
+    },
+    onError: (e: Error) => setErro(e.message),
+  });
+
+  // Nota PENDENTE = uma tentativa de emissão anterior falhou (SEFAZ
+  // rejeitou, rede caiu, etc.). "Tentar novamente" chama o mesmo endpoint de
+  // autorização — o backend agora aceita reprocessar notas PENDENTE, não só
+  // RASCUNHO, para não deixar o número/série travado sem saída.
+  const retryMutation = useMutation({
+    mutationFn: async (id: string) => NfeService.authorize(companyId, id),
+    onSuccess: async (nfe) => {
+      setErro('');
+      setResultado(nfe);
       await qc.invalidateQueries({ queryKey: ['nfe-list', companyId] });
     },
     onError: (e: Error) => setErro(e.message),
@@ -596,6 +610,9 @@ export default function NfeEmissaoPage() {
                       >
                         {nfe.status}
                       </span>
+                      {nfe.status === 'PENDENTE' && nfe.status_motivo && (
+                        <p className="mt-1 max-w-xs text-xs text-amber-700">{nfe.status_motivo}</p>
+                      )}
                     </td>
                     <td className="py-2 pr-3">
                       <div className="flex items-center gap-2">
@@ -607,6 +624,17 @@ export default function NfeEmissaoPage() {
                         >
                           <Download className="h-4 w-4" />
                         </button>
+                        {nfe.status === 'PENDENTE' && (
+                          <button
+                            type="button"
+                            className="text-gray-500 hover:text-emerald-600 disabled:opacity-50"
+                            title="Tentar novamente (reenviar à SEFAZ)"
+                            disabled={retryMutation.isPending}
+                            onClick={() => retryMutation.mutate(nfe.id)}
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                          </button>
+                        )}
                         {nfe.status === 'AUTORIZADA' && (
                           <button
                             type="button"

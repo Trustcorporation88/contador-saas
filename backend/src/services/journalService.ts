@@ -211,8 +211,10 @@ export class JournalService {
     if (typeof filters.is_posted === 'boolean') query = query.where('is_posted', filters.is_posted);
     if (filters.reference_type) query = query.where('reference_type', filters.reference_type);
     if (filters.search) {
+      // Knex QueryBuilder é "thenable" — os void abaixo só sinalizam que a
+      // montagem da cláusula (não uma Promise) é intencionalmente descartada.
       query = query.where(function () {
-        this.whereILike('description', `%${filters.search}%`)
+        void this.whereILike('description', `%${filters.search}%`)
           .orWhereILike('reference_number', `%${filters.search}%`)
           .orWhereILike('reference_issuer', `%${filters.search}%`);
       });
@@ -221,7 +223,7 @@ export class JournalService {
     // Filtrar por conta afetada (join nas lines)
     if (filters.account_id) {
       query = query.whereIn('id', function () {
-        this.select('journal_entry_id')
+        void this.select('journal_entry_id')
           .from('journal_lines')
           .where('account_id', filters.account_id!);
       });

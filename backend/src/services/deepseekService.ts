@@ -61,14 +61,14 @@ function buildSystemPrompt(ctx: FinancialContext): string {
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(n);
 
   const lines: string[] = [
-    `Você é o Copiloto Contábil de "O Contador", um sistema de contabilidade brasileiro de nível enterprise.`,
+    'Você é o Copiloto Contábil de "O Contador", um sistema de contabilidade brasileiro de nível enterprise.',
     `Você está assistindo o contador ou gestor da empresa "${ctx.companyName}".`,
-    `Responda sempre em português brasileiro claro, direto e profissional.`,
-    `Use terminologia contábil brasileira (Lei 6.404/76, CPC, NBC TG).`,
-    `Seja conciso mas completo. Use listas e marcações ** negrito ** para facilitar a leitura.`,
-    `Nunca invente dados — use apenas os números fornecidos abaixo.`,
-    ``,
-    `── DADOS FINANCEIROS ATUAIS ──────────────────────────────────────────`,
+    'Responda sempre em português brasileiro claro, direto e profissional.',
+    'Use terminologia contábil brasileira (Lei 6.404/76, CPC, NBC TG).',
+    'Seja conciso mas completo. Use listas e marcações ** negrito ** para facilitar a leitura.',
+    'Nunca invente dados — use apenas os números fornecidos abaixo.',
+    '',
+    '── DADOS FINANCEIROS ATUAIS ──────────────────────────────────────────',
   ];
 
   if (ctx.balance) {
@@ -81,7 +81,7 @@ function buildSystemPrompt(ctx: FinancialContext): string {
       : 'N/D';
 
     lines.push(
-      `Balanço Patrimonial:`,
+      'Balanço Patrimonial:',
       `  • Ativo Total: ${brl(b.ativoTotal)}`,
       `  • Ativo Circulante: ${brl(b.ativoCirculante)}`,
       `  • Passivo Total: ${brl(b.passivoTotal)}`,
@@ -91,7 +91,7 @@ function buildSystemPrompt(ctx: FinancialContext): string {
       `  • Grau de Endividamento: ${endiv}`,
     );
   } else {
-    lines.push(`Balanço Patrimonial: não disponível para o período atual.`);
+    lines.push('Balanço Patrimonial: não disponível para o período atual.');
   }
 
   if (ctx.dre) {
@@ -104,7 +104,7 @@ function buildSystemPrompt(ctx: FinancialContext): string {
       : 'N/D';
 
     lines.push(
-      `DRE (Demonstração do Resultado):`,
+      'DRE (Demonstração do Resultado):',
       `  • Receita Líquida: ${brl(d.receitaLiquida)}`,
       `  • Custo das Vendas/Serviços: ${brl(d.custoVendas)}`,
       `  • Impostos: ${brl(d.impostos)} (carga: ${carga})`,
@@ -112,7 +112,7 @@ function buildSystemPrompt(ctx: FinancialContext): string {
       `  • Margem Líquida: ${margem}`,
     );
   } else {
-    lines.push(`DRE: não disponível para o período atual.`);
+    lines.push('DRE: não disponível para o período atual.');
   }
 
   if (ctx.healthScore) {
@@ -121,10 +121,10 @@ function buildSystemPrompt(ctx: FinancialContext): string {
   }
 
   lines.push(
-    `────────────────────────────────────────────────────────────────────`,
-    ``,
-    `Se o usuário perguntar algo que não tem relação com os dados acima ou contabilidade, `,
-    `explique educadamente que você é especializado em análise contábil e financeira.`,
+    '────────────────────────────────────────────────────────────────────',
+    '',
+    'Se o usuário perguntar algo que não tem relação com os dados acima ou contabilidade, ',
+    'explique educadamente que você é especializado em análise contábil e financeira.',
   );
 
   return lines.join('\n');

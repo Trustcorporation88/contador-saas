@@ -347,6 +347,24 @@ async function mockApi(page: Page) {
       });
     }
 
+    // Sem este mock, o fallback `{ data: [] }` vira status=[] no
+    // FiscalCapturePanel — e `status.sync.find` derruba /documentos.
+    if (pathname.includes('/fiscal-capture/status')) {
+      return fulfillJson(route, {
+        success: true,
+        data: {
+          certificate: null,
+          sync: [],
+          captures_total: 0,
+          python_available: false,
+        },
+      });
+    }
+
+    if (pathname.includes('/fiscal-capture/captures')) {
+      return fulfillJson(route, { success: true, data: [], total: 0 });
+    }
+
     return fulfillJson(route, { success: true, data: [] });
   });
 }

@@ -214,7 +214,7 @@ export class ReportController {
       const cacheKey = CacheKeys.trialBalance(
         companyId, 
         dateFrom || 'start', 
-        dateTo || 'today'
+        dateTo || 'today',
       );
       const cached = await cacheService.get(cacheKey);
 

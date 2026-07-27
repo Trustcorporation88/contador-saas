@@ -13,7 +13,11 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: '18'
+  # Vite 7 (frontend) exige Node 20.19+/22.12+ para o dev server usado pelo
+  # Playwright (config.webServer) — com Node 18 ele falha com "crypto.hash is
+  # not a function" antes mesmo de subir. O backend aceita >=18 (ver
+  # package.json > engines), então subir a versão aqui é seguro para os dois.
+  NODE_VERSION: '20'
 
 jobs:
   test-backend:
@@ -219,6 +223,19 @@ jobs:
           CACHE_ENABLED: 'true'
           PORT: 3000
           LOG_LEVEL: error
+          # Sem senha, o bootstrap do admin (authService.ts) é pulado
+          # silenciosamente ("ADMIN_BOOTSTRAP_PASSWORD is empty") — sem
+          # usuário admin@contador.dev criado, os testes E2E que fazem login
+          # (auth.spec.ts e todo teste que usa helpers.ts > loginAs) nunca
+          # conseguem autenticar. Credenciais aqui só valem para este banco
+          # de teste efêmero do CI, nunca chegam perto de produção.
+          ADMIN_BOOTSTRAP_EMAIL: admin@contador.dev
+          ADMIN_BOOTSTRAP_PASSWORD: Admin@123
+          # Login endpoint = 5 req/min. Cada spec chama loginAs no beforeEach
+          # (+ retries do Playwright) → "Rate limit exceeded for endpoint tier"
+          # e o teste fica preso em /login. Em CI o banco é efêmero; desligar
+          # o rate limit só neste job não afeta produção.
+          ENABLE_RATE_LIMITING: 'false'
         run: nohup npm start >/tmp/backend.log 2>&1 &
 
       - name: Wait for backend
@@ -266,7 +283,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build backend image
-        run: docker build -t ocontador-backend:ci ./backend
+        # O Dockerfile do backend copia caminhos relativos à raiz do repo
+        # (backend/src, automacao-xml/ etc. — usado assim no deploy real via
+        # Railway, com Root Directory = "/"). Build context precisa ser a
+        # raiz (.), não ./backend, senão os COPY não encontram os arquivos.
+        run: docker build -t ocontador-backend:ci -f backend/Dockerfile .
 
       - name: Build frontend image
         run: docker build -t ocontador-frontend:ci ./frontend

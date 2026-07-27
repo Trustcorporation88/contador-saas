@@ -374,8 +374,8 @@ export class EFDController {
       const entries = await db('journal_entries')
         .where({ company_id: companyId })
         .select(
-          db.raw("EXTRACT(MONTH FROM entry_date)::int as month"),
-          db.raw("EXTRACT(YEAR FROM entry_date)::int as year"),
+          db.raw('EXTRACT(MONTH FROM entry_date)::int as month'),
+          db.raw('EXTRACT(YEAR FROM entry_date)::int as year'),
         )
         .distinct()
         .orderBy('year', 'month');

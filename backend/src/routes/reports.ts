@@ -22,18 +22,18 @@ const CLIENT_SUMMARY_ROLES = [...REPORT_ROLES, 'viewer'];
 router.use(authenticateToken, validateTenantAccess);
 
 function authorizeTenantRoles(...allowedRoles: string[]) {
-	return (req: import('express').Request, res: import('express').Response, next: import('express').NextFunction) => {
-		const role = req.tenant?.role ?? req.user?.role;
+  return (req: import('express').Request, res: import('express').Response, next: import('express').NextFunction) => {
+    const role = req.tenant?.role ?? req.user?.role;
 
-		if (!role || !allowedRoles.includes(role)) {
-			return res.status(HTTP_STATUS.FORBIDDEN).json({
-				error: 'Forbidden',
-				message: 'Você não tem permissão para acessar este relatório',
-			});
-		}
+    if (!role || !allowedRoles.includes(role)) {
+      return res.status(HTTP_STATUS.FORBIDDEN).json({
+        error: 'Forbidden',
+        message: 'Você não tem permissão para acessar este relatório',
+      });
+    }
 
-		return next();
-	};
+    return next();
+  };
 }
 
 router.get('/client-summary/monthly', authorizeTenantRoles(...CLIENT_SUMMARY_ROLES), ReportController.clientMonthlySummary);

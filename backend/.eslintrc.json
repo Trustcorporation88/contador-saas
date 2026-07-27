@@ -19,11 +19,12 @@
     "no-var": "error",
     "prefer-const": "error",
     "prefer-arrow-callback": "error",
-    "@typescript-eslint/explicit-function-return-types": ["warn", { "allowExpressions": true }],
+    "@typescript-eslint/explicit-function-return-type": ["warn", { "allowExpressions": true }],
     "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
     "@typescript-eslint/no-explicit-any": "warn",
     "@typescript-eslint/no-floating-promises": "error",
-    "@typescript-eslint/await-thenable": "error"
+    "@typescript-eslint/await-thenable": "error",
+    "@typescript-eslint/no-namespace": ["error", { "allowDeclarations": true }]
   },
   "env": {
     "node": true,

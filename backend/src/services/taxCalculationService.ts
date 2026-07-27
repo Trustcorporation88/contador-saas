@@ -40,20 +40,20 @@ export class TaxCalculationService {
     let taxes: TaxLineResult[];
 
     switch (taxRegime) {
-      case TaxRegime.LUCRO_PRESUMIDO:
-        taxes = TaxCalculationService.calcLucroPresumido(
-          revenues, dto.atividade ?? 'servicos', issRate, icmsRate,
-        );
-        break;
-      case TaxRegime.SIMPLES:
-        taxes = TaxCalculationService.calcSimples(revenues, dto.rbt12 ?? revenues);
-        break;
-      case TaxRegime.LUCRO_REAL:
-      default:
-        taxes = TaxCalculationService.calcLucroReal(
-          revenues, netIncome, issRate, icmsRate,
-        );
-        break;
+    case TaxRegime.LUCRO_PRESUMIDO:
+      taxes = TaxCalculationService.calcLucroPresumido(
+        revenues, dto.atividade ?? 'servicos', issRate, icmsRate,
+      );
+      break;
+    case TaxRegime.SIMPLES:
+      taxes = TaxCalculationService.calcSimples(revenues, dto.rbt12 ?? revenues);
+      break;
+    case TaxRegime.LUCRO_REAL:
+    default:
+      taxes = TaxCalculationService.calcLucroReal(
+        revenues, netIncome, issRate, icmsRate,
+      );
+      break;
     }
 
     // Adicionar aliases camelCase para compatibilidade com testes

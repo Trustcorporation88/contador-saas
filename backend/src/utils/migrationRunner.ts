@@ -496,6 +496,132 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
         },
       },
       {
+        name: '017a_accounting_core_tables',
+        up: async (db) => {
+          // accounts, journal_entries, journal_lines e documents nunca
+          // fizeram parte deste sistema de migração automática — só
+          // existiam via scripts SQL manuais na raiz do repo (001_create_
+          // accounts.sql, 002_create_journal_tables.sql), aplicados uma
+          // única vez direto em produção há tempos. Isso nunca causou
+          // problema em produção (as tabelas já existem lá), mas qualquer
+          // ambiente NOVO (CI, disaster recovery, novo deploy) nunca
+          // conseguia inicializar o schema: a migração 018_efd_tables cria
+          // uma foreign key para journal_entries, que nunca existia,
+          // derrubando o servidor inteiro na inicialização.
+          // hasTable() torna isso um no-op seguro onde as tabelas já
+          // existem (produção).
+          const hasAccounts = await db.schema.hasTable('accounts');
+          if (!hasAccounts) {
+            console.log('[MIGRATIONS] Creating accounts table...');
+            await db.schema.createTable('accounts', (table) => {
+              table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+              table.uuid('company_id').notNullable();
+              table.uuid('parent_id').nullable();
+              table.string('code', 20).notNullable();
+              table.string('name', 255).notNullable();
+              table.string('type', 20).notNullable();
+              table.string('tax_code', 50).nullable();
+              table.boolean('is_analytical').defaultTo(false);
+              table.boolean('is_active').defaultTo(true);
+              table.timestamp('created_at').defaultTo(db.fn.now());
+              table.timestamp('updated_at').defaultTo(db.fn.now());
+              table.unique(['company_id', 'code']);
+              table.index(['company_id']);
+              table.index(['parent_id']);
+              table.index(['type']);
+              table.index(['company_id', 'type']);
+            });
+            await db.raw(`
+              ALTER TABLE accounts ADD CONSTRAINT valid_type CHECK (
+                type IN ('ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE')
+              )
+            `);
+          }
+
+          const hasJournalEntries = await db.schema.hasTable('journal_entries');
+          if (!hasJournalEntries) {
+            console.log('[MIGRATIONS] Creating journal_entries table...');
+            await db.schema.createTable('journal_entries', (table) => {
+              table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+              table.uuid('company_id').notNullable();
+              table.uuid('created_by').notNullable();
+              table.date('entry_date').notNullable();
+              table.string('description', 500).nullable();
+              table.string('reference_type', 50).nullable();
+              table.string('reference_number', 50).nullable();
+              table.string('reference_issuer', 255).nullable();
+              table.decimal('total_debit', 18, 2).defaultTo(0);
+              table.decimal('total_credit', 18, 2).defaultTo(0);
+              table.boolean('is_posted').defaultTo(false);
+              table.string('data_hash', 64).nullable();
+              table.timestamp('created_at').defaultTo(db.fn.now());
+              table.timestamp('updated_at').defaultTo(db.fn.now());
+              table.index(['company_id']);
+              table.index(['entry_date']);
+              table.index(['company_id', 'entry_date']);
+            });
+            await db.raw(`
+              ALTER TABLE journal_entries
+                ADD CONSTRAINT valid_debit_credit CHECK (total_debit >= 0 AND total_credit >= 0),
+                ADD CONSTRAINT balanced CHECK (ABS(total_debit - total_credit) < 0.01),
+                ADD CONSTRAINT valid_reference_type CHECK (
+                  reference_type IS NULL OR reference_type IN ('NF', 'RPA', 'CHEQUE', 'BOLETO', 'MANUAL')
+                )
+            `);
+          }
+
+          const hasJournalLines = await db.schema.hasTable('journal_lines');
+          if (!hasJournalLines) {
+            console.log('[MIGRATIONS] Creating journal_lines table...');
+            await db.schema.createTable('journal_lines', (table) => {
+              table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+              table.uuid('journal_entry_id').notNullable()
+                .references('id').inTable('journal_entries').onDelete('CASCADE');
+              table.uuid('account_id').notNullable();
+              table.uuid('cost_center_id').nullable();
+              table.decimal('debit', 18, 2).defaultTo(0);
+              table.decimal('credit', 18, 2).defaultTo(0);
+              table.string('description', 500).nullable();
+              table.integer('line_number').notNullable();
+              table.index(['journal_entry_id']);
+              table.index(['account_id']);
+              table.index(['account_id', 'journal_entry_id']);
+            });
+            await db.raw(`
+              ALTER TABLE journal_lines
+                ADD CONSTRAINT valid_debit_credit CHECK (debit >= 0 AND credit >= 0),
+                ADD CONSTRAINT not_both_zero CHECK ((debit > 0 AND credit = 0) OR (debit = 0 AND credit > 0)),
+                ADD CONSTRAINT valid_line_number CHECK (line_number > 0)
+            `);
+          }
+
+          const hasDocuments = await db.schema.hasTable('documents');
+          if (!hasDocuments) {
+            console.log('[MIGRATIONS] Creating documents table...');
+            await db.schema.createTable('documents', (table) => {
+              table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+              table.uuid('journal_entry_id').nullable();
+              table.string('document_type', 50).notNullable();
+              table.string('document_number', 50).nullable();
+              table.string('issuer', 255).nullable();
+              table.date('issue_date').nullable();
+              table.decimal('amount', 18, 2).nullable();
+              table.timestamp('created_at').defaultTo(db.fn.now());
+              table.index(['journal_entry_id']);
+              table.index(['document_number']);
+              table.index(['document_type', 'document_number']);
+            });
+            await db.raw(`
+              ALTER TABLE documents ADD CONSTRAINT valid_document_type CHECK (
+                document_type IN ('NF', 'RPA', 'CHEQUE', 'BOLETO', 'INVOICE', 'OTHER')
+              )
+            `);
+          }
+
+          console.log('✓ 017a_accounting_core_tables completed');
+        },
+      },
+      {
         name: '017b_journal_entries_reversal_tracking',
         up: async (db) => {
           const hasTable = await db.schema.hasTable('journal_entries');
@@ -639,7 +765,7 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           // updateStatus do TaxCalculationService continuam funcionando sem
           // alteração — só o conjunto de valores aceitos em tax_type muda).
           try {
-            await db.raw(`ALTER TABLE tax_calculations DROP CONSTRAINT IF EXISTS chk_tax_type_valid`);
+            await db.raw('ALTER TABLE tax_calculations DROP CONSTRAINT IF EXISTS chk_tax_type_valid');
             await db.raw(`
               ALTER TABLE tax_calculations ADD CONSTRAINT chk_tax_type_valid
               CHECK (tax_type IN ('IRPJ','CSLL','PIS','COFINS','ICMS','ISS','CBS','IBS','IS'))

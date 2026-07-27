@@ -23,7 +23,12 @@ export enum TipoEventoDAS {
 
 export enum CodigoReceitaDAS {
   SIMPLES_NACIONAL = '0201',
+  // NOTA: LUCRO_REAL e LUCRO_PRESUMIDO compartilham o mesmo código de receita
+  // (0200) — precisa de confirmação com um contador antes de alterar, já que
+  // um código de receita errado tem consequência fiscal real (DARF/DAS
+  // recolhido no código errado). Não mudei sem essa confirmação.
   LUCRO_REAL = '0200',
+  // eslint-disable-next-line @typescript-eslint/no-duplicate-enum-values
   LUCRO_PRESUMIDO = '0200',
   IRRF = '0101',
   INSS = '0110',

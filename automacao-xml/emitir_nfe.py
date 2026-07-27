@@ -244,17 +244,39 @@ def _emitir(payload: dict) -> dict:
             "xml_proc": xml_proc,
         })
     else:
-        # Falha: envio[1] é o objeto de resposta HTTP; tenta extrair cStat/xMotivo
+        # Falha: envio[1] é o objeto de resposta HTTP; tenta extrair cStat/xMotivo.
+        #
+        # ATENÇÃO: a resposta síncrona sempre traz um cStat de LOTE em
+        # retEnviNFe/cStat (ex.: 104 = "Lote processado" — apenas informa que
+        # o lote foi processado, não se a nota foi autorizada ou rejeitada!)
+        # e, quando o lote foi processado, também o cStat da NOTA em
+        # retEnviNFe/protNFe/infProt/cStat (esse sim é o motivo real de
+        # aceite/rejeição). Como ambos se chamam "cStat", buscar o primeiro
+        # com "//ns:cStat" pega o do lote (104) e mostra "Lote processado"
+        # como se fosse o erro — motivo do bug já visto em produção.
         retorno = envio[1]
         texto = getattr(retorno, "text", str(retorno))
         cstat_val = ""
         motivo = ""
+        chave_rejeitada = ""
         try:
             root = etree.fromstring(texto.encode("utf-8"))
-            cs = root.xpath("//ns:cStat/text()", namespaces=ns)
-            xm = root.xpath("//ns:xMotivo/text()", namespaces=ns)
-            cstat_val = cs[0] if cs else ""
-            motivo = xm[0] if xm else ""
+            cs_nota = root.xpath("//ns:protNFe/ns:infProt/ns:cStat/text()", namespaces=ns)
+            xm_nota = root.xpath("//ns:protNFe/ns:infProt/ns:xMotivo/text()", namespaces=ns)
+            ch_nota = root.xpath("//ns:protNFe/ns:infProt/ns:chNFe/text()", namespaces=ns)
+            if cs_nota:
+                # Nota processada (autorizada ou rejeitada) — usa o motivo dela.
+                cstat_val = cs_nota[0]
+                motivo = xm_nota[0] if xm_nota else ""
+                chave_rejeitada = ch_nota[0] if ch_nota else ""
+            else:
+                # Sem protNFe: falha aconteceu antes de processar a nota em si
+                # (lote rejeitado, XML malformado, etc.) — aí o cStat do lote
+                # é de fato o motivo real.
+                cs = root.xpath("//ns:cStat/text()", namespaces=ns)
+                xm = root.xpath("//ns:xMotivo/text()", namespaces=ns)
+                cstat_val = cs[0] if cs else ""
+                motivo = xm[0] if xm else ""
         except Exception:
             motivo = texto[:500]
         resultado.update({
@@ -262,7 +284,7 @@ def _emitir(payload: dict) -> dict:
             "cStat": cstat_val,
             "motivo": motivo or "Falha na transmissão à SEFAZ",
             "protocolo": "",
-            "chave": "",
+            "chave": chave_rejeitada,
             "raw": texto[:1000],
         })
 

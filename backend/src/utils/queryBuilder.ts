@@ -156,7 +156,9 @@ export function joinedQuery(db: Knex, companyId: string): Knex.QueryBuilder {
   const query = db.from('journal_entries');
 
   // Aplicar filtro company_id na tabela principal
-  query.where('journal_entries.company_id', companyId);
+  // (Knex QueryBuilder é "thenable"; void só descarta o valor de retorno —
+  // query já foi mutado in place e é retornado explicitamente abaixo.)
+  void query.where('journal_entries.company_id', companyId);
 
   // Aplicar filtro também nas joined tables (segurança)
   // Nota: joins precisam de tratamento especial

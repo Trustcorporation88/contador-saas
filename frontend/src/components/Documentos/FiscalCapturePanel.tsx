@@ -115,8 +115,11 @@ export default function FiscalCapturePanel() {
   });
 
   const cert = status?.certificate;
-  const nfeSync = status?.sync.find((item) => item.doc_type === 'nfe');
-  const nfseSync = status?.sync.find((item) => item.doc_type === 'nfse');
+  // status?.sync sozinho não é suficiente: se a API responder um formato
+  // inesperado (status truthy, mas sem o campo sync), .find() em undefined
+  // derruba a página inteira — o ?? [] garante um array mesmo nesse caso.
+  const nfeSync = (status?.sync ?? []).find((item) => item.doc_type === 'nfe');
+  const nfseSync = (status?.sync ?? []).find((item) => item.doc_type === 'nfse');
 
   return (
     <div className="rounded-3xl border border-emerald-100 bg-gradient-to-br from-white to-emerald-50/40 p-5 shadow-sm">

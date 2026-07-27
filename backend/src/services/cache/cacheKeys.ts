@@ -54,7 +54,7 @@ export class CacheKeys {
   static incomeStatement(
     companyId: string,
     dateFrom: string,
-    dateTo: string
+    dateTo: string,
   ): string {
     return `${CacheNamespace.REPORTS}:${companyId}:${ReportType.INCOME_STATEMENT}:${sanitize(dateFrom)}:${sanitize(dateTo)}`;
   }
@@ -68,7 +68,7 @@ export class CacheKeys {
   static trialBalance(
     companyId: string,
     dateFrom: string,
-    dateTo: string
+    dateTo: string,
   ): string {
     return `${CacheNamespace.REPORTS}:${companyId}:${ReportType.TRIAL_BALANCE}:${sanitize(dateFrom)}:${sanitize(dateTo)}`;
   }
@@ -101,7 +101,7 @@ export class CacheKeys {
   static executiveSummary(
     companyId: string,
     dateFrom: string,
-    dateTo: string
+    dateTo: string,
   ): string {
     return `${CacheNamespace.REPORTS}:${companyId}:${ReportType.EXECUTIVE_SUMMARY}:${sanitize(dateFrom)}:${sanitize(dateTo)}`;
   }
@@ -151,7 +151,7 @@ export class CacheKeys {
     companyId: string,
     periodStart: string,
     periodEnd: string,
-    regime: string
+    regime: string,
   ): string {
     return `${CacheNamespace.TAXES}:${companyId}:calculation:${sanitize(periodStart)}:${sanitize(periodEnd)}:${sanitize(regime)}`;
   }

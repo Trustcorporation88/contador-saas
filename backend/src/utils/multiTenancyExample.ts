@@ -53,7 +53,7 @@ export function createCompanyRoutes(): Router {
       await TenantService.auditAccess(
         req.tenant.userId,
         companyId,
-        'VIEW_ACCOUNTS'
+        'VIEW_ACCOUNTS',
       );
     } catch (error) {
       res.status(500).json({
@@ -107,7 +107,7 @@ export function createCompanyRoutes(): Router {
           userId,
           companyId,
           'CREATE_ACCOUNT',
-          { accountId, code }
+          { accountId, code },
         );
       } catch (error) {
         res.status(500).json({
@@ -115,7 +115,7 @@ export function createCompanyRoutes(): Router {
           message: 'Failed to create account',
         });
       }
-    }
+    },
   );
 
   /**
@@ -153,7 +153,7 @@ export function createCompanyRoutes(): Router {
           userId,
           companyId,
           'UPDATE_ACCOUNT',
-          { accountId }
+          { accountId },
         );
       } catch (error) {
         res.status(500).json({
@@ -161,7 +161,7 @@ export function createCompanyRoutes(): Router {
           message: 'Failed to update account',
         });
       }
-    }
+    },
   );
 
   /**
@@ -199,7 +199,7 @@ export function createCompanyRoutes(): Router {
           userId,
           companyId,
           'DELETE_ACCOUNT',
-          { accountId }
+          { accountId },
         );
       } catch (error) {
         res.status(500).json({
@@ -207,7 +207,7 @@ export function createCompanyRoutes(): Router {
           message: 'Failed to delete account',
         });
       }
-    }
+    },
   );
 
   return router;
@@ -229,7 +229,7 @@ export class AccountService {
       name: string;
       type: string;
       parentCode?: string;
-    }
+    },
   ): Promise<any> {
     // 1. Validar que user tem acesso
     const access = await TenantService.validateUserAccess(userId, companyId);
@@ -241,7 +241,7 @@ export class AccountService {
     const hasPermission = await TenantService.checkPermission(
       userId,
       companyId,
-      'write'
+      'write',
     );
     if (!hasPermission) {
       throw new Error('User does not have write permission');
@@ -264,7 +264,7 @@ export class AccountService {
       userId,
       companyId,
       'CREATE_ACCOUNT',
-      { accountId, code: data.code }
+      { accountId, code: data.code },
     );
 
     return { id: accountId, ...data };
@@ -279,7 +279,7 @@ export class AccountService {
     filters?: {
       type?: string;
       isActive?: boolean;
-    }
+    },
   ): Promise<any[]> {
     // Validar acesso
     const access = await TenantService.validateUserAccess(userId, companyId);
@@ -314,7 +314,7 @@ export class AccountService {
 export async function createAccountsWithTransation(
   companyId: string,
   userId: string,
-  accountsData: Array<{ code: string; name: string; type: string }>
+  accountsData: Array<{ code: string; name: string; type: string }>,
 ): Promise<any[]> {
   const db = await getDatabase();
 
@@ -342,7 +342,7 @@ export async function createAccountsWithTransation(
       userId,
       companyId,
       'BATCH_CREATE_ACCOUNTS',
-      { count: createdAccounts.length }
+      { count: createdAccounts.length },
     );
 
     return createdAccounts;
@@ -357,7 +357,7 @@ export async function createAccountsWithTransation(
  */
 export async function switchUserCompany(
   userId: string,
-  newCompanyId: string
+  newCompanyId: string,
 ): Promise<{ success: boolean; token?: string }> {
   // Validar que user tem acesso à nova empresa
   const access = await TenantService.validateUserAccess(userId, newCompanyId);
@@ -381,7 +381,7 @@ export async function switchUserCompany(
 export async function checkUserActions(
   userId: string,
   companyId: string,
-  actions: string[]
+  actions: string[],
 ): Promise<Record<string, boolean>> {
   const result: Record<string, boolean> = {};
 
@@ -389,7 +389,7 @@ export async function checkUserActions(
     result[action] = await TenantService.checkPermission(
       userId,
       companyId,
-      action
+      action,
     );
   }
 
@@ -401,7 +401,7 @@ export async function checkUserActions(
  */
 export async function getCompanyAuditReport(
   companyId: string,
-  days: number = 30
+  days: number = 30,
 ): Promise<any> {
   return TenantService.getAccessReportByCompany(companyId, days);
 }

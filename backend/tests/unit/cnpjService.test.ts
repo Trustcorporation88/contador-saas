@@ -54,6 +54,34 @@ const mockBrasilApiResponse = {
   },
 };
 
+/**
+ * CnpjService.lookup() usa TrustCorp como provedor primário (tenta várias
+ * URLs candidatas) e cai para a BrasilAPI só se o TrustCorp não encontrar
+ * nada. Este helper mocka axios.get de forma consciente da URL: qualquer
+ * chamada para "trustcorp" recebe o comportamento de trustcorp (por padrão,
+ * 404 em todas as tentativas — "não encontrado lá"), e qualquer chamada
+ * para "brasilapi" recebe o comportamento configurado para o teste.
+ */
+function mockLookupProviders(opts: {
+  trustcorp?: 'not-found' | { status: number };
+  brasilapi: 'success' | { status: number } | 'network-error';
+}) {
+  mockedAxios.get = jest.fn().mockImplementation((url: string) => {
+    if (url.includes('trustcorp')) {
+      if (opts.trustcorp && opts.trustcorp !== 'not-found') {
+        return Promise.reject({ response: { status: opts.trustcorp.status }, message: 'TrustCorp error' });
+      }
+      return Promise.reject({ response: { status: 404 }, message: 'Not Found' });
+    }
+    if (url.includes('brasilapi')) {
+      if (opts.brasilapi === 'success') return Promise.resolve(mockBrasilApiResponse);
+      if (opts.brasilapi === 'network-error') return Promise.reject({ response: undefined, message: 'Network Error' });
+      return Promise.reject({ response: { status: opts.brasilapi.status }, message: 'BrasilAPI error' });
+    }
+    return Promise.reject(new Error(`URL não mockada neste teste: ${url}`));
+  });
+}
+
 describe('CnpjService', () => {
 
   beforeEach(() => {
@@ -95,8 +123,10 @@ describe('CnpjService', () => {
   // ── lookup ────────────────────────────────────────────────────────────────
 
   describe('lookup()', () => {
-    it('deve buscar CNPJ válido na BrasilAPI e retornar dados formatados', async () => {
-      mockedAxios.get = jest.fn().mockResolvedValueOnce(mockBrasilApiResponse);
+    it('deve buscar CNPJ válido (fallback BrasilAPI) e retornar dados formatados', async () => {
+      // TrustCorp (provedor primário) não encontra em nenhuma URL candidata;
+      // cai para a BrasilAPI, que tem os dados oficiais da Receita Federal.
+      mockLookupProviders({ brasilapi: 'success' });
       const result = await CnpjService.lookup('11222333000181');
 
       expect(mockedAxios.get).toHaveBeenCalledWith(
@@ -109,13 +139,14 @@ describe('CnpjService', () => {
     });
 
     it('deve retornar resultado do cache na segunda chamada', async () => {
-      mockedAxios.get = jest.fn().mockResolvedValueOnce(mockBrasilApiResponse);
+      mockLookupProviders({ brasilapi: 'success' });
 
       await CnpjService.lookup('11222333000181');
+      const chamadasAntesDoCache = (mockedAxios.get as jest.Mock).mock.calls.length;
       const cached = await CnpjService.lookup('11222333000181');
 
-      // API chamada apenas uma vez
-      expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+      // Nenhuma chamada adicional à API na segunda busca (veio do cache)
+      expect((mockedAxios.get as jest.Mock).mock.calls.length).toBe(chamadasAntesDoCache);
       expect(cached.cached).toBe(true);
     });
 
@@ -127,32 +158,23 @@ describe('CnpjService', () => {
       await expect(CnpjService.lookup('12345678901234')).rejects.toMatchObject({ status: 400 });
     });
 
-    it('deve lançar 404 quando BrasilAPI retornar 404', async () => {
-      mockedAxios.get = jest.fn().mockRejectedValueOnce({
-        response: { status: 404 },
-        message: 'Not Found',
-      });
+    it('deve lançar 404 quando nenhum provedor encontrar o CNPJ', async () => {
+      mockLookupProviders({ brasilapi: { status: 404 } });
       await expect(CnpjService.lookup('11222333000181')).rejects.toMatchObject({ status: 404 });
     });
 
-    it('deve lançar 429 quando BrasilAPI retornar 429 (rate limit)', async () => {
-      mockedAxios.get = jest.fn().mockRejectedValueOnce({
-        response: { status: 429 },
-        message: 'Too Many Requests',
-      });
+    it('deve lançar 429 quando a BrasilAPI retornar 429 (rate limit)', async () => {
+      mockLookupProviders({ brasilapi: { status: 429 } });
       await expect(CnpjService.lookup('11222333000181')).rejects.toMatchObject({ status: 429 });
     });
 
-    it('deve lançar 503 em falha de rede', async () => {
-      mockedAxios.get = jest.fn().mockRejectedValueOnce({
-        response: undefined,
-        message: 'Network Error',
-      });
+    it('deve lançar 503 em falha de rede em ambos os provedores', async () => {
+      mockLookupProviders({ brasilapi: 'network-error' });
       await expect(CnpjService.lookup('11222333000181')).rejects.toMatchObject({ status: 503 });
     });
 
     it('resultado deve ter estrutura correta (campos obrigatórios)', async () => {
-      mockedAxios.get = jest.fn().mockResolvedValueOnce(mockBrasilApiResponse);
+      mockLookupProviders({ brasilapi: 'success' });
       const result = await CnpjService.lookup('11222333000181');
 
       expect(result).toMatchObject({
@@ -171,13 +193,16 @@ describe('CnpjService', () => {
 
   describe('invalidateCache()', () => {
     it('deve forçar nova chamada à API após invalidação', async () => {
-      mockedAxios.get = jest.fn().mockResolvedValue(mockBrasilApiResponse);
+      mockLookupProviders({ brasilapi: 'success' });
 
       await CnpjService.lookup('11222333000181');
+      const chamadasAntesDeInvalidar = (mockedAxios.get as jest.Mock).mock.calls.length;
       CnpjService.invalidateCache('11222333000181');
       await CnpjService.lookup('11222333000181');
 
-      expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+      // Após invalidar, uma nova rodada completa de chamadas é feita (não é
+      // servido do cache) — mesmo comportamento da primeira busca.
+      expect((mockedAxios.get as jest.Mock).mock.calls.length).toBe(2 * chamadasAntesDeInvalidar);
     });
   });
 });

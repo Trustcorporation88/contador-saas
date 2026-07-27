@@ -3,8 +3,9 @@
  * Gerencia conexão com Redis com retry logic, health checks e graceful shutdown
  */
 
-import Redis, { RedisOptions } from 'ioredis';
+import Redis from 'ioredis';
 import { envConfig } from '../../config/env';
+import { buildRedisOptions } from './redisConnection';
 import { RedisHealth } from './types';
 
 /**
@@ -13,6 +14,9 @@ import { RedisHealth } from './types';
  */
 let logger: any;
 try {
+  // Fallback deliberado: um import estático quebraria o módulo inteiro se
+  // requestLogger falhar ao carregar; aqui isso só desativa o logging.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const loggerModule = require('../../middleware/requestLogger');
   logger = loggerModule.logger;
 } catch {
@@ -60,55 +64,27 @@ class RedisClient {
       return;
     }
 
-    const options: RedisOptions = {
-      host: envConfig.redis.host,
-      port: envConfig.redis.port,
-      password: envConfig.redis.password || undefined,
-      db: envConfig.redis.db,
-      lazyConnect: envConfig.redis.lazyConnect,
-      enableOfflineQueue: envConfig.redis.enableOfflineQueue,
-      
-      // Retry strategy com exponential backoff
+    const { url, options } = buildRedisOptions({
       retryStrategy: (times: number) => {
         if (times > envConfig.redis.maxRetries) {
           logger.error('Redis max retries exceeded', { attempts: times });
-          return null; // Stop retrying
+          return null;
         }
-
         const delay = Math.min(times * envConfig.redis.retryDelay, 5000);
         logger.warn(`Redis retry attempt ${times}, waiting ${delay}ms`);
         return delay;
       },
-
-      // Reconnect on error
-      reconnectOnError: (err: Error) => {
-        const targetError = 'READONLY';
-        if (err.message.includes(targetError)) {
-          // Reconnect only on READONLY errors
-          return true;
-        }
-        return false;
-      },
-
-      // Connection timeout
-      connectTimeout: 10000,
-
-      // Keep alive
-      keepAlive: 30000,
-
-      // Name for debugging
-      connectionName: 'contador-backend',
-    };
+      reconnectOnError: (err: Error) => err.message.includes('READONLY'),
+    });
 
     logger.info('Connecting to Redis...', {
-      host: envConfig.redis.host,
-      port: envConfig.redis.port,
+      via: url ? 'REDIS_URL' : 'host/port',
+      host: url ? undefined : envConfig.redis.host,
+      port: url ? undefined : envConfig.redis.port,
       db: envConfig.redis.db,
     });
 
-    this.client = new Redis(options);
-
-    // Event listeners
+    this.client = url ? new Redis(url, options) : new Redis(options);
     this.setupEventListeners();
   }
 
@@ -169,6 +145,24 @@ class RedisClient {
    */
   public async healthCheck(): Promise<RedisHealth> {
     try {
+      // Cache desligado: Redis é opcional — não é falha de saúde.
+      if (!envConfig.cache.enabled) {
+        return {
+          connected: false,
+          uptime: 0,
+          memoryUsed: '0B',
+          keys: 0,
+          timestamp: new Date(),
+          error: 'cache_disabled',
+        };
+      }
+
+      if (!this.client) {
+        // Lazy init: o health pode ser chamado antes do boot terminar
+        // ou se connect() foi pulado por race no startup.
+        this.connect();
+      }
+
       if (!this.client) {
         return {
           connected: false,

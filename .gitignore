@@ -40,6 +40,12 @@ coverage/
 .nyc_output/
 jest.results.json
 
+# ── Playwright (artefatos locais / CI) ───────────────────────
+frontend/playwright-report/
+frontend/test-results/
+frontend/blob-report/
+frontend/playwright/.cache/
+
 # ── Editores / IDEs ──────────────────────────────────────────
 .vscode/settings.json
 .vscode/launch.json

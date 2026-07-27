@@ -41,8 +41,12 @@ class EmailService {
         });
         this.isConfigured = !!process.env.SENDGRID_API_KEY;
       } else if (emailProvider === 'ses') {
-        // AWS SES configuration
+        // AWS SES configuration. Deps opcionais (não estão no package.json):
+        // um import estático quebraria o build para quem não usa
+        // EMAIL_PROVIDER=ses.
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
         const nodemailerSES = require('nodemailer-ses');
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
         const aws = require('aws-sdk');
 
         const ses = new aws.SES({
@@ -71,9 +75,9 @@ class EmailService {
           secure: process.env.SMTP_SECURE === 'true',
           auth: process.env.SMTP_USER
             ? {
-                user: process.env.SMTP_USER,
-                pass: process.env.SMTP_PASSWORD,
-              }
+              user: process.env.SMTP_USER,
+              pass: process.env.SMTP_PASSWORD,
+            }
             : undefined,
         });
         this.isConfigured = !!process.env.SMTP_HOST;
@@ -121,14 +125,14 @@ class EmailService {
    */
   private priorityToNumber(priority: string): number {
     switch (priority) {
-      case 'high':
-        return 1;
-      case 'normal':
-        return 3;
-      case 'low':
-        return 5;
-      default:
-        return 3;
+    case 'high':
+      return 1;
+    case 'normal':
+      return 3;
+    case 'low':
+      return 5;
+    default:
+      return 3;
     }
   }
 

@@ -51,18 +51,18 @@ export const logger = winston.createLogger({
   format:
     envConfig.logFormat === 'json'
       ? winston.format.combine(
-          winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-          winston.format.errors({ stack: true }),
-          winston.format.json(),
-        )
+        winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+        winston.format.errors({ stack: true }),
+        winston.format.json(),
+      )
       : winston.format.combine(
-          winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-          winston.format.printf((info) => {
-            const base = `${info.timestamp} [${info.level.toUpperCase()}] ${info.message}`;
-            const meta = info.meta ? JSON.stringify(info.meta) : '';
-            return meta ? `${base} ${meta}` : base;
-          }),
-        ),
+        winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+        winston.format.printf((info) => {
+          const base = `${info.timestamp} [${info.level.toUpperCase()}] ${info.message}`;
+          const meta = info.meta ? JSON.stringify(info.meta) : '';
+          return meta ? `${base} ${meta}` : base;
+        }),
+      ),
   defaultMeta: { service: 'contador-backend' },
   transports: [
     new winston.transports.Console(),

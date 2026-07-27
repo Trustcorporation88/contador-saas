@@ -501,11 +501,11 @@ export class NfeService {
       ja_emitida_capturada: jaEmitidaCapturada,
       local: local
         ? {
-            id: local.id,
-            status: local.status,
-            chave_acesso: local.chave_acesso,
-            data_emissao: local.data_emissao,
-          }
+          id: local.id,
+          status: local.status,
+          chave_acesso: local.chave_acesso,
+          data_emissao: local.data_emissao,
+        }
         : null,
       sefaz: {
         online: sefaz.sefaz_online,
@@ -662,7 +662,7 @@ export class NfeService {
           cst_cofins:      item.cst_cofins,
           aliquota_cofins: item.aliquota_cofins,
           valor_cofins:    item.valor_cofins,
-        }))
+        })),
       );
 
       logger.info('NF-e criada', { id: record.id, numero, chave, companyId });
@@ -671,14 +671,20 @@ export class NfeService {
   }
 
   /**
-   * Autorizar NF-e (envia XML ao SEFAZ mock)
-   * Transição: RASCUNHO → AUTORIZADA
+   * Autorizar NF-e junto à SEFAZ (ou simulador em modo mock).
+   * Transições: RASCUNHO → AUTORIZADA | PENDENTE → AUTORIZADA (nova tentativa)
+   *
+   * PENDENTE é aceito aqui de propósito: é o status que a nota fica quando
+   * uma tentativa anterior falhou (SEFAZ rejeitou, rede caiu, etc.) — sem
+   * isso, uma nota que falhou uma vez travava para sempre (nunca virava
+   * AUTORIZADA nem podia ser cancelada, já que cancel() exige AUTORIZADA),
+   * e o número/série ficava bloqueado sem nenhuma saída para o usuário.
    */
   static async authorize(id: string, companyId: string): Promise<NfeRecord> {
     const db = await getDatabase();
     const nfe = await db('nfe').where({ id, company_id: companyId }).first();
     if (!nfe) throw Object.assign(new Error('NF-e não encontrada'), { status: 404 });
-    if (nfe.status !== NfeStatus.RASCUNHO) {
+    if (nfe.status !== NfeStatus.RASCUNHO && nfe.status !== NfeStatus.PENDENTE) {
       throw Object.assign(
         new Error(`NF-e não pode ser autorizada no status ${nfe.status}`),
         { status: 422 },

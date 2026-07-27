@@ -7,6 +7,7 @@ import { Request, Response } from 'express';
 import cacheService from '../services/cache/cacheService';
 import redisClient from '../services/cache/redisClient';
 import { getDatabase } from '../config/database';
+import { envConfig } from '../config/env';
 import { logger } from '../middleware/requestLogger';
 import { getBlacklistStats } from '../services/cache/tokenBlacklist';
 
@@ -43,9 +44,10 @@ export class HealthController {
       const redisCheck = checks[1].status === 'fulfilled' ? checks[1].value : { status: 'fail', error: (checks[1] as PromiseRejectedResult).reason };
       const apiCheck = checks[2].status === 'fulfilled' ? checks[2].value : { status: 'fail', error: (checks[2] as PromiseRejectedResult).reason };
 
-      // Determina status geral
+      // Database é o único serviço crítico. Redis é opcional (CACHE_ENABLED=false
+      // no Railway sem plugin Redis) — warn/fail de Redis = degraded, não 503.
       const allHealthy = databaseCheck.status === 'pass' && redisCheck.status === 'pass' && apiCheck.status === 'pass';
-      const anyUnhealthy = databaseCheck.status === 'fail' || redisCheck.status === 'fail';
+      const criticalFail = databaseCheck.status === 'fail';
       
       let overallStatus: 'healthy' | 'degraded' | 'unhealthy';
       let httpStatus: number;
@@ -53,7 +55,7 @@ export class HealthController {
       if (allHealthy) {
         overallStatus = 'healthy';
         httpStatus = 200;
-      } else if (anyUnhealthy) {
+      } else if (criticalFail) {
         overallStatus = 'unhealthy';
         httpStatus = 503;
       } else {
@@ -155,18 +157,31 @@ export class HealthController {
   }
 
   /**
-   * Checa saúde do Redis
+   * Checa saúde do Redis.
+   * Com CACHE_ENABLED=false o Redis é opcional (docs Railway) — não derruba o health.
    */
   private static async checkRedis(): Promise<any> {
     const startTime = Date.now();
-    
+
     try {
+      if (!envConfig.cache.enabled) {
+        return {
+          status: 'pass',
+          latency: 0,
+          memory: null,
+          skipped: true,
+          message: 'CACHE_ENABLED=false (Redis opcional)',
+        };
+      }
+
       const health = await redisClient.healthCheck();
       const latency = Date.now() - startTime;
 
       if (!health.connected) {
+        // Redis habilitado mas indisponível: degradado (warn), não unhealthy.
+        // A API continua sem cache; só DB é crítico para o deploy Railway.
         return {
-          status: 'fail',
+          status: 'warn',
           latency,
           error: health.error || 'Not connected',
           memory: null,
@@ -191,9 +206,9 @@ export class HealthController {
     } catch (error) {
       const latency = Date.now() - startTime;
       logger.error('Redis health check failed', { error: (error as Error).message });
-      
+
       return {
-        status: 'fail',
+        status: 'warn',
         latency,
         error: (error as Error).message,
         memory: null,
