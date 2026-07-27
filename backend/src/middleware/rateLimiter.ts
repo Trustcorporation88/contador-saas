@@ -16,6 +16,7 @@ import { Request, Response, NextFunction } from 'express';
 import Redis from 'ioredis';
 import { envConfig } from '../config/env';
 import { logger } from './requestLogger';
+import { buildRedisOptions } from '../services/cache/redisConnection';
 
 /**
  * Redis client singleton
@@ -27,12 +28,8 @@ let redisClient: Redis | null = null;
  */
 function getRedisClient(): Redis {
   if (!redisClient) {
-    redisClient = new Redis({
-      host: envConfig.redis.host,
-      port: envConfig.redis.port,
-      password: envConfig.redis.password || undefined,
-      db: envConfig.redis.db,
-      maxRetriesPerRequest: envConfig.redis.maxRetries,
+    const { url, options } = buildRedisOptions({
+      lazyConnect: false,
       retryStrategy: (times: number) => {
         if (times > envConfig.redis.maxRetries) {
           logger.error('Redis max retries exceeded for rate limiter');
@@ -40,8 +37,9 @@ function getRedisClient(): Redis {
         }
         return Math.min(times * envConfig.redis.retryDelay, 2000);
       },
-      lazyConnect: false,
     });
+
+    redisClient = url ? new Redis(url, options) : new Redis(options);
 
     redisClient.on('error', (err) => {
       logger.error('Redis error in rate limiter', { error: err.message });
