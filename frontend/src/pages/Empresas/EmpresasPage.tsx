@@ -226,8 +226,9 @@ function CompanyForm({
 
       {/* Regime Tributário */}
       <div>
-        <label className="input-label">Regime Tributário</label>
+        <label className="input-label" htmlFor="tax_regime">Regime Tributário</label>
         <select
+          id="tax_regime"
           className={clsx('input-field', errors.tax_regime && 'border-red-400')}
           {...register('tax_regime')}
         >
@@ -259,8 +260,9 @@ function CompanyForm({
 
       {/* Exercício Fiscal */}
       <div>
-        <label className="input-label">Início do Exercício Fiscal</label>
+        <label className="input-label" htmlFor="fiscal_year_start">Início do Exercício Fiscal</label>
         <select
+          id="fiscal_year_start"
           className="input-field"
           {...register('fiscal_year_start', { valueAsNumber: true })}
         >
@@ -283,8 +285,8 @@ function CompanyForm({
             {...register('inscricao_estadual')}
           />
           <div>
-            <label className="input-label">Regime (CRT)</label>
-            <select className="input-field" {...register('crt')}>
+            <label className="input-label" htmlFor="crt">Regime (CRT)</label>
+            <select id="crt" className="input-field" {...register('crt')}>
               <option value="">—</option>
               <option value="1">1 - Simples Nacional</option>
               <option value="2">2 - Simples Nacional (excesso)</option>

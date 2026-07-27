@@ -223,6 +223,14 @@ jobs:
           CACHE_ENABLED: 'true'
           PORT: 3000
           LOG_LEVEL: error
+          # Sem senha, o bootstrap do admin (authService.ts) é pulado
+          # silenciosamente ("ADMIN_BOOTSTRAP_PASSWORD is empty") — sem
+          # usuário admin@contador.dev criado, os testes E2E que fazem login
+          # (auth.spec.ts e todo teste que usa helpers.ts > loginAs) nunca
+          # conseguem autenticar. Credenciais aqui só valem para este banco
+          # de teste efêmero do CI, nunca chegam perto de produção.
+          ADMIN_BOOTSTRAP_EMAIL: admin@contador.dev
+          ADMIN_BOOTSTRAP_PASSWORD: Admin@123
         run: nohup npm start >/tmp/backend.log 2>&1 &
 
       - name: Wait for backend

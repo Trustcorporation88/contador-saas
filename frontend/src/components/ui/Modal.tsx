@@ -63,12 +63,12 @@ export const Modal: React.FC<ModalProps> = ({
         ref={panelRef}
         tabIndex={-1}
         className={clsx(
-          'relative z-10 w-full mx-4 bg-white rounded-xl shadow-xl outline-none',
+          'relative z-10 flex max-h-[90vh] w-full mx-4 flex-col bg-white rounded-xl shadow-xl outline-none',
           SIZE[size]
         )}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        {/* Header (fixo, não rola com o conteúdo) */}
+        <div className="flex shrink-0 items-center justify-between px-6 py-4 border-b border-gray-100">
           <h2 id="modal-title" className="text-base font-semibold text-gray-900">
             {title}
           </h2>
@@ -81,8 +81,10 @@ export const Modal: React.FC<ModalProps> = ({
           </button>
         </div>
 
-        {/* Body */}
-        <div className="px-6 py-5">{children}</div>
+        {/* Body — rolagem interna: sem isso, formulários longos (ex.:
+            cadastro de empresa) empurram os botões de ação pra fora da
+            viewport, sem nenhuma barra de rolagem pra alcançá-los. */}
+        <div className="overflow-y-auto px-6 py-5">{children}</div>
       </div>
     </div>
   );

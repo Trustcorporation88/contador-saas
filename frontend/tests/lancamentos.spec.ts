@@ -96,12 +96,16 @@ test.describe('Lançamentos Contábeis', () => {
     await page.getByLabel(/data/i).fill('2026-01-31');
     await page.getByLabel(/descrição|histórico/i).fill('Compra de insumos');
 
+    // "Selecione a conta..." só aparece nas linhas AINDA não preenchidas —
+    // depois de escolher a conta da 1ª linha, o texto do span muda para o
+    // código/nome escolhido, então sobra só 1 elemento com esse placeholder
+    // (a 2ª linha), não 2. Por isso é .first() nas duas vezes, não .nth(1).
     const selectors = page.locator('span:has-text("Selecione a conta...")');
     await selectors.first().click();
     await page.getByPlaceholder(/buscar código|buscar codigo/i).fill('caixa');
     await page.getByText('1.1.1.01').click();
 
-    await selectors.nth(1).click();
+    await selectors.first().click();
     await page.getByPlaceholder(/buscar código|buscar codigo/i).fill('forne');
     await page.getByText('2.1.1.01').click();
 
