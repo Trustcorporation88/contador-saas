@@ -98,6 +98,7 @@ function gerarXmlNfe(
     <det nItem="${item.numero_item}">
       <prod>
         <cProd>${item.codigo_produto}</cProd>
+        <cEAN>SEM GTIN</cEAN>
         <xProd>${item.descricao}</xProd>
         <NCM>${item.ncm ?? '00000000'}</NCM>
         <CFOP>${item.cfop}</CFOP>
@@ -105,6 +106,7 @@ function gerarXmlNfe(
         <qCom>${fmt4(item.quantidade)}</qCom>
         <vUnCom>${fmt4(item.valor_unitario)}</vUnCom>
         <vProd>${fmt2(item.valor_total)}</vProd>
+        <cEANTrib>SEM GTIN</cEANTrib>
         <indTot>1</indTot>
       </prod>
       <imposto>
