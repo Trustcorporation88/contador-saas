@@ -130,10 +130,33 @@ def _construir_nota(payload: dict):
         icms_bc = bruto if icms_mod in ("00", "10", "20", "70") else Decimal("0")
         icms_valor = _dec(icms_bc * icms_aliq / 100)
 
-        pis_mod = str(item.get("pis_modalidade", "07"))
-        pis_aliq = Decimal(str(item.get("pis_aliquota", 0)))
-        cofins_mod = str(item.get("cofins_modalidade", "07"))
-        cofins_aliq = Decimal(str(item.get("cofins_aliquota", 0)))
+        # PIS/COFINS: CST NT (04–09) NÃO leva vPIS/vCOFINS no item; o pynfe ainda
+        # soma pis_valor em totais_icms_pis → SEFAZ rejeita cStat 602
+        # ("Total do PIS difere do somatório dos itens...").
+        pis_nt = {"04", "05", "06", "07", "08", "09"}
+        pis_aliq = Decimal(str(item.get("pis_aliquota", 0) or 0))
+        pis_mod = str(item.get("pis_modalidade") or "").strip()
+        if not pis_mod:
+            pis_mod = "07" if pis_aliq <= 0 else "01"
+        if pis_mod in pis_nt:
+            pis_aliq = Decimal("0")
+            pis_bc = Decimal("0")
+            pis_valor = Decimal("0")
+        else:
+            pis_bc = bruto
+            pis_valor = _dec(bruto * pis_aliq / 100)
+
+        cofins_aliq = Decimal(str(item.get("cofins_aliquota", 0) or 0))
+        cofins_mod = str(item.get("cofins_modalidade") or "").strip()
+        if not cofins_mod:
+            cofins_mod = "07" if cofins_aliq <= 0 else "01"
+        if cofins_mod in pis_nt:
+            cofins_aliq = Decimal("0")
+            cofins_bc = Decimal("0")
+            cofins_valor = Decimal("0")
+        else:
+            cofins_bc = bruto
+            cofins_valor = _dec(bruto * cofins_aliq / 100)
 
         # SEFAZ rejeita cEAN/cEANTrib vazios (cStat 883). Sem código de barras
         # o literal obrigatório é "SEM GTIN" (NT 2017.001 / NT 2021.003).
@@ -166,13 +189,13 @@ def _construir_nota(payload: dict):
             icms_valor=icms_valor,
             valor_tributos_aprox=Decimal(str(item.get("tributos_aprox", 0))),
             pis_modalidade=pis_mod,
-            pis_valor_base_calculo=bruto if pis_aliq else Decimal("0"),
+            pis_valor_base_calculo=pis_bc,
             pis_aliquota_percentual=pis_aliq,
-            pis_valor=_dec(bruto * pis_aliq / 100),
+            pis_valor=pis_valor,
             cofins_modalidade=cofins_mod,
-            cofins_valor_base_calculo=bruto if cofins_aliq else Decimal("0"),
+            cofins_valor_base_calculo=cofins_bc,
             cofins_aliquota_percentual=cofins_aliq,
-            cofins_valor=_dec(bruto * cofins_aliq / 100),
+            cofins_valor=cofins_valor,
         )
 
     valor_frete = _dec(payload.get("frete", 0))

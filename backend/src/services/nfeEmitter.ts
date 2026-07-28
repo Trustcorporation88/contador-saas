@@ -227,20 +227,30 @@ function buildPayload(
       uf: (destEndereco.uf as string) || company.state,
       cep: digits(destEndereco.cep) || digits(company.postal_code),
     },
-    itens: itens.map((it) => ({
-      codigo: it.codigo_produto,
-      descricao: it.descricao,
-      ncm: digits(it.ncm).slice(0, 8),
-      cfop: digits(it.cfop).slice(0, 4),
-      unidade: it.unidade || 'UN',
-      quantidade: Number(it.quantidade),
-      valor_unitario: Number(it.valor_unitario),
-      icms_modalidade: simples ? '102' : it.cst_icms || '00',
-      icms_origem: 0,
-      icms_aliquota: Number(it.aliquota_icms ?? 0),
-      pis_aliquota: Number(it.aliquota_pis ?? 0),
-      cofins_aliquota: Number(it.aliquota_cofins ?? 0),
-    })),
+    itens: itens.map((it) => {
+      const pisAliq = simples ? 0 : Number(it.aliquota_pis ?? 0);
+      const cofinsAliq = simples ? 0 : Number(it.aliquota_cofins ?? 0);
+      return {
+        codigo: it.codigo_produto,
+        descricao: it.descricao,
+        ncm: digits(it.ncm).slice(0, 8),
+        cfop: digits(it.cfop).slice(0, 4),
+        unidade: it.unidade || 'UN',
+        quantidade: Number(it.quantidade),
+        valor_unitario: Number(it.valor_unitario),
+        icms_modalidade: simples ? '102' : it.cst_icms || '00',
+        icms_origem: 0,
+        // Simples Nacional (CSOSN): ICMS próprio não se aplica — zera alíquota
+        // para não misturar com totais de PIS/COFINS.
+        icms_aliquota: simples ? 0 : Number(it.aliquota_icms ?? 0),
+        // Simples: PIS/COFINS CST 07 (NT) com valor 0. Regime normal: CST 01
+        // quando há alíquota (evita cStat 602 — total PIS ≠ soma dos itens).
+        pis_modalidade: simples || pisAliq <= 0 ? '07' : '01',
+        pis_aliquota: pisAliq,
+        cofins_modalidade: simples || cofinsAliq <= 0 ? '07' : '01',
+        cofins_aliquota: cofinsAliq,
+      };
+    }),
   };
 }
 
