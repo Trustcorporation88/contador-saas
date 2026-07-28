@@ -151,7 +151,11 @@ export default function NfeEmissaoPage() {
         if (!Number.isInteger(n) || n < 1) {
           throw new Error('Informe um número de NF-e válido.');
         }
-        if (!confirmarNumeroManual || !checkOk) {
+        // Edição de rascunho/pendente: verificação OK já basta (checkbox é pré-marcado).
+        // Emissão nova / salto de numeração: exige confirmação explícita.
+        const confirmado =
+          confirmarNumeroManual || (Boolean(editando) && checkOk && !checkSalto);
+        if (!confirmado || !checkOk) {
           throw new Error(
             'Valide o número/série no SEFAZ e confirme o checkbox antes de emitir.',
           );
@@ -335,7 +339,8 @@ export default function NfeEmissaoPage() {
         status_motivo: detail.status_motivo,
       });
 
-      // Revalida número para liberar o checkbox de confirmação (reutilizável).
+      // Revalida número; em reemissão (PENDENTE/RASCUNHO) já confirma o checkbox
+      // para não bloquear "Atualizar e reenviar" com clique extra.
       setCheckLoading(true);
       setCheckNumeracao('');
       setCheckOk(false);
@@ -347,10 +352,15 @@ export default function NfeEmissaoPage() {
           serie: Number(detail.serie) || 1,
           numero: Number(detail.numero),
         });
+        const reutilizavel = Boolean(result.reutilizavel);
+        const salto = result.disponivel && result.salto_numeracao && !reutilizavel;
         setCheckNumeracao(result.mensagem);
         setCheckOk(result.disponivel);
-        setCheckSalto(result.disponivel && result.salto_numeracao && !result.reutilizavel);
-        setCheckReutilizavel(Boolean(result.reutilizavel));
+        setCheckSalto(salto);
+        setCheckReutilizavel(reutilizavel);
+        // Disponível e sem lacuna: confirma automaticamente na edição.
+        setConfirmarNumeroManual(Boolean(result.disponivel && !salto));
+        if (result.disponivel) setErro('');
       } catch (e) {
         setCheckOk(false);
         setCheckNumeracao(e instanceof Error ? e.message : 'Falha na verificação');
@@ -464,9 +474,9 @@ export default function NfeEmissaoPage() {
               Editando NF-e {editando.numero} série {editando.serie} ({editando.status})
             </p>
             <p>
-              Altere os dados necessários, confirme o número abaixo e clique em{' '}
-              <strong>Atualizar e reenviar</strong>. A nota pendente será atualizada e reenviada à
-              SEFAZ.
+              Altere os dados necessários e clique em <strong>Atualizar e reenviar</strong>. A
+              numeração é validada ao abrir a edição; o checkbox de confirmação já fica marcado
+              quando o número estiver liberado.
             </p>
             {editando.status_motivo?.toLowerCase().includes('lote processado') && (
               <p className="text-amber-800">
@@ -691,10 +701,16 @@ export default function NfeEmissaoPage() {
                       serie: Number(serie) || 1,
                       numero: n,
                     });
+                    const reutilizavel = Boolean(result.reutilizavel);
+                    const salto = result.disponivel && result.salto_numeracao && !reutilizavel;
                     setCheckNumeracao(result.mensagem);
                     setCheckOk(result.disponivel);
-                    setCheckSalto(result.disponivel && result.salto_numeracao && !result.reutilizavel);
-                    setCheckReutilizavel(Boolean(result.reutilizavel));
+                    setCheckSalto(salto);
+                    setCheckReutilizavel(reutilizavel);
+                    // Após verificar com sucesso: marca confirmação (exceto lacuna,
+                    // que exige atenção consciente do usuário).
+                    setConfirmarNumeroManual(Boolean(result.disponivel && !salto));
+                    if (result.disponivel) setErro('');
                   } catch (e) {
                     setCheckOk(false);
                     setCheckSalto(false);
