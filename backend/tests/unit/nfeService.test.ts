@@ -71,6 +71,8 @@ jest.mock('../../src/config/database', () => {
     where:     jest.fn().mockReturnValue(mockTrx),
     update:    jest.fn().mockReturnValue(mockTrx),
     select:    jest.fn().mockReturnValue(mockTrx),
+    del:       jest.fn().mockResolvedValue(1),
+    delete:    jest.fn().mockResolvedValue(1),
   });
 
   // db retorna A SI MESMO para que db.first/returning possam ser sobrescritos nos testes
@@ -117,6 +119,11 @@ jest.mock('../../src/config/database', () => {
         );
         return Promise.resolve(encontrado ? { id: 'capture-1' } : null);
       }
+      // nfe: default null — create() consulta se já existe PENDENTE/RASCUNHO
+      // para o número; retornar o record padrão fazia todo create() "reutilizar"
+      // e quebrava o mock (sem del). Testes que precisam de registro usam
+      // mockResolvedValueOnce.
+      if (_currentTable === 'nfe') return Promise.resolve(null);
       return Promise.resolve(nfeRecord);
     }),
     transaction: jest.fn().mockImplementation(async (cb: any) => cb(mockTrx)),
@@ -230,6 +237,15 @@ describe('NfeService', () => {
   describe('authorize()', () => {
 
     it('deve autorizar NF-e em status RASCUNHO', async () => {
+      const { db } = require('../../src/config/database');
+      db.first.mockResolvedValueOnce({ ...mockNfeRecord, status: 'RASCUNHO' });
+      db.returning.mockResolvedValueOnce([{
+        ...mockNfeRecord,
+        status: 'AUTORIZADA',
+        protocolo: '20251234567890123',
+        data_autorizacao: new Date().toISOString(),
+      }]);
+
       const nfe = await NfeService.authorize('nfe-uuid-1', 'company-uuid-1');
       expect(nfe.status).toBe('AUTORIZADA');
       expect(nfe.protocolo).toBeDefined();
@@ -423,6 +439,53 @@ describe('NfeService', () => {
 
       expect(resultado.salto_numeracao).toBe(true);
       expect(resultado.ultimo_numero_registrado).toBe(7);
+    });
+
+    // Bug 823: nota PENDENTE (falha anterior) bloqueava verificação/checkbox e
+    // o usuário não conseguia reemitir pelo formulário.
+    it('marca PENDENTE local como reutilizável e disponível (não bloqueia)', async () => {
+      setup({
+        capturados: [],
+        ultimoNumeroLocal: 822,
+        localEncontrado: {
+          id: 'nfe-pendente-823',
+          status: 'PENDENTE',
+          chave_acesso: null,
+          data_emissao: '2026-07-27T12:00:00.000Z',
+        },
+      });
+
+      const resultado = await NfeService.verificarNumeracao('company-uuid-1', {
+        serie: 1,
+        numero: 823,
+      });
+
+      expect(resultado.disponivel).toBe(true);
+      expect((resultado as any).reutilizavel).toBe(true);
+      expect(resultado.mensagem).toMatch(/PENDENTE|reenviar/i);
+      expect(resultado.local?.id).toBe('nfe-pendente-823');
+    });
+
+    it('continua bloqueando se o número local já está AUTORIZADA', async () => {
+      setup({
+        capturados: [],
+        ultimoNumeroLocal: 823,
+        localEncontrado: {
+          id: 'nfe-ok-823',
+          status: 'AUTORIZADA',
+          chave_acesso: '35...',
+          data_emissao: '2026-07-27T12:00:00.000Z',
+        },
+      });
+
+      const resultado = await NfeService.verificarNumeracao('company-uuid-1', {
+        serie: 1,
+        numero: 823,
+      });
+
+      expect(resultado.disponivel).toBe(false);
+      expect((resultado as any).reutilizavel).toBe(false);
+      expect(resultado.mensagem).toMatch(/AUTORIZADA/);
     });
   });
 

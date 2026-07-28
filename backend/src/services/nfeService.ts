@@ -410,11 +410,15 @@ export class NfeService {
       .where({ company_id: companyId, serie, modelo, numero })
       .first();
 
-    // Qualquer registro local (inclusive RASCUNHO) ocupa o número: um rascunho
-    // representa uma intenção confirmada de uso daquele número e não pode ser
-    // reaproveitado por outra nota, mesmo que ainda não tenha sido transmitido à SEFAZ.
+    // AUTORIZADA/CANCELADA/DENEGADA ocupam o número de forma definitiva.
+    // RASCUNHO/PENDENTE são reutilizáveis: o usuário pode atualizar os dados
+    // e reenviar à SEFAZ (senão o número fica eternamente travado — bug 823).
     let chaveLocal: string | null = null;
     const jaEmitidaLocal = Boolean(local);
+    const localReutilizavel =
+      !!local &&
+      (local.status === NfeStatus.PENDENTE || local.status === NfeStatus.RASCUNHO);
+    const localBloqueante = jaEmitidaLocal && !localReutilizavel;
     if (local) {
       chaveLocal = local.chave_acesso || null;
     }
@@ -464,7 +468,7 @@ export class NfeService {
 
     const jaEmitidaSefaz = sefaz.ja_emitida_sefaz === true;
     const disponivel =
-      !jaEmitidaLocal &&
+      !localBloqueante &&
       !jaEmitidaCapturada &&
       !jaEmitidaSefaz &&
       !foraDeOrdem &&
@@ -472,7 +476,11 @@ export class NfeService {
       (sefaz.disponivel === true || sefaz.disponivel === null || sefaz.disponivel === undefined);
 
     let mensagem: string;
-    if (jaEmitidaLocal) {
+    if (localReutilizavel) {
+      mensagem =
+        `Número ${numero} série ${serie} está ${local.status} no ProContador ` +
+        '(emissão anterior incompleta). Confirme para atualizar os dados e reenviar à SEFAZ.';
+    } else if (localBloqueante) {
       mensagem = `Número ${numero} série ${serie} já existe no ProContador (status ${local.status}).`;
     } else if (jaEmitidaCapturada) {
       mensagem = `Número ${numero} série ${serie} já foi emitido por esta empresa — encontrado nas notas capturadas da SEFAZ. Escolha outro número.`;
@@ -492,6 +500,7 @@ export class NfeService {
 
     return {
       disponivel,
+      reutilizavel: localReutilizavel,
       serie,
       numero,
       modelo,
@@ -599,9 +608,20 @@ export class NfeService {
     const cNF   = String(Math.floor(Math.random() * 1e8)).padStart(8, '0');
     const chave = gerarChaveAcesso('35', aamm, cnpj, modelo, serie, numero, 1, cNF);
 
+    // Se já existe RASCUNHO/PENDENTE com este número, atualiza em vez de
+    // inserir (evita unique conflict e destrava emissão após falha anterior).
+    const existente = await db('nfe')
+      .where({ company_id: companyId, serie, modelo, numero })
+      .first();
+    const reutilizarId =
+      existente &&
+      (existente.status === NfeStatus.PENDENTE || existente.status === NfeStatus.RASCUNHO)
+        ? String(existente.id)
+        : null;
+
     // Montar registro base para gerar XML
     const nfeBase: NfeRecord = {
-      id:               randomUUID(),
+      id:               reutilizarId || randomUUID(),
       company_id:       companyId,
       numero,
       serie,
@@ -629,17 +649,61 @@ export class NfeService {
       natureza_operacao: dto.natureza_operacao ?? 'VENDA',
       informacoes_adicionais: dto.informacoes_adicionais,
       data_emissao:     new Date().toISOString(),
-      created_at:       new Date().toISOString(),
+      created_at:       reutilizarId ? existente.created_at : new Date().toISOString(),
       updated_at:       new Date().toISOString(),
     };
 
     const xml = gerarXmlNfe(nfeBase, dto.destinatario.email, itensCalc, chave);
 
     return await db.transaction(async trx => {
-      const [record] = await trx('nfe').insert({
-        ...nfeBase,
-        xml_nfe: xml,
-      }).returning('*');
+      let record: NfeRecord;
+
+      if (reutilizarId) {
+        const [updated] = await trx('nfe')
+          .where({ id: reutilizarId, company_id: companyId })
+          .update({
+            chave_acesso: nfeBase.chave_acesso,
+            ambiente: nfeBase.ambiente,
+            emit_cnpj: nfeBase.emit_cnpj,
+            emit_razao_social: nfeBase.emit_razao_social,
+            dest_cpf_cnpj: nfeBase.dest_cpf_cnpj,
+            dest_razao_social: nfeBase.dest_razao_social,
+            dest_email: nfeBase.dest_email,
+            dest_endereco: nfeBase.dest_endereco,
+            valor_produtos: nfeBase.valor_produtos,
+            valor_frete: nfeBase.valor_frete,
+            valor_desconto: nfeBase.valor_desconto,
+            valor_icms: nfeBase.valor_icms,
+            valor_pis: nfeBase.valor_pis,
+            valor_cofins: nfeBase.valor_cofins,
+            valor_total: nfeBase.valor_total,
+            status: NfeStatus.RASCUNHO,
+            status_sefaz: null,
+            status_motivo: null,
+            protocolo: null,
+            natureza_operacao: nfeBase.natureza_operacao,
+            informacoes_adicionais: nfeBase.informacoes_adicionais,
+            data_emissao: nfeBase.data_emissao,
+            xml_nfe: xml,
+            updated_at: nfeBase.updated_at,
+          })
+          .returning('*');
+        await trx('nfe_itens').where({ nfe_id: reutilizarId }).del();
+        record = updated as NfeRecord;
+        logger.info('NF-e PENDENTE/RASCUNHO reutilizada', {
+          id: reutilizarId,
+          numero,
+          chave,
+          companyId,
+        });
+      } else {
+        const [inserted] = await trx('nfe').insert({
+          ...nfeBase,
+          xml_nfe: xml,
+        }).returning('*');
+        record = inserted as NfeRecord;
+        logger.info('NF-e criada', { id: record.id, numero, chave, companyId });
+      }
 
       await trx('nfe_itens').insert(
         itensCalc.map(item => ({
@@ -665,8 +729,7 @@ export class NfeService {
         })),
       );
 
-      logger.info('NF-e criada', { id: record.id, numero, chave, companyId });
-      return record as NfeRecord;
+      return record;
     });
   }
 
