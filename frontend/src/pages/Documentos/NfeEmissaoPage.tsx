@@ -64,6 +64,7 @@ export default function NfeEmissaoPage() {
   const [checkNumeracao, setCheckNumeracao] = useState<string>('');
   const [checkOk, setCheckOk] = useState(false);
   const [checkSalto, setCheckSalto] = useState(false);
+  const [checkReutilizavel, setCheckReutilizavel] = useState(false);
   const [checkLoading, setCheckLoading] = useState(false);
   const [formaPagamento, setFormaPagamento] = useState('01');
   const [frete, setFrete] = useState(0);
@@ -506,6 +507,7 @@ export default function NfeEmissaoPage() {
                   setCheckNumeracao('');
                   setCheckOk(false);
                   setCheckSalto(false);
+                  setCheckReutilizavel(false);
                   setConfirmarNumeroManual(false);
                   try {
                     const n = Number(numeroManual);
@@ -515,10 +517,12 @@ export default function NfeEmissaoPage() {
                     });
                     setCheckNumeracao(result.mensagem);
                     setCheckOk(result.disponivel);
-                    setCheckSalto(result.disponivel && result.salto_numeracao);
+                    setCheckSalto(result.disponivel && result.salto_numeracao && !result.reutilizavel);
+                    setCheckReutilizavel(Boolean(result.reutilizavel));
                   } catch (e) {
                     setCheckOk(false);
                     setCheckSalto(false);
+                    setCheckReutilizavel(false);
                     setCheckNumeracao(e instanceof Error ? e.message : 'Falha na verificação');
                   } finally {
                     setCheckLoading(false);
@@ -531,7 +535,11 @@ export default function NfeEmissaoPage() {
             {checkNumeracao && (
               <p
                 className={`text-sm ${
-                  !checkOk ? 'text-red-700' : checkSalto ? 'text-amber-800' : 'text-emerald-800'
+                  !checkOk
+                    ? 'text-red-700'
+                    : checkReutilizavel || checkSalto
+                      ? 'text-amber-800'
+                      : 'text-emerald-800'
                 }`}
               >
                 {checkNumeracao}
@@ -546,8 +554,19 @@ export default function NfeEmissaoPage() {
                 onChange={(e) => setConfirmarNumeroManual(e.target.checked)}
               />
               <span>
-                Confirmo que o número <strong>{numeroManual}</strong> série{' '}
-                <strong>{serie}</strong> está correto e foi validado (livre na base / SEFAZ online).
+                {checkReutilizavel ? (
+                  <>
+                    Confirmo a reemissão do número <strong>{numeroManual}</strong> série{' '}
+                    <strong>{serie}</strong> (nota pendente/rascunho será atualizada e reenviada à
+                    SEFAZ).
+                  </>
+                ) : (
+                  <>
+                    Confirmo que o número <strong>{numeroManual}</strong> série{' '}
+                    <strong>{serie}</strong> está correto e foi validado (livre na base / SEFAZ
+                    online).
+                  </>
+                )}
               </span>
             </label>
           </div>
@@ -627,12 +646,13 @@ export default function NfeEmissaoPage() {
                         {nfe.status === 'PENDENTE' && (
                           <button
                             type="button"
-                            className="text-gray-500 hover:text-emerald-600 disabled:opacity-50"
+                            className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
                             title="Tentar novamente (reenviar à SEFAZ)"
                             disabled={retryMutation.isPending}
                             onClick={() => retryMutation.mutate(nfe.id)}
                           >
-                            <RefreshCw className="h-4 w-4" />
+                            <RefreshCw className="h-3.5 w-3.5" />
+                            Tentar novamente
                           </button>
                         )}
                         {nfe.status === 'AUTORIZADA' && (

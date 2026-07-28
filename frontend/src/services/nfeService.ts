@@ -49,6 +49,7 @@ export interface CreateNfePayload {
 
 export interface NumeracaoCheckResult {
   disponivel: boolean;
+  reutilizavel?: boolean;
   serie: number;
   numero: number;
   modelo: number;
