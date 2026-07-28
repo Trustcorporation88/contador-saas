@@ -135,9 +135,16 @@ def _construir_nota(payload: dict):
         cofins_mod = str(item.get("cofins_modalidade", "07"))
         cofins_aliq = Decimal(str(item.get("cofins_aliquota", 0)))
 
+        # SEFAZ rejeita cEAN/cEANTrib vazios (cStat 883). Sem código de barras
+        # o literal obrigatório é "SEM GTIN" (NT 2017.001 / NT 2021.003).
+        ean = str(item.get("ean") or item.get("gtin") or "").strip() or "SEM GTIN"
+        ean_trib = str(item.get("ean_tributavel") or item.get("gtin_tributavel") or ean).strip() or "SEM GTIN"
+
         nota.adicionar_produto_servico(
             codigo=str(item["codigo"]),
             descricao=item["descricao"],
+            ean=ean,
+            ean_tributavel=ean_trib,
             ncm=_digits(item.get("ncm")) or "00000000",
             cfop=str(item["cfop"]),
             unidade_comercial=item.get("unidade", "UN"),
