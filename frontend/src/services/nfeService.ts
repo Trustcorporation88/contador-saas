@@ -67,6 +67,24 @@ export interface NumeracaoCheckResult {
   };
 }
 
+export interface NfeItemRecord {
+  id?: string;
+  nfe_id?: string;
+  numero_item?: number;
+  codigo_produto?: string;
+  descricao: string;
+  ncm?: string;
+  cfop: string;
+  unidade?: string;
+  quantidade: number;
+  valor_unitario: number;
+  valor_total?: number;
+  cst_icms?: string;
+  aliquota_icms?: number;
+  aliquota_pis?: number;
+  aliquota_cofins?: number;
+}
+
 export interface NfeRecord {
   id: string;
   company_id: string;
@@ -80,16 +98,24 @@ export interface NfeRecord {
   emit_razao_social: string;
   dest_cpf_cnpj: string;
   dest_razao_social: string;
+  dest_email?: string;
+  /** JSON string: { endereco?, inscricao_estadual?, indicador_ie? } */
+  dest_endereco?: string;
+  valor_frete?: number;
+  valor_desconto?: number;
   valor_total: number;
   status: NfeStatus;
   status_sefaz?: string;
   status_motivo?: string;
   natureza_operacao: string;
+  informacoes_adicionais?: string;
   data_emissao: string;
   data_autorizacao?: string;
   data_cancelamento?: string;
   created_at: string;
 }
+
+export type NfeDetail = NfeRecord & { itens: NfeItemRecord[] };
 
 export interface NfeListResponse {
   data: NfeRecord[];
@@ -117,10 +143,8 @@ export class NfeService {
     return data;
   }
 
-  static async get(companyId: string, id: string): Promise<NfeRecord & { itens: unknown[] }> {
-    const { data } = await api.get<NfeRecord & { itens: unknown[] }>(
-      `${this.base(companyId)}/${id}`,
-    );
+  static async get(companyId: string, id: string): Promise<NfeDetail> {
+    const { data } = await api.get<NfeDetail>(`${this.base(companyId)}/${id}`);
     return data;
   }
 

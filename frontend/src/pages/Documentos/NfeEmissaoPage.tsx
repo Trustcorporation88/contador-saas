@@ -1,6 +1,16 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2, FileText, Download, Ban, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
+import {
+  Plus,
+  Trash2,
+  FileText,
+  Download,
+  Ban,
+  AlertTriangle,
+  CheckCircle2,
+  RefreshCw,
+  Pencil,
+} from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -9,6 +19,7 @@ import {
   NfeService,
   type CreateNfePayload,
   type NfeItemPayload,
+  type NfeItemRecord,
   type NfeRecord,
 } from '../../services/nfeService';
 
@@ -74,6 +85,15 @@ export default function NfeEmissaoPage() {
 
   const [erro, setErro] = useState('');
   const [resultado, setResultado] = useState<NfeRecord | null>(null);
+  /** Nota PENDENTE/RASCUNHO carregada no formulário para editar e reenviar. */
+  const [editando, setEditando] = useState<{
+    id: string;
+    numero: number;
+    serie: number;
+    status: string;
+    status_motivo?: string;
+  } | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
 
   const totalProdutos = useMemo(
     () => itens.reduce((s, i) => s + Number(i.quantidade || 0) * Number(i.valor_unitario || 0), 0),
@@ -146,6 +166,7 @@ export default function NfeEmissaoPage() {
     onSuccess: async (nfe) => {
       setErro('');
       setResultado(nfe);
+      setEditando(null);
       await qc.invalidateQueries({ queryKey: ['nfe-list', companyId] });
     },
     onError: (e: Error) => {
@@ -232,6 +253,131 @@ export default function NfeEmissaoPage() {
     }
   };
 
+  const parseDestEndereco = (raw?: string) => {
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as {
+        endereco?: {
+          logradouro?: string;
+          numero?: string;
+          bairro?: string;
+          municipio?: string;
+          uf?: string;
+          cep?: string;
+          cod_municipio?: string;
+        };
+        inscricao_estadual?: string;
+        indicador_ie?: number;
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const mapItensParaForm = (itensDb: NfeItemRecord[]): ItemForm[] => {
+    if (!itensDb.length) return [novoItem()];
+    return itensDb.map((item) => ({
+      _key: Math.random().toString(36).slice(2),
+      codigo_produto: item.codigo_produto || '',
+      descricao: item.descricao || '',
+      ncm: item.ncm || '',
+      cfop: item.cfop || '5102',
+      unidade: item.unidade || 'UN',
+      quantidade: Number(item.quantidade) || 1,
+      valor_unitario: Number(item.valor_unitario) || 0,
+      aliquota_icms: Number(item.aliquota_icms) || 0,
+      aliquota_pis: Number(item.aliquota_pis) || 0,
+      aliquota_cofins: Number(item.aliquota_cofins) || 0,
+    }));
+  };
+
+  /** Carrega PENDENTE/RASCUNHO no formulário para o usuário editar e reemitir. */
+  const handleEditarNota = async (nfe: NfeRecord) => {
+    if (nfe.status !== 'PENDENTE' && nfe.status !== 'RASCUNHO') {
+      setErro('Só é possível editar notas em RASCUNHO ou PENDENTE.');
+      return;
+    }
+    setEditLoading(true);
+    setErro('');
+    setResultado(null);
+    try {
+      const detail = await NfeService.get(companyId, nfe.id);
+      const destMeta = parseDestEndereco(detail.dest_endereco);
+      const end = destMeta?.endereco;
+
+      setDestCpfCnpj(detail.dest_cpf_cnpj || '');
+      setDestNome(detail.dest_razao_social || '');
+      setDestEmail(detail.dest_email || '');
+      setDestIe(destMeta?.inscricao_estadual || '');
+      setIndicadorIe(Number(destMeta?.indicador_ie ?? 9));
+      setLogradouro(end?.logradouro || '');
+      setNumero(end?.numero || '');
+      setBairro(end?.bairro || '');
+      setMunicipio(end?.municipio || '');
+      setUf((end?.uf || '').toUpperCase());
+      setCep(end?.cep || '');
+      setCodMunicipio(end?.cod_municipio || '');
+
+      setNaturezaOperacao(detail.natureza_operacao || 'VENDA DE MERCADORIA');
+      setSerie(Number(detail.serie) || 1);
+      setUsarNumeroManual(true);
+      setNumeroManual(String(detail.numero));
+      setFrete(Number(detail.valor_frete) || 0);
+      setDesconto(Number(detail.valor_desconto) || 0);
+      setInfoAdicional(detail.informacoes_adicionais || '');
+      setItens(mapItensParaForm(detail.itens || []));
+
+      setEditando({
+        id: detail.id,
+        numero: detail.numero,
+        serie: detail.serie,
+        status: detail.status,
+        status_motivo: detail.status_motivo,
+      });
+
+      // Revalida número para liberar o checkbox de confirmação (reutilizável).
+      setCheckLoading(true);
+      setCheckNumeracao('');
+      setCheckOk(false);
+      setCheckSalto(false);
+      setCheckReutilizavel(false);
+      setConfirmarNumeroManual(false);
+      try {
+        const result = await NfeService.verificarNumeracao(companyId, {
+          serie: Number(detail.serie) || 1,
+          numero: Number(detail.numero),
+        });
+        setCheckNumeracao(result.mensagem);
+        setCheckOk(result.disponivel);
+        setCheckSalto(result.disponivel && result.salto_numeracao && !result.reutilizavel);
+        setCheckReutilizavel(Boolean(result.reutilizavel));
+      } catch (e) {
+        setCheckOk(false);
+        setCheckNumeracao(e instanceof Error ? e.message : 'Falha na verificação');
+      } finally {
+        setCheckLoading(false);
+      }
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível carregar a nota para edição.');
+      setEditando(null);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const cancelarEdicao = () => {
+    setEditando(null);
+    setUsarNumeroManual(false);
+    setNumeroManual('');
+    setConfirmarNumeroManual(false);
+    setCheckNumeracao('');
+    setCheckOk(false);
+    setCheckSalto(false);
+    setCheckReutilizavel(false);
+  };
+
   const preencherDestinatarioPorDocumento = async () => {
     const documento = destCpfCnpj.replace(/\D/g, '');
     if (documento.length !== 11 && documento.length !== 14) return;
@@ -307,6 +453,36 @@ export default function NfeEmissaoPage() {
         <div className="flex items-start gap-2 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
           <Ban className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{erro}</span>
+        </div>
+      )}
+
+      {editando && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <Pencil className="mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex-1 space-y-1">
+            <p className="font-semibold">
+              Editando NF-e {editando.numero} série {editando.serie} ({editando.status})
+            </p>
+            <p>
+              Altere os dados necessários, confirme o número abaixo e clique em{' '}
+              <strong>Atualizar e reenviar</strong>. A nota pendente será atualizada e reenviada à
+              SEFAZ.
+            </p>
+            {editando.status_motivo?.toLowerCase().includes('lote processado') && (
+              <p className="text-amber-800">
+                Atenção: o motivo &quot;Lote processado&quot; pode indicar que a SEFAZ já processou
+                o lote. Antes de reenviar, use <strong>Verificar no SEFAZ</strong> — se o número já
+                estiver autorizado, não reemita (risco de duplicidade cStat 539).
+              </p>
+            )}
+            <button
+              type="button"
+              className="text-xs font-semibold text-amber-900 underline"
+              onClick={cancelarEdicao}
+            >
+              Cancelar edição
+            </button>
+          </div>
         </div>
       )}
 
@@ -585,7 +761,7 @@ export default function NfeEmissaoPage() {
             <p className="text-lg font-bold text-gray-900">Total da nota: {brl(totalNota)}</p>
           </div>
           <Button size="lg" loading={emitirMutation.isPending} onClick={handleEmitir} icon={<FileText className="h-4 w-4" />}>
-            Emitir NF-e
+            {editando ? 'Atualizar e reenviar' : 'Emitir NF-e'}
           </Button>
         </div>
       </section>
@@ -643,11 +819,23 @@ export default function NfeEmissaoPage() {
                         >
                           <Download className="h-4 w-4" />
                         </button>
+                        {(nfe.status === 'PENDENTE' || nfe.status === 'RASCUNHO') && (
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 rounded-md border border-primary-300 bg-primary-50 px-2 py-1 text-xs font-semibold text-primary-800 hover:bg-primary-100 disabled:opacity-50"
+                            title="Editar dados e reenviar à SEFAZ"
+                            disabled={editLoading}
+                            onClick={() => handleEditarNota(nfe)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Editar
+                          </button>
+                        )}
                         {nfe.status === 'PENDENTE' && (
                           <button
                             type="button"
                             className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
-                            title="Tentar novamente (reenviar à SEFAZ)"
+                            title="Tentar novamente (reenviar à SEFAZ sem alterar dados)"
                             disabled={retryMutation.isPending}
                             onClick={() => retryMutation.mutate(nfe.id)}
                           >
