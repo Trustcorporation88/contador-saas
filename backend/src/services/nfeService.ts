@@ -479,7 +479,7 @@ export class NfeService {
     if (localReutilizavel) {
       mensagem =
         `Número ${numero} série ${serie} está ${local.status} no ProContador ` +
-        `(emissão anterior incompleta). Confirme para atualizar os dados e reenviar à SEFAZ.`;
+        '(emissão anterior incompleta). Confirme para atualizar os dados e reenviar à SEFAZ.';
     } else if (localBloqueante) {
       mensagem = `Número ${numero} série ${serie} já existe no ProContador (status ${local.status}).`;
     } else if (jaEmitidaCapturada) {
