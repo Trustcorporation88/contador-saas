@@ -214,7 +214,7 @@ export class TaxController {
         icms_iss_legado_amount: req.body.icms_iss_legado_amount,
       };
 
-      const cacheKey = CacheKeys.reformaCalculation(companyId, ano, regime);
+      const cacheKey = CacheKeys.reformaCalculation(companyId, ano, regime, dto.revenues);
       const cached = await cacheService.get(cacheKey);
       if (cached) {
         return res.status(200).json(cached);
@@ -262,7 +262,7 @@ export class TaxController {
         period_end: req.body.period_end,
       };
 
-      const cacheKey = CacheKeys.reformaProjecao(companyId, regime, anoInicio, anoFim);
+      const cacheKey = CacheKeys.reformaProjecao(companyId, regime, anoInicio, anoFim, dto.revenues);
       const cached = await cacheService.get(cacheKey);
       if (cached) {
         return res.status(200).json(cached);

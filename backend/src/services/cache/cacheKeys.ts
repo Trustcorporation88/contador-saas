@@ -176,15 +176,23 @@ export class CacheKeys {
   /**
    * Cache key para cálculo de CBS/IBS (Reforma Tributária) de um ano
    */
-  static reformaCalculation(companyId: string, ano: number, regime: string): string {
-    return `${CacheNamespace.TAXES}:${companyId}:reforma:calculation:${ano}:${sanitize(regime)}`;
+  static reformaCalculation(companyId: string, ano: number, regime: string, revenues?: number): string {
+    const rev = revenues !== undefined && Number.isFinite(revenues) ? `:rev${revenues}` : '';
+    return `${CacheNamespace.TAXES}:${companyId}:reforma:calculation:${ano}:${sanitize(regime)}${rev}`;
   }
 
   /**
    * Cache key para projeção multi-ano de CBS/IBS (Reforma Tributária)
    */
-  static reformaProjecao(companyId: string, regime: string, anoInicio: number, anoFim: number): string {
-    return `${CacheNamespace.TAXES}:${companyId}:reforma:projecao:${sanitize(regime)}:${anoInicio}-${anoFim}`;
+  static reformaProjecao(
+    companyId: string,
+    regime: string,
+    anoInicio: number,
+    anoFim: number,
+    revenues?: number,
+  ): string {
+    const rev = revenues !== undefined && Number.isFinite(revenues) ? `:rev${revenues}` : '';
+    return `${CacheNamespace.TAXES}:${companyId}:reforma:projecao:${sanitize(regime)}:${anoInicio}-${anoFim}${rev}`;
   }
 
   // ============================================

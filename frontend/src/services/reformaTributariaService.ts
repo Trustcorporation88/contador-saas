@@ -5,6 +5,7 @@ import type { TaxRegime } from './taxService';
 
 export type ReformaTaxType = 'CBS' | 'IBS' | 'IS';
 export type RateNature     = 'INFORMATIVO' | 'DEVIDO';
+export type ReformaAliquotaFonte = 'CADASTRADA' | 'REFERENCIA_MERCADO';
 
 export interface ReformaTaxLineResult {
   tax_type: ReformaTaxType;
@@ -14,6 +15,7 @@ export interface ReformaTaxLineResult {
   natureza: RateNature;
   collectible: boolean;
   aliquota_publicada: boolean;
+  fonte_aliquota?: ReformaAliquotaFonte;
   notes?: string;
 }
 
@@ -26,6 +28,10 @@ export interface ReformaCalculationResult {
   taxes:    ReformaTaxLineResult[];
   total_devido:      number;
   total_informativo: number;
+  aliquota_efetiva?: number;
+  fase?: string;
+  percentual_ibs_transicao?: number;
+  percentual_icms_iss_legado?: number;
   generated_at: string;
 }
 
