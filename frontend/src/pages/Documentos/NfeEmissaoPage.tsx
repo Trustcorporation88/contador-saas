@@ -120,7 +120,12 @@ export default function NfeEmissaoPage() {
           cpf_cnpj: destCpfCnpj.replace(/\D/g, ''),
           razao_social: destNome,
           email: destEmail || undefined,
-          inscricao_estadual: destIe || undefined,
+          inscricao_estadual:
+            Number(indicadorIe) === 9
+              ? undefined
+              : Number(indicadorIe) === 2
+                ? 'ISENTO'
+                : destIe || undefined,
           indicador_ie: Number(indicadorIe),
           endereco: {
             logradouro,
@@ -207,6 +212,12 @@ export default function NfeEmissaoPage() {
     if (!destNome.trim()) return 'Informe a razão social / nome do destinatário.';
     if (!logradouro || !bairro || !municipio || !uf || !cep)
       return 'Preencha o endereço completo do destinatário.';
+    if (Number(indicadorIe) === 1) {
+      const ie = destIe.replace(/\D/g, '');
+      if (!ie || /^0+$/.test(ie)) {
+        return 'Contribuinte ICMS exige Inscrição Estadual válida (ou selecione Isento / Não contribuinte).';
+      }
+    }
     if (itens.length === 0) return 'Adicione ao menos um item.';
     for (const i of itens) {
       if (!i.descricao.trim()) return 'Todos os itens precisam de descrição.';
@@ -312,8 +323,21 @@ export default function NfeEmissaoPage() {
       setDestCpfCnpj(detail.dest_cpf_cnpj || '');
       setDestNome(detail.dest_razao_social || '');
       setDestEmail(detail.dest_email || '');
-      setDestIe(destMeta?.inscricao_estadual || '');
-      setIndicadorIe(Number(destMeta?.indicador_ie ?? 9));
+      {
+        const ind = Number(destMeta?.indicador_ie ?? 9);
+        const ieRaw = String(destMeta?.inscricao_estadual || '').trim();
+        const ieDigits = ieRaw.replace(/\D/g, '');
+        if (ind === 2 || ieRaw.toUpperCase() === 'ISENTO') {
+          setIndicadorIe(2);
+          setDestIe('ISENTO');
+        } else if (ind === 9 || !ieDigits || /^0+$/.test(ieDigits)) {
+          setIndicadorIe(9);
+          setDestIe('');
+        } else {
+          setIndicadorIe(1);
+          setDestIe(ieDigits);
+        }
+      }
       setLogradouro(end?.logradouro || '');
       setNumero(end?.numero || '');
       setBairro(end?.bairro || '');
@@ -530,10 +554,31 @@ export default function NfeEmissaoPage() {
           />
           <Input label="Razão social / Nome" value={destNome} onChange={(e) => setDestNome(e.target.value)} />
           <Input label="E-mail" type="email" value={destEmail} onChange={(e) => setDestEmail(e.target.value)} />
-          <Input label="Inscrição Estadual" value={destIe} onChange={(e) => setDestIe(e.target.value)} />
+          <Input
+            label="Inscrição Estadual"
+            value={destIe}
+            onChange={(e) => setDestIe(e.target.value)}
+            disabled={indicadorIe === 9}
+            hint={
+              indicadorIe === 9
+                ? 'Não contribuinte: IE não é informada na NF-e'
+                : indicadorIe === 2
+                  ? 'Use ISENTO (ou deixe que o sistema preencha)'
+                  : 'Obrigatória para contribuinte ICMS'
+            }
+          />
           <div className="w-full">
             <label className="input-label">Indicador IE</label>
-            <select className="input-field" value={indicadorIe} onChange={(e) => setIndicadorIe(Number(e.target.value))}>
+            <select
+              className="input-field"
+              value={indicadorIe}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setIndicadorIe(v);
+                if (v === 9) setDestIe('');
+                if (v === 2) setDestIe('ISENTO');
+              }}
+            >
               <option value={1}>1 - Contribuinte ICMS</option>
               <option value={2}>2 - Isento de IE</option>
               <option value={9}>9 - Não contribuinte</option>

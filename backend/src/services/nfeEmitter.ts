@@ -186,6 +186,24 @@ function buildPayload(
   }
   const destEndereco = (dest.endereco as Record<string, unknown>) || {};
 
+  // Normaliza IE do destinatário (evita cStat 232 com IE vazia/0000).
+  let indicadorIe = Number(dest.indicador_ie ?? 9);
+  if (![1, 2, 9].includes(indicadorIe)) indicadorIe = 9;
+  const ieRaw = String(dest.inscricao_estadual || '').trim();
+  const ieDigits = digits(ieRaw);
+  const iePlaceholder = !ieDigits || /^0+$/.test(ieDigits);
+  let inscricaoEstadual = ieRaw;
+  if (ieRaw.toUpperCase() === 'ISENTO' || indicadorIe === 2) {
+    indicadorIe = 2;
+    inscricaoEstadual = 'ISENTO';
+  } else if (indicadorIe === 9 || iePlaceholder) {
+    indicadorIe = 9;
+    inscricaoEstadual = '';
+  } else {
+    indicadorIe = 1;
+    inscricaoEstadual = ieDigits;
+  }
+
   return {
     ambiente,
     modelo: nfe.modelo,
@@ -217,8 +235,8 @@ function buildPayload(
       numero_documento: digits(nfe.dest_cpf_cnpj),
       razao_social: nfe.dest_razao_social,
       email: nfe.dest_email || '',
-      indicador_ie: Number(dest.indicador_ie ?? 9),
-      inscricao_estadual: dest.inscricao_estadual || '',
+      indicador_ie: indicadorIe,
+      inscricao_estadual: inscricaoEstadual,
       logradouro: destEndereco.logradouro || 'NAO INFORMADO',
       numero: destEndereco.numero || 'S/N',
       bairro: destEndereco.bairro || 'NAO INFORMADO',

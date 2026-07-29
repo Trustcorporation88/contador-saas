@@ -33,6 +33,39 @@ def _digits(value) -> str:
     return "".join(ch for ch in str(value or "") if ch.isdigit())
 
 
+def _normalizar_ie_destinatario(dest: dict) -> tuple[int, str, bool]:
+    """Normaliza indIEDest + IE para evitar rejeição SEFAZ 232.
+
+    1 = Contribuinte (IE obrigatória, só dígitos)
+    2 = Isento (IE = ISENTO; não usar _digits)
+    9 = Não contribuinte (IE não deve ser informada)
+
+    Placeholders como "0000" / "0" são tratados como IE vazia.
+    """
+    raw_ind = dest.get("indicador_ie", 9)
+    try:
+        indicador = int(raw_ind)
+    except (TypeError, ValueError):
+        indicador = 9
+    if indicador not in (1, 2, 9):
+        indicador = 9
+
+    raw_ie = str(dest.get("inscricao_estadual") or "").strip()
+    ie_upper = raw_ie.upper()
+    ie_digits = _digits(raw_ie)
+    placeholder = ie_digits in ("", "0", "00", "000", "0000", "00000", "000000")
+
+    if ie_upper == "ISENTO" or indicador == 2:
+        return 2, "ISENTO", True
+
+    if indicador == 9 or placeholder:
+        # Não contribuinte ou sem IE válida → não informar IE
+        return 9, "", False
+
+    # Contribuinte: exige IE numérica
+    return 1, ie_digits, False
+
+
 def _construir_nota(payload: dict):
     """Monta a NotaFiscal pynfe a partir do payload e retorna (nota, totais)."""
     from pynfe.entidades.emitente import Emitente
@@ -75,12 +108,14 @@ def _construir_nota(payload: dict):
 
     dest_doc = _digits(dest["numero_documento"])
     dest_nome = HOMOLOG_DEST_NOME if homologacao else dest["razao_social"]
+    indicador_ie, inscricao_estadual, isento_icms = _normalizar_ie_destinatario(dest)
     cliente = Cliente(
         razao_social=dest_nome,
         tipo_documento="CNPJ" if len(dest_doc) == 14 else "CPF",
         numero_documento=dest_doc,
-        indicador_ie=int(dest.get("indicador_ie", 9)),
-        inscricao_estadual=_digits(dest.get("inscricao_estadual")),
+        indicador_ie=indicador_ie,
+        inscricao_estadual=inscricao_estadual,
+        isento_icms=isento_icms,
         endereco_logradouro=dest["logradouro"],
         endereco_numero=str(dest.get("numero", "S/N")),
         endereco_complemento=dest.get("complemento", ""),
