@@ -17,6 +17,60 @@ import {
 } from '../models/dtos/companyDTO';
 import { TenantService } from './tenantService';
 
+function onlyDigits(value: string): string {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function clip(value: string | undefined | null, max: number): string | null {
+  if (value === undefined || value === null) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, max);
+}
+
+function normalizeFiscalYearMonth(
+  value: CreateCompanyDTO['fiscal_year_start'] | number | string | undefined,
+): number | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 12) {
+    return value;
+  }
+  if (typeof value === 'string' && /^\d+$/.test(value)) {
+    const n = Number(value);
+    if (n >= 1 && n <= 12) return n;
+  }
+  if (typeof value === 'object' && value && typeof (value as { month?: number }).month === 'number') {
+    const m = (value as { month: number }).month;
+    if (m >= 1 && m <= 12) return m;
+  }
+  return null;
+}
+
+async function pickExistingCompanyColumns(
+  trx: { schema: { hasColumn: (table: string, col: string) => Promise<boolean> } },
+  data: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(data)) {
+    if (val === undefined) continue;
+    // Colunas core sempre tentam inserir; extras só se existirem
+    const optional = [
+      'inscricao_estadual',
+      'endereco_numero',
+      'endereco_bairro',
+      'codigo_municipio',
+      'crt',
+      'trade_name',
+    ];
+    if (optional.includes(key)) {
+      const exists = await trx.schema.hasColumn('companies', key);
+      if (!exists) continue;
+    }
+    out[key] = val;
+  }
+  return out;
+}
+
 /**
  * Company Service - Gerencia operações de empresas
  * Responsável por criar, atualizar, deletar e listar empresas
@@ -36,8 +90,17 @@ export class CompanyService {
   static async create(data: CreateCompanyDTO, adminUserId?: string): Promise<CompanyResponse> {
     const db = await getDatabase();
 
+    // Normaliza fiscal_year_start: frontend envia mês (1–12); DTO legado usa {month,day}
+    const fiscalMonth = normalizeFiscalYearMonth(data.fiscal_year_start);
+    const normalized: CreateCompanyDTO = {
+      ...data,
+      fiscal_year_start: fiscalMonth
+        ? { month: fiscalMonth, day: 1 }
+        : undefined,
+    };
+
     // Validar DTO
-    const validation = CompanyDTOValidator.validateCreateDTO(data);
+    const validation = CompanyDTOValidator.validateCreateDTO(normalized);
     if (!validation.isValid) {
       const errorMsg = Object.entries(validation.errors)
         .map(([key, msg]) => `${key}: ${msg}`)
@@ -46,7 +109,7 @@ export class CompanyService {
     }
 
     // Verificar CNPJ duplicado
-    const existingCNPJ = await this.checkCNPJExists(data.cnpj);
+    const existingCNPJ = await this.checkCNPJExists(normalized.cnpj);
     if (existingCNPJ) {
       throw new Error('CNPJ already registered');
     }
@@ -56,58 +119,73 @@ export class CompanyService {
       const companyId = randomUUID();
       const now = new Date().toISOString();
 
-      // Preparar dados da empresa
+      // Sanitiza tamanhos para as colunas do banco (evita 500 "value too long")
       const companyData = {
         id: companyId,
-        cnpj: data.cnpj.replace(/[^\d]/g, ''), // Remover formatação
-        legal_name: data.name,
-        address: data.address || null,
-        phone: data.phone || null,
-        email: data.email || null,
-        tax_regime: data.tax_regime,
-        fiscal_year_start: data.fiscal_year_start ? JSON.stringify(data.fiscal_year_start) : null,
-        inscricao_estadual: data.inscricao_estadual || null,
-        city: data.city || null,
-        state: data.state || null,
-        postal_code: data.postal_code || null,
-        endereco_numero: data.endereco_numero || null,
-        endereco_bairro: data.endereco_bairro || null,
-        codigo_municipio: data.codigo_municipio || null,
-        crt: data.crt || null,
+        cnpj: onlyDigits(normalized.cnpj).slice(0, 14),
+        legal_name: String(normalized.name || '').trim().slice(0, 255),
+        address: clip(normalized.address, 255),
+        phone: clip(onlyDigits(normalized.phone || '') || normalized.phone, 20),
+        email: clip(normalized.email, 255),
+        tax_regime: String(normalized.tax_regime).slice(0, 50),
+        fiscal_year_start: fiscalMonth ?? 1,
+        inscricao_estadual: clip(normalized.inscricao_estadual, 30),
+        city: clip(normalized.city, 100),
+        state: clip(normalized.state, 2)?.toUpperCase() || null,
+        postal_code: clip(onlyDigits(normalized.postal_code || '') || normalized.postal_code, 10),
+        endereco_numero: clip(normalized.endereco_numero, 20),
+        endereco_bairro: clip(normalized.endereco_bairro, 120),
+        codigo_municipio: clip(onlyDigits(normalized.codigo_municipio || ''), 7),
+        crt: clip(normalized.crt, 1),
         is_active: true,
         created_at: now,
         updated_at: now,
       };
 
-      // Inserir empresa
-      await trx('companies').insert(companyData);
+      // Inserir apenas colunas existentes (ambientes sem migration completa)
+      const row = await pickExistingCompanyColumns(trx, companyData);
+      await trx('companies').insert(row);
 
       logger.info('Company created', {
         companyId,
-        cnpj: data.cnpj,
-        legal_name: data.name,
+        cnpj: companyData.cnpj,
+        legal_name: companyData.legal_name,
         createdBy: adminUserId,
       });
 
       // Auto-associar admin se fornecido
       if (adminUserId) {
         const companyUserId = randomUUID();
-        await trx('company_users').insert({
-          id: companyUserId,
-          user_id: adminUserId,
-          company_id: companyId,
-          role: 'admin', // Primeiro a criar é admin
-          permissions: JSON.stringify(['*']), // Full permissions
-          is_active: true,
-          created_at: now,
-          updated_at: now,
-        });
+        try {
+          await trx('company_users').insert({
+            id: companyUserId,
+            user_id: adminUserId,
+            company_id: companyId,
+            role: 'admin',
+            permissions: JSON.stringify(['*']),
+            is_active: true,
+            created_at: now,
+            updated_at: now,
+          });
+        } catch (assocErr) {
+          // Sem permissions column / schema legado: tenta mínimo
+          logger.warn('company_users insert com permissions falhou; tentando sem permissions', {
+            error: assocErr instanceof Error ? assocErr.message : String(assocErr),
+          });
+          await trx('company_users').insert({
+            id: companyUserId,
+            user_id: adminUserId,
+            company_id: companyId,
+            role: 'admin',
+            is_active: true,
+            created_at: now,
+            updated_at: now,
+          });
+        }
 
-        // Auditar criação
         await this.auditAction(adminUserId, companyId, 'CREATE', 'Company created', true, trx);
       }
 
-      // Retornar empresa criada
       return this.formatCompanyResponse(companyData);
     });
   }
@@ -402,9 +480,25 @@ export class CompanyService {
       phone: company.phone,
       email: company.email,
       tax_regime: company.tax_regime,
-      fiscal_year_start: company.fiscal_year_start
-        ? JSON.parse(company.fiscal_year_start)
-        : undefined,
+      fiscal_year_start: (() => {
+        const raw = company.fiscal_year_start;
+        if (raw === undefined || raw === null || raw === '') return undefined;
+        if (typeof raw === 'number') return { month: raw, day: 1 };
+        if (typeof raw === 'string') {
+          try {
+            const parsed = JSON.parse(raw);
+            if (typeof parsed === 'number') return { month: parsed, day: 1 };
+            if (parsed && typeof parsed === 'object' && parsed.month) return parsed;
+          } catch {
+            const n = Number(raw);
+            if (n >= 1 && n <= 12) return { month: n, day: 1 };
+          }
+        }
+        if (typeof raw === 'object' && raw && (raw as { month?: number }).month) {
+          return raw as { month: number; day: number };
+        }
+        return undefined;
+      })(),
       inscricao_estadual: company.inscricao_estadual || undefined,
       city: company.city || undefined,
       state: company.state || undefined,

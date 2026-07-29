@@ -121,9 +121,15 @@ export class CompanyController {
         userId: req.user?.id,
       });
 
+      // Mensagem real para o usuário (antes só "Internal Server Error")
+      const isDbLength =
+        /value too long|character varying|string data.?right truncation/i.test(errorMessage);
       res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         error: 'Internal Server Error',
         code: ERROR_CODES.INTERNAL_ERROR,
+        message: isDbLength
+          ? 'Algum campo excede o tamanho máximo (verifique código IBGE com 7 dígitos, UF com 2 letras e telefone).'
+          : errorMessage || 'Erro ao criar empresa',
       });
     }
   }

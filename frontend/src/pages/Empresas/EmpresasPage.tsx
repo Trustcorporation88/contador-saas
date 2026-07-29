@@ -312,6 +312,8 @@ function CompanyForm({
           <Input
             label="Código IBGE do município"
             hint="7 dígitos — obrigatório para NF-e"
+            maxLength={7}
+            inputMode="numeric"
             error={errors.codigo_municipio?.message}
             {...register('codigo_municipio')}
           />
