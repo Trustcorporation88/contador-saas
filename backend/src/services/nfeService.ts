@@ -469,13 +469,18 @@ export class NfeService {
     });
 
     const jaEmitidaSefaz = sefaz.ja_emitida_sefaz === true;
-    const disponivel =
+    // SEFAZ offline / status ilegível não deve travar número livre: a autorização
+    // real confirma na SEFAZ. Antes, parse frágil de status gerava "fora de operação".
+    const disponivelBase =
       !localBloqueante &&
       !jaEmitidaCapturada &&
       !jaEmitidaSefaz &&
-      !foraDeOrdem &&
-      sefaz.sefaz_online &&
-      (sefaz.disponivel === true || sefaz.disponivel === null || sefaz.disponivel === undefined);
+      !foraDeOrdem;
+    const disponivel =
+      disponivelBase &&
+      (sefaz.disponivel === true ||
+        sefaz.disponivel === null ||
+        sefaz.disponivel === undefined);
 
     let mensagem: string;
     if (localReutilizavel) {
@@ -490,6 +495,10 @@ export class NfeService {
       mensagem = `SEFAZ confirma NF-e já emitida para número ${numero} série ${serie}.`;
     } else if (foraDeOrdem) {
       mensagem = `Fora de ordem cronológica: o último número confirmado nesta série foi ${ultimoNumeroRegistrado}. Use um número maior que ${ultimoNumeroRegistrado}.`;
+    } else if (!sefaz.sefaz_online && disponivelBase) {
+      mensagem =
+        `Número ${numero}/${serie} livre na base local. Aviso: consulta de status SEFAZ ` +
+        `indisponível (${sefaz.motivo || 'sem detalhe'}). Você pode emitir — a SEFAZ confirma na autorização.`;
     } else if (!sefaz.sefaz_online) {
       mensagem = `SEFAZ offline: ${sefaz.motivo}`;
     } else if (saltoNumeracao) {
