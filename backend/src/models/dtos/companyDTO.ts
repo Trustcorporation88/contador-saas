@@ -291,9 +291,16 @@ export class CompanyDTOValidator {
       errors.tax_regime = `Invalid tax regime. Must be one of: ${Object.values(TaxRegimeEnum).join(', ')}`;
     }
 
-    // Fiscal year start (optional)
-    if (dto.fiscal_year_start && !this.validateFiscalYearStart(dto.fiscal_year_start)) {
-      errors.fiscal_year_start = 'Invalid fiscal year start (month: 1-12, day: 1-31)';
+    // Fiscal year start (optional) — aceita {month,day} ou mês numérico 1–12
+    if (dto.fiscal_year_start) {
+      const raw = dto.fiscal_year_start as unknown;
+      if (typeof raw === 'number') {
+        if (raw < 1 || raw > 12) {
+          errors.fiscal_year_start = 'Invalid fiscal year start month (1-12)';
+        }
+      } else if (!this.validateFiscalYearStart(dto.fiscal_year_start)) {
+        errors.fiscal_year_start = 'Invalid fiscal year start (month: 1-12, day: 1-31)';
+      }
     }
 
     return {

@@ -86,7 +86,10 @@ const baseSchema = z.object({
   city:               z.string().optional(),
   state:              z.string().optional(),
   postal_code:        z.string().optional(),
-  codigo_municipio:   z.string().optional(),
+  codigo_municipio:   z
+    .string()
+    .optional()
+    .refine((v) => !v || /^\d{0,7}$/.test(v.replace(/\D/g, '')), 'Informe até 7 dígitos do IBGE'),
   crt:                z.string().optional(),
 });
 
@@ -312,6 +315,8 @@ function CompanyForm({
           <Input
             label="Código IBGE do município"
             hint="7 dígitos — obrigatório para NF-e"
+            maxLength={7}
+            inputMode="numeric"
             error={errors.codigo_municipio?.message}
             {...register('codigo_municipio')}
           />
