@@ -115,6 +115,10 @@ export function calcIndicadoresFinanceiros(ctx: IndicadoresContexto): IndicadorR
   const lucro = dre?.lucroLiquido ?? 0;
   const detalhado = dre?.hasDetailedBreakdown === true;
 
+  // EBITDA ≈ resultado operacional + D&A. Sem D&A discriminada no DRE,
+  // usa-se o resultado operacional como proxy (Margem EBITDA do mapa FP&A).
+  const ebitda = ebit;
+
   const ativo = balance?.ativo?.total ?? 0;
   const ativoCirc = sumItems(balance?.ativo?.circulante);
   const passivo = balance?.passivo?.total ?? 0;
@@ -162,29 +166,29 @@ export function calcIndicadoresFinanceiros(ctx: IndicadoresContexto): IndicadorR
     motivoIndisponivel: margemBruta === null ? 'Sem CMV discriminado no DRE do período.' : undefined,
   });
 
-  const margemEbit = receita > 0 ? (ebit / receita) * 100 : null;
+  const margemEbitda = receita > 0 ? (ebitda / receita) * 100 : null;
   resultados.push({
-    id: 'margem-ebit',
+    id: 'margem-ebitda',
     categoria: 'margens',
-    nome: 'Margem EBIT',
-    descricao: 'Lucro operacional (antes de juros e impostos) sobre a receita.',
-    formula: 'EBIT / Receita Líquida',
+    nome: 'Margem EBITDA',
+    descricao: 'Geração operacional de caixa antes de juros, impostos, depreciação e amortização, sobre a receita.',
+    formula: 'EBITDA / Receita Líquida',
     destaque: true,
-    valor: margemEbit,
-    valorFormatado: fmt(margemEbit, 'percent'),
+    valor: margemEbitda,
+    valorFormatado: fmt(margemEbitda, 'percent'),
     unidade: 'percent',
-    status: statusFromThresholds(margemEbit, { great: 15, ok: 8, warning: 0 }),
+    status: statusFromThresholds(margemEbitda, { great: 20, ok: 10, warning: 0 }),
     interpretacao:
-      margemEbit === null
+      margemEbitda === null
         ? 'Sem receita no período.'
-        : margemEbit >= 15
-          ? 'Operação com boa rentabilidade operacional.'
-          : margemEbit >= 8
-            ? 'Margem operacional adequada.'
-            : margemEbit >= 0
-              ? 'Margem operacional baixa — revise despesas.'
+        : margemEbitda >= 20
+          ? 'Boa geração operacional (proxy EBITDA).'
+          : margemEbitda >= 10
+            ? 'Margem EBITDA adequada.'
+            : margemEbitda >= 0
+              ? 'Margem EBITDA baixa — revise custos e despesas.'
               : 'Resultado operacional negativo.',
-    disponivel: margemEbit !== null,
+    disponivel: margemEbitda !== null,
   });
 
   const margemFcl = receita > 0 ? (fclProxy / receita) * 100 : null;

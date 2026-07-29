@@ -252,9 +252,9 @@ export const serviceCatalog: ServiceDefinition[] = [
     category: "relatorio",
     status: "hibrido",
     summary:
-      "Catalogo educacional com 19 skills contabeis e KPIs FP&A (margens, rentabilidade, capital, estrutura).",
+      "Catalogo educacional com skills contabeis e KPIs FP&A (Margem Bruta, Margem EBITDA, Margem FCL).",
     howItWorks:
-      "Aba Skills: conteudo didatico 1-19. Aba Indicadores: calcula no frontend a partir do Balanco e da DRE.",
+      "Aba Skills: conteudo didatico. Aba Indicadores: calcula no frontend a partir do Balanco e da DRE.",
     requiredData: [
       "Para KPIs: balanco e DRE do periodo",
       "CMV discriminado para margem bruta",
@@ -270,7 +270,8 @@ export const serviceCatalog: ServiceDefinition[] = [
       "/companies/:id/reports/income-statement",
     ],
     notes: [
-      "Skills 1-19 incluem fundamentos, indices, reserva legal, dividendos e CST IBS/CBS.",
+      "Destaques: Margem Bruta, Margem EBITDA e Margem de Fluxo de Caixa Livre.",
+      "Skills incluem balanco, PL, fluxo de caixa, imobilizado, estoque, passivo e contas a pagar.",
     ],
   },
   {
