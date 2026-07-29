@@ -123,11 +123,11 @@ export const SKILLS_CONTABEIS: SkillItem[] = [
       'Impacta o resultado como despesa',
       'Segue critérios contábeis e fiscais',
     ],
-    exemplo: 'Bem R$ 60.000, vida útil 5 anos, residual R$ 0 → depreciação anual R$ 12.000',
+    exemplo: 'Móveis R$ 10.000, vida útil 5 anos, residual R$ 1.000 → depreciável R$ 9.000 → R$ 1.800/ano',
     lancamento: {
-      debito: 'Despesa com Depreciação',
-      credito: 'Depreciação Acumulada',
-      historico: 'Apropriação da depreciação do período',
+      debito: 'Despesa com Depreciação — R$ 1.800',
+      credito: '(-) Depreciação Acumulada — R$ 1.800',
+      historico: 'Apropriação da depreciação do período (método linear)',
     },
   },
   {
@@ -422,7 +422,127 @@ export const SKILLS_CONTABEIS: SkillItem[] = [
       historico: 'Reconhecimento de receita de vendas à vista',
     },
   },
+  {
+    numero: 20,
+    titulo: 'Balanço Patrimonial',
+    categoria: 'demonstracoes',
+    definicao:
+      'Demonstração que apresenta a situação patrimonial e financeira da empresa em uma data específica — a “fotografia” do negócio.',
+    objetivo: 'Mostrar o que a empresa tem (ativo), o que deve (passivo) e o que é dos sócios (PL).',
+    formula: 'Ativo = Passivo + Patrimônio Líquido',
+    baseLegal: 'Lei 6.404/76; CPC 26',
+    pontos: [
+      'Ativo circulante e não circulante (caixa, clientes, estoques, imobilizado, intangível)',
+      'Passivo circulante e não circulante (fornecedores, empréstimos, impostos)',
+      'PL: capital, reservas, lucros acumulados',
+      'Base para liquidez, endividamento, investimentos e rentabilidade',
+    ],
+    exemplo: 'Ativo 140k = Passivo 80k + PL 60k (31/12)',
+  },
+  {
+    numero: 21,
+    titulo: 'Patrimônio Líquido',
+    categoria: 'resultado',
+    definicao:
+      'Riqueza dos sócios na empresa: capital investido, reservas, resultados acumulados e ajustes de avaliação patrimonial.',
+    objetivo: 'Medir a solidez patrimonial e a capacidade de gerar valor para os sócios.',
+    formula: 'Ativo − Passivo = Patrimônio Líquido',
+    pontos: [
+      'Composição: Capital Social, Reservas, Lucros/Prejuízos Acumulados, Ajustes de Avaliação',
+      'Aumenta com integralização, lucros, reversão de reservas e ganhos de avaliação',
+      'Diminui com prejuízos, dividendos, pró-labore acima do permitido e redução de capital',
+      'Essencial para credores, investidores e decisões estratégicas',
+    ],
+    exemplo: 'Capital 200k + Reserva Legal 30k + Lucros 50k + Ajustes 10k = PL R$ 290.000',
+  },
+  {
+    numero: 22,
+    titulo: 'Fluxo de Caixa',
+    categoria: 'demonstracoes',
+    definicao:
+      'Mapa das entradas e saídas de dinheiro da empresa, separado em operações, investimentos e financiamentos.',
+    objetivo: 'Mostrar a situação financeira real — lucro no papel não significa dinheiro no caixa.',
+    pontos: [
+      'Operacional: vendas, recebimentos, fornecedores, salários, aluguel',
+      'Investimento: compra/venda de imobilizado, aplicações de longo prazo',
+      'Financiamento: empréstimos, integralização, amortizações, dividendos',
+      'Ciclo estratégico: planejar → controlar → decidir',
+    ],
+    exemplo: 'Caixa líquido operações + investimentos + financiamentos = aumento líquido de caixa',
+  },
+  {
+    numero: 23,
+    titulo: 'Imobilizado',
+    categoria: 'patrimonio',
+    definicao:
+      'Ativos tangíveis usados nas operações, na produção ou na prestação de serviços, com benefício econômico por mais de um exercício.',
+    objetivo: 'Sustentar a capacidade produtiva e gerar resultados no longo prazo.',
+    baseLegal: 'NBC TG 27 / CPC 27',
+    pontos: [
+      'Exemplos: edificações, máquinas, veículos, móveis, instalações',
+      'Uso nas operações, longo prazo, não destinado à venda, sofre depreciação',
+      'Reconhecimento: benefício futuro + controle + mensuração confiável do custo',
+      'Depreciação impacta custos, resultado e análise de EBITDA',
+    ],
+    exemplo: 'Compra de máquina R$ 50.000 à vista',
+    lancamento: {
+      debito: 'Imobilizado (Máquinas e Equipamentos) — R$ 50.000',
+      credito: 'Caixa / Bancos — R$ 50.000',
+    },
+  },
+  {
+    numero: 24,
+    titulo: 'Estoque',
+    categoria: 'patrimonio',
+    definicao:
+      'Ativo circulante formado por mercadorias para venda ou insumos usados na produção — o coração operacional da empresa.',
+    objetivo: 'Garantir disponibilidade, continuidade da produção e controle do resultado (CMV).',
+    pontos: [
+      'Métodos: PEPS (FIFO), Custo Médio; UEPS não aceito fiscalmente no Brasil',
+      'Impacta CMV, lucro e capital de giro',
+      'Boas práticas: inventários, giro/rotatividade, excessos, ponto de pedido',
+      'Compra: D Estoque / C Caixa ou Fornecedores; venda: D CMV / C Estoque',
+    ],
+    exemplo: 'Controle de saldo em quantidade e valor; CMV bem gerido aumenta o lucro',
+  },
+  {
+    numero: 25,
+    titulo: 'Passivo Circulante e Não Circulante',
+    categoria: 'patrimonio',
+    definicao:
+      'Obrigações presentes decorrentes de eventos passados que exigirão saída de recursos — classificadas por prazo (até ou após 12 meses).',
+    objetivo: 'Evidenciar liquidez, solvência e estrutura de capital.',
+    baseLegal: 'CPC 00; CPC 26',
+    pontos: [
+      'Circulante: fornecedores, empréstimos CP, obrigações tributárias, salários e encargos',
+      'Não circulante: empréstimos LP, debêntures, impostos diferidos, provisões LP',
+      'Contratos longos devem ser particionados em parcela CP e LP',
+      'Monitorar vencimentos e negociar prazos',
+    ],
+    exemplo: 'Financiamento de veículo: parcela dos próximos 12 meses no circulante; restante no não circulante',
+  },
+  {
+    numero: 26,
+    titulo: 'Contas a Pagar',
+    categoria: 'patrimonio',
+    definicao:
+      'Obrigações da empresa com terceiros por bens ou serviços recebidos a prazo.',
+    objetivo: 'Controlar compromissos para evitar juros, multas e desequilíbrio de caixa.',
+    pontos: [
+      'Vencimento definido, exigível, origem em compras a prazo',
+      'Exemplos: fornecedores, contas de consumo, empréstimos, impostos a recolher',
+      'Bem gerenciado: saúde financeira e planejamento de pagamentos',
+      'Mal gerenciado: juros, multas, perda de credibilidade',
+    ],
+    exemplo: 'Registrar, monitorar vencimentos, agendar pagamentos e analisar impacto no fluxo de caixa',
+    lancamento: {
+      debito: 'Despesa ou Ativo (estoque/serviço)',
+      credito: 'Contas a Pagar (Passivo Circulante)',
+    },
+  },
 ];
+
+export const SKILLS_TOTAL = SKILLS_CONTABEIS.length;
 
 export function getSkillByNumero(n: number): SkillItem | undefined {
   return SKILLS_CONTABEIS.find((s) => s.numero === n);

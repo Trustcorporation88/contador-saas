@@ -1,7 +1,7 @@
 /**
  * IndicadoresPage.tsx — Principais Indicadores e Skills
  * Aba 1: KPIs FP&A calculados (Balanço + DRE)
- * Aba 2: Catálogo educacional Skills 1–19
+ * Aba 2: Catálogo educacional Skills (fundamentos + demonstrações + gestão)
  */
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -31,6 +31,7 @@ import {
 import {
   SKILLS_CONTABEIS,
   SKILL_CATEGORIA_META,
+  SKILLS_TOTAL,
   INDICES_CLASSICOS,
   CST_IBS_CBS,
   type SkillItem,
@@ -110,7 +111,7 @@ function SkillDetail({ skill }: { skill: SkillItem }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-[0.16em] text-gray-400">
-            Skill {String(skill.numero).padStart(2, '0')} de 19
+            Skill {String(skill.numero).padStart(2, '0')} de {SKILLS_TOTAL}
           </p>
           <h3 className="mt-1 text-xl font-bold text-gray-900">{skill.titulo}</h3>
         </div>
@@ -239,7 +240,7 @@ function SkillsPanel() {
             filtroCat === 'todos' ? 'bg-ink-900 text-white' : 'bg-white text-gray-600 ring-1 ring-gray-200'
           }`}
         >
-          Todos (19)
+          Todos ({SKILLS_TOTAL})
         </button>
         {(Object.keys(SKILL_CATEGORIA_META) as SkillCategoria[]).map((c) => (
           <button
@@ -417,7 +418,7 @@ export default function IndicadoresPage() {
           Principais Indicadores e Skills
         </h1>
         <p className="mt-1 max-w-3xl text-sm text-gray-500">
-          Catálogo educacional com 19 skills contábeis e KPIs FP&A calculados com o Balanço e a DRE da empresa ativa.
+          Catálogo educacional com {SKILLS_TOTAL} skills contábeis e KPIs FP&A (Margem Bruta, Margem EBITDA, Margem FCL) calculados com o Balanço e a DRE.
         </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -429,7 +430,7 @@ export default function IndicadoresPage() {
             }`}
           >
             <BookOpen className="h-4 w-4" />
-            Skills 1–19
+            Skills 1–{SKILLS_TOTAL}
           </button>
           <button
             type="button"
