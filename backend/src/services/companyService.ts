@@ -347,42 +347,53 @@ export class CompanyService {
       }
     }
 
-    // Preparar dados de atualização
-    const updateData: any = {
+    // Preparar dados de atualização (mesmas regras de tamanho do create)
+    const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
 
     if (data.name) {
-      updateData.legal_name = data.name;
+      updateData.legal_name = String(data.name).trim().slice(0, 255);
     }
-    if (data.address) {
-      updateData.address = data.address;
+    if (data.address !== undefined) {
+      updateData.address = clip(data.address, 255);
     }
-    if (data.phone) {
-      updateData.phone = data.phone;
+    if (data.phone !== undefined) {
+      updateData.phone = clip(onlyDigits(data.phone || '') || data.phone, 20);
     }
-    if (data.email) {
-      updateData.email = data.email;
+    if (data.email !== undefined) {
+      updateData.email = clip(data.email, 255);
     }
     if (data.tax_regime) {
-      updateData.tax_regime = data.tax_regime;
+      updateData.tax_regime = String(data.tax_regime).slice(0, 50);
     }
-    if (data.fiscal_year_start) {
-      updateData.fiscal_year_start = JSON.stringify(data.fiscal_year_start);
+    if (data.fiscal_year_start !== undefined) {
+      const fiscalMonth = normalizeFiscalYearMonth(data.fiscal_year_start as never);
+      if (fiscalMonth) updateData.fiscal_year_start = fiscalMonth;
     }
-    for (const field of [
-      'inscricao_estadual',
-      'city',
-      'state',
-      'postal_code',
-      'endereco_numero',
-      'endereco_bairro',
-      'codigo_municipio',
-      'crt',
-    ] as const) {
-      if (data[field] !== undefined) {
-        updateData[field] = data[field] || null;
-      }
+    if (data.inscricao_estadual !== undefined) {
+      updateData.inscricao_estadual = clip(data.inscricao_estadual, 30);
+    }
+    if (data.city !== undefined) {
+      updateData.city = clip(data.city, 100);
+    }
+    if (data.state !== undefined) {
+      updateData.state = clip(data.state, 2)?.toUpperCase() || null;
+    }
+    if (data.postal_code !== undefined) {
+      updateData.postal_code = clip(onlyDigits(data.postal_code || '') || data.postal_code, 10);
+    }
+    if (data.endereco_numero !== undefined) {
+      updateData.endereco_numero = clip(data.endereco_numero, 20);
+    }
+    if (data.endereco_bairro !== undefined) {
+      updateData.endereco_bairro = clip(data.endereco_bairro, 120);
+    }
+    if (data.codigo_municipio !== undefined) {
+      updateData.codigo_municipio = clip(onlyDigits(data.codigo_municipio || ''), 7);
+    }
+    if (data.crt !== undefined) {
+      updateData.crt = clip(data.crt, 1);
     }
 
     // Atualizar no banco
