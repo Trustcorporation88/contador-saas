@@ -131,6 +131,32 @@ function buildCaptureSuccessMessage(parsed: CaptureResultSummary): string {
   return `Captura concluída: ${nfe} NF-e e ${nfse} NFS-e novos.`;
 }
 
+function buildCaptureFields(
+  result: { success: boolean; message: string },
+  parsed: CaptureResultSummary,
+): {
+  success: boolean;
+  nfe_capturados?: number;
+  nfse_capturados?: number;
+  nfe_nsu?: string | null;
+  nfse_nsu?: string | null;
+  warnings?: string[];
+  message: string;
+} {
+  const failed = parsed.ok === false;
+  return {
+    success: result.success && !failed,
+    nfe_capturados: parsed.nfe_capturados,
+    nfse_capturados: parsed.nfse_capturados,
+    nfe_nsu: parsed.nfe_nsu,
+    nfse_nsu: parsed.nfse_nsu,
+    warnings: parsed.warnings,
+    message: failed
+      ? (parsed.errors || []).join(' | ') || result.message
+      : buildCaptureSuccessMessage(parsed),
+  };
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Garante que companyId é um UUID válido antes de usá-lo em caminhos de arquivo. */
@@ -422,20 +448,7 @@ export class FiscalCaptureService {
     const parsed = parseCaptureResult(result.stdout || '');
     const combined = {
       ...result,
-      ...(parsed
-        ? {
-            success: result.success && parsed.ok !== false,
-            nfe_capturados: parsed.nfe_capturados,
-            nfse_capturados: parsed.nfse_capturados,
-            nfe_nsu: parsed.nfe_nsu,
-            nfse_nsu: parsed.nfse_nsu,
-            warnings: parsed.warnings,
-            message:
-              parsed.ok === false
-                ? (parsed.errors || []).join(' | ') || result.message
-                : buildCaptureSuccessMessage(parsed),
-          }
-        : {}),
+      ...(parsed ? buildCaptureFields(result, parsed) : {}),
     };
 
     // Fallback: stdout com "ERRO:" mesmo com exit 0 (scheduler antigo).
