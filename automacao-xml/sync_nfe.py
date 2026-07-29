@@ -64,9 +64,20 @@ def sync_empresa_nfe(empresa: EmpresaConfig, company_id: str | None = None) -> S
                 consulta_nsu_especifico=False,
             )
             root = ET.fromstring(resposta.text)
+            c_stat = (root.findtext(".//ns:cStat", namespaces=NS) or "").strip()
+            x_motivo = (root.findtext(".//ns:xMotivo", namespaces=NS) or "").strip()
+            # 137 = nenhum documento; 138 = documento(s) localizado(s).
+            # Qualquer outro cStat (215, 656, rejeição de certificado/CNPJ, etc.)
+            # não pode ser tratado como "lista vazia OK" — isso escondia a falha.
+            if c_stat and c_stat not in ("137", "138"):
+                msg = f"SEFAZ DistDFe rejeitou (cStat {c_stat}): {x_motivo or 'sem motivo'}"
+                save_cursor(company_id, "nfe", nsu, status="error", error=msg)
+                raise RuntimeError(msg)
+
             docs = root.findall(".//ns:docZip", NS)
 
             if not docs:
+                # cStat 137 ou resposta sem docs: fim normal (sem XMLs novos).
                 break
 
             for doc in docs:

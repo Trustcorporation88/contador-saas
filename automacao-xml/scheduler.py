@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -15,6 +14,8 @@ from common.config import EmpresaConfig, get_certs_dir
 from common.db import ensure_schema
 from sync_nfe import sync_empresa_nfe
 from sync_nfse import sync_empresa_nfse
+
+RESULT_PREFIX = "CAPTURE_RESULT:"
 
 
 def carregar_empresas_json(path: Path) -> list[EmpresaConfig]:
@@ -56,6 +57,16 @@ def main() -> int:
         print("Nenhuma empresa para sincronizar.")
         return 1
 
+    summary = {
+        "ok": True,
+        "nfe_capturados": 0,
+        "nfse_capturados": 0,
+        "nfe_nsu": None,
+        "nfse_nsu": None,
+        "errors": [],
+        "warnings": [],
+    }
+
     for empresa in empresas:
         company_id = empresa.company_id
         print(f"Sincronizando {empresa.cnpj} ({company_id})...")
@@ -64,23 +75,37 @@ def main() -> int:
             try:
                 result = sync_empresa_nfe(empresa, company_id)
                 print(f"  NF-e: {result.capturados} XML(s), NSU={result.ultimo_nsu}")
+                summary["nfe_capturados"] += int(result.capturados or 0)
+                summary["nfe_nsu"] = result.ultimo_nsu
                 if result.alerta_certificado:
-                    print(f"  AVISO: {result.alerta_certificado}")
+                    msg = str(result.alerta_certificado)
+                    print(f"  AVISO: {msg}")
+                    summary["warnings"].append(msg)
             except Exception as exc:
                 print(f"  NF-e ERRO: {exc}")
+                summary["ok"] = False
+                summary["errors"].append(f"NF-e: {exc}")
 
         if args.tipo in ("nfse", "all"):
             try:
                 result = sync_empresa_nfse(empresa, company_id)
                 print(f"  NFS-e: {result.capturados} XML(s), NSU={result.ultimo_nsu}")
+                summary["nfse_capturados"] += int(result.capturados or 0)
+                summary["nfse_nsu"] = result.ultimo_nsu
                 if result.aviso:
                     print(f"  INFO: {result.aviso}")
+                    summary["warnings"].append(str(result.aviso))
                 if result.alerta_certificado:
-                    print(f"  AVISO: {result.alerta_certificado}")
+                    msg = str(result.alerta_certificado)
+                    print(f"  AVISO: {msg}")
+                    summary["warnings"].append(msg)
             except Exception as exc:
                 print(f"  NFS-e ERRO: {exc}")
+                summary["ok"] = False
+                summary["errors"].append(f"NFS-e: {exc}")
 
-    return 0
+    print(RESULT_PREFIX + json.dumps(summary, ensure_ascii=False))
+    return 0 if summary["ok"] else 1
 
 
 if __name__ == "__main__":
