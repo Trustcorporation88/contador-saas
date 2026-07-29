@@ -24,6 +24,7 @@ export default function FiscalCapturePanel() {
   const [file, setFile] = useState<File | null>(null);
   const [syncTipo, setSyncTipo] = useState<FiscalDocType>('all');
   const [formError, setFormError] = useState('');
+  const [syncInfo, setSyncInfo] = useState('');
   const [showCertForm, setShowCertForm] = useState(false);
 
   const formatCnpj = (value?: string | null): string => {
@@ -98,11 +99,15 @@ export default function FiscalCapturePanel() {
 
   const syncMutation = useMutation({
     mutationFn: () => FiscalCaptureService.sync(syncTipo),
-    onSuccess: async () => {
+    onSuccess: async (data) => {
       setFormError('');
+      setSyncInfo(data.message || 'Captura concluída.');
       await invalidate();
     },
-    onError: (error: Error) => setFormError(error.message),
+    onError: (error: Error) => {
+      setSyncInfo('');
+      setFormError(error.message);
+    },
   });
 
   const reprocessMutation = useMutation({
@@ -140,6 +145,12 @@ export default function FiscalCapturePanel() {
       {formError && (
         <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {formError}
+        </div>
+      )}
+
+      {syncInfo && !formError && (
+        <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          {syncInfo}
         </div>
       )}
 
@@ -183,6 +194,20 @@ export default function FiscalCapturePanel() {
             <p>NF-e NSU: {nfeSync?.cursor_value || '0'}</p>
             <p>NFS-e NSU: {nfseSync?.cursor_value || '0'}</p>
             <p>XMLs capturados: {status?.captures_total ?? 0}</p>
+            {nfeSync?.last_status && (
+              <p className={nfeSync.last_status === 'error' ? 'text-red-700' : 'text-emerald-700'}>
+                Última NF-e: {nfeSync.last_status}
+                {nfeSync.last_sync_at
+                  ? ` · ${new Date(nfeSync.last_sync_at).toLocaleString('pt-BR')}`
+                  : ''}
+              </p>
+            )}
+            {nfeSync?.last_status === 'error' && nfeSync.last_error && (
+              <p className="text-xs text-red-700">{nfeSync.last_error}</p>
+            )}
+            {nfseSync?.last_status === 'error' && nfseSync.last_error && (
+              <p className="text-xs text-red-700">NFS-e: {nfseSync.last_error}</p>
+            )}
             <p className={status?.python_available ? 'text-emerald-700' : 'text-amber-700'}>
               Captura automática: {status?.python_available ? 'ativa no servidor' : 'aguardando deploy'}
             </p>

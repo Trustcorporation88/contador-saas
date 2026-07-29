@@ -80,7 +80,14 @@ export const FiscalCaptureService = {
     return data.data;
   },
 
-  async sync(tipo: FiscalDocType = 'all'): Promise<{ message: string; stdout?: string }> {
+  async sync(tipo: FiscalDocType = 'all'): Promise<{
+    success?: boolean;
+    message: string;
+    stdout?: string;
+    nfe_capturados?: number;
+    nfse_capturados?: number;
+    warnings?: string[];
+  }> {
     const { data } = await api.post(companyPath('/sync'), { tipo }, { timeout: 300000 });
     return data;
   },

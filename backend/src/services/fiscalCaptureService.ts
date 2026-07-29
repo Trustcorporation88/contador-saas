@@ -93,6 +93,70 @@ function onlyDigits(value: string): string {
   return value.replace(/\D/g, '');
 }
 
+interface CaptureResultSummary {
+  ok?: boolean;
+  nfe_capturados?: number;
+  nfse_capturados?: number;
+  nfe_nsu?: string | null;
+  nfse_nsu?: string | null;
+  errors?: string[];
+  warnings?: string[];
+}
+
+function parseCaptureResult(stdout: string): CaptureResultSummary | null {
+  const line = stdout
+    .split('\n')
+    .map((l) => l.trim())
+    .reverse()
+    .find((l) => l.startsWith('CAPTURE_RESULT:'));
+  if (!line) return null;
+  try {
+    return JSON.parse(line.replace('CAPTURE_RESULT:', '').trim()) as CaptureResultSummary;
+  } catch {
+    return null;
+  }
+}
+
+function buildCaptureSuccessMessage(parsed: CaptureResultSummary): string {
+  const nfe = Number(parsed.nfe_capturados || 0);
+  const nfse = Number(parsed.nfse_capturados || 0);
+  const total = nfe + nfse;
+  if (total === 0) {
+    return (
+      'Captura concluída: nenhum XML novo na SEFAZ/Portal Nacional neste momento ' +
+      `(NSU NF-e ${parsed.nfe_nsu ?? '0'}). ` +
+      'Se a empresa emite/recebe notas, confira CNPJ/UF do certificado e se o A1 é o da empresa correta.'
+    );
+  }
+  return `Captura concluída: ${nfe} NF-e e ${nfse} NFS-e novos.`;
+}
+
+function buildCaptureFields(
+  result: { success: boolean; message: string },
+  parsed: CaptureResultSummary,
+): {
+  success: boolean;
+  nfe_capturados?: number;
+  nfse_capturados?: number;
+  nfe_nsu?: string | null;
+  nfse_nsu?: string | null;
+  warnings?: string[];
+  message: string;
+} {
+  const failed = parsed.ok === false;
+  return {
+    success: result.success && !failed,
+    nfe_capturados: parsed.nfe_capturados,
+    nfse_capturados: parsed.nfse_capturados,
+    nfe_nsu: parsed.nfe_nsu,
+    nfse_nsu: parsed.nfse_nsu,
+    warnings: parsed.warnings,
+    message: failed
+      ? (parsed.errors || []).join(' | ') || result.message
+      : buildCaptureSuccessMessage(parsed),
+  };
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Garante que companyId é um UUID válido antes de usá-lo em caminhos de arquivo. */
@@ -304,12 +368,29 @@ export class FiscalCaptureService {
     message: string;
     stdout?: string;
     stderr?: string;
+    nfe_capturados?: number;
+    nfse_capturados?: number;
+    nfe_nsu?: string | null;
+    nfse_nsu?: string | null;
+    warnings?: string[];
   }> {
     assertValidCompanyId(companyId);
     const db = await getDatabase();
     const cert = await db('fiscal_certificates').where({ company_id: companyId, active: true }).first();
     if (!cert) {
       return { success: false, message: 'Certificado A1 não configurado para esta empresa.' };
+    }
+
+    const company = await db('companies').where({ id: companyId }).first();
+    const companyCnpj = onlyDigits(String(company?.cnpj || ''));
+    const certCnpj = onlyDigits(String(cert.cnpj || ''));
+    if (companyCnpj && certCnpj && companyCnpj !== certCnpj) {
+      return {
+        success: false,
+        message:
+          `CNPJ do certificado (${certCnpj}) difere do CNPJ da empresa (${companyCnpj}). ` +
+          'Substitua o certificado A1 com o CNPJ correto da empresa selecionada.',
+      };
     }
 
     const password = decryptSecret(cert.password_encrypted);
@@ -364,25 +445,46 @@ export class FiscalCaptureService {
 
     await fs.remove(configPath).catch(() => undefined);
 
-    if (!result.success) {
-      await db('fiscal_xml_sync')
-        .insert({
-          company_id: companyId,
-          doc_type: tipo === 'all' ? 'nfe' : tipo,
-          cursor_value: '0',
-          last_sync_at: new Date(),
-          last_status: 'error',
-          last_error: result.stderr || result.message,
-        })
-        .onConflict(['company_id', 'doc_type'])
-        .merge({
-          last_sync_at: new Date(),
-          last_status: 'error',
-          last_error: result.stderr || result.message,
-        });
+    const parsed = parseCaptureResult(result.stdout || '');
+    const combined = {
+      ...result,
+      ...(parsed ? buildCaptureFields(result, parsed) : {}),
+    };
+
+    // Fallback: stdout com "ERRO:" mesmo com exit 0 (scheduler antigo).
+    if (combined.success && /ERRO:/i.test(result.stdout || '')) {
+      combined.success = false;
+      combined.message =
+        (result.stdout || '')
+          .split('\n')
+          .filter((l) => /ERRO:/i.test(l))
+          .join(' | ') || combined.message;
     }
 
-    return result;
+    if (!combined.success) {
+      const errText = combined.message || result.stderr || 'Falha na captura';
+      const docTypes: Array<'nfe' | 'nfse'> =
+        tipo === 'all' ? ['nfe', 'nfse'] : [tipo];
+      for (const docType of docTypes) {
+        await db('fiscal_xml_sync')
+          .insert({
+            company_id: companyId,
+            doc_type: docType,
+            cursor_value: '0',
+            last_sync_at: new Date(),
+            last_status: 'error',
+            last_error: errText,
+          })
+          .onConflict(['company_id', 'doc_type'])
+          .merge({
+            last_sync_at: new Date(),
+            last_status: 'error',
+            last_error: errText,
+          });
+      }
+    }
+
+    return combined;
   }
 
   private static async isPythonAvailable(): Promise<boolean> {
