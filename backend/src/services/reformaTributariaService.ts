@@ -300,7 +300,7 @@ export class ReformaTributariaService {
       };
     }
 
-    let base = revenues;
+    const base = revenues;
     const notesParts: string[] = [];
 
     if (resolved.fonte_aliquota === 'REFERENCIA_MERCADO' && ano > FASE_TESTES_INICIO) {

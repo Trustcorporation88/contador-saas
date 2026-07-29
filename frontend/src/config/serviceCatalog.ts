@@ -247,31 +247,30 @@ export const serviceCatalog: ServiceDefinition[] = [
     ],
   },
   {
-    title: "Principais Indicadores",
+    title: "Principais Indicadores e Skills",
     path: "/indicadores",
     category: "relatorio",
     status: "hibrido",
     summary:
-      "Mapa FP&A de margens, rentabilidade, capital, estrutura, dividendos e valuation.",
+      "Catalogo educacional com 19 skills contabeis e KPIs FP&A (margens, rentabilidade, capital, estrutura).",
     howItWorks:
-      "Calcula no frontend os indicadores disponiveis a partir do Balanco e da DRE; mantem catalogo educacional para Capex, dividendos e valuation sem cotacao.",
+      "Aba Skills: conteudo didatico 1-19. Aba Indicadores: calcula no frontend a partir do Balanco e da DRE.",
     requiredData: [
-      "Balanco patrimonial valido",
-      "DRE do periodo com receita e resultado",
+      "Para KPIs: balanco e DRE do periodo",
       "CMV discriminado para margem bruta",
     ],
     bestResultsTips: [
-      "Feche o mes antes da leitura gerencial",
-      "Classifique custos e despesas financeiras corretamente",
+      "Use Skills para treinamento da equipe",
+      "Feche o mes antes da leitura gerencial dos KPIs",
       "Combine com Saude Financeira e Benchmark Setorial",
     ],
-    dataSources: ["Reports API + calculo local"],
+    dataSources: ["Catalogo local + Reports API"],
     backendRoutes: [
       "/companies/:id/reports/balance-sheet",
       "/companies/:id/reports/income-statement",
     ],
     notes: [
-      "Capex, dividend yield, payout e P/L ficam indisponiveis ate haver DFC completo ou cotacao.",
+      "Skills 1-19 incluem fundamentos, indices, reserva legal, dividendos e CST IBS/CBS.",
     ],
   },
   {
