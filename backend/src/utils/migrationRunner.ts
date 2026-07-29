@@ -799,6 +799,64 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           console.log('✓ 020_nfe_xml_cancelamento completed');
         },
       },
+      {
+        name: '021_reforma_aliquotas_referencia_2027_2033',
+        up: async (db) => {
+          // Seed de alíquotas de referência 2027–2033 + curva de transição
+          // ICMS/ISS → IBS (2029–2032). Valores de mercado (CBS 8,8% / IBS
+          // cheio 17,7%) para simulação até o Senado fixar as alíquotas
+          // oficiais. onConflict ignore: não sobrescreve cadastro admin.
+          const hasAliquotas = await db.schema.hasTable('reforma_aliquotas_anuais');
+          if (!hasAliquotas) {
+            console.warn('[MIGRATIONS] reforma_aliquotas_anuais ausente — pule 021');
+            return;
+          }
+
+          const CBS = 0.088;
+          const IBS_CHEIA = 0.177;
+          const IBS_TESTE = 0.001;
+          const fonteRef =
+            'Referência de mercado (CBS ~8,8% / IBS ~17,7%) — LC 214/2025 cronograma; Senado fixa anualmente';
+
+          const aliquotas = [
+            // 2027–2028: CBS cheia + IBS 0,1%
+            { ano: 2027, tax_type: 'CBS', aliquota: CBS, natureza: 'DEVIDO', aplicavel_simples: true, fonte_legal: fonteRef },
+            { ano: 2027, tax_type: 'IBS', aliquota: IBS_TESTE, natureza: 'DEVIDO', aplicavel_simples: true, fonte_legal: 'LC 214/2025 — IBS 0,1% em 2027-2028' },
+            { ano: 2028, tax_type: 'CBS', aliquota: CBS, natureza: 'DEVIDO', aplicavel_simples: true, fonte_legal: fonteRef },
+            { ano: 2028, tax_type: 'IBS', aliquota: IBS_TESTE, natureza: 'DEVIDO', aplicavel_simples: true, fonte_legal: 'LC 214/2025 — IBS 0,1% em 2027-2028' },
+            // 2029–2032: IBS 10/20/30/40% da alíquota cheia
+            { ano: 2029, tax_type: 'CBS', aliquota: CBS, natureza: 'DEVIDO', aplicavel_simples: true, fonte_legal: fonteRef },
+            { ano: 2029, tax_type: 'IBS', aliquota: Math.round(IBS_CHEIA * 0.1 * 10000) / 10000, natureza: 'DEVIDO', aplicavel_simples: true, fonte_legal: fonteRef },
+            { ano: 2030, tax_type: 'CBS', aliquota: CBS, natureza: 'DEVIDO', aplicavel_simples: true, fonte_legal: fonteRef },
+            { ano: 2030, tax_type: 'IBS', aliquota: Math.round(IBS_CHEIA * 0.2 * 10000) / 10000, natureza: 'DEVIDO', aplicavel_simples: true, fonte_legal: fonteRef },
+            { ano: 2031, tax_type: 'CBS', aliquota: CBS, natureza: 'DEVIDO', aplicavel_simples: true, fonte_legal: fonteRef },
+            { ano: 2031, tax_type: 'IBS', aliquota: Math.round(IBS_CHEIA * 0.3 * 10000) / 10000, natureza: 'DEVIDO', aplicavel_simples: true, fonte_legal: fonteRef },
+            { ano: 2032, tax_type: 'CBS', aliquota: CBS, natureza: 'DEVIDO', aplicavel_simples: true, fonte_legal: fonteRef },
+            { ano: 2032, tax_type: 'IBS', aliquota: Math.round(IBS_CHEIA * 0.4 * 10000) / 10000, natureza: 'DEVIDO', aplicavel_simples: true, fonte_legal: fonteRef },
+            // 2033: sistema definitivo
+            { ano: 2033, tax_type: 'CBS', aliquota: CBS, natureza: 'DEVIDO', aplicavel_simples: true, fonte_legal: fonteRef },
+            { ano: 2033, tax_type: 'IBS', aliquota: IBS_CHEIA, natureza: 'DEVIDO', aplicavel_simples: true, fonte_legal: fonteRef },
+          ];
+
+          await db('reforma_aliquotas_anuais').insert(aliquotas).onConflict(['ano', 'tax_type']).ignore();
+
+          const hasTransicao = await db.schema.hasTable('reforma_transicao_icms_iss');
+          if (hasTransicao) {
+            await db('reforma_transicao_icms_iss')
+              .insert([
+                { ano: 2029, percentual_ibs: 0.10, percentual_icms_iss_legado: 0.90, fonte_legal: 'EC 132/2023 + LC 214/2025 — transição ICMS/ISS' },
+                { ano: 2030, percentual_ibs: 0.20, percentual_icms_iss_legado: 0.80, fonte_legal: 'EC 132/2023 + LC 214/2025 — transição ICMS/ISS' },
+                { ano: 2031, percentual_ibs: 0.30, percentual_icms_iss_legado: 0.70, fonte_legal: 'EC 132/2023 + LC 214/2025 — transição ICMS/ISS' },
+                { ano: 2032, percentual_ibs: 0.40, percentual_icms_iss_legado: 0.60, fonte_legal: 'EC 132/2023 + LC 214/2025 — transição ICMS/ISS' },
+                { ano: 2033, percentual_ibs: 1.00, percentual_icms_iss_legado: 0.00, fonte_legal: 'EC 132/2023 + LC 214/2025 — sistema definitivo' },
+              ])
+              .onConflict(['ano'])
+              .ignore();
+          }
+
+          console.log('✓ 021_reforma_aliquotas_referencia_2027_2033 completed');
+        },
+      },
     ];
 
     for (const migration of migrations) {

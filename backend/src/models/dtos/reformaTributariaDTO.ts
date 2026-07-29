@@ -3,18 +3,21 @@
  * IBS (Imposto sobre Bens e Serviços)
  *
  * Base legal: EC 132/2023 + LC 214/2025
- * Cronograma confirmado (verificado em 2026-07-25):
+ * Cronograma (Receita Federal / LC 214):
  *  - 2026: fase de testes. CBS 0,9% + IBS 0,1%, calculados e destacados,
  *    SEM recolhimento em dinheiro (compensável). Simples Nacional NÃO
  *    participa desta fase — só entra em 2027.
- *  - 2027-2028: PIS/COFINS extintos, CBS cobrada de fato. IBS segue 0,1%,
- *    CBS reduz 0,1 p.p. Simples Nacional entra no novo modelo.
- *  - 2029-2032: IBS substitui ICMS/ISS gradualmente.
+ *  - 2027-2028: PIS/COFINS extintos; CBS cobrada de fato; IBS segue 0,1%;
+ *    IPI → 0 (exceto ZFM); IS inicia em 2027. Simples entra no novo modelo.
+ *  - 2029-2032: IBS substitui ICMS/ISS gradualmente (10/20/30/40% da
+ *    alíquota cheia; legado ICMS/ISS em 90/80/70/60%).
  *  - 2033+: sistema definitivo — só CBS + IBS (+ IS quando aplicável).
  *
- * As alíquotas de referência definitivas pós-2027 AINDA NÃO são fixadas por
- * lei — dependem de cálculo anual do Comitê Gestor do IBS + Receita Federal.
- * Por isso NUNCA são hardcoded aqui — vêm da tabela `reforma_aliquotas_anuais`.
+ * Alíquotas de referência definitivas pós-2026 são fixadas anualmente por
+ * resolução do Senado (cálculo TCU / Comitê Gestor). Enquanto não houver
+ * cadastro oficial em `reforma_aliquotas_anuais`, o motor usa alíquotas de
+ * referência de mercado para simulação (CBS ~8,8% / IBS cheio ~17,7%),
+ * sempre sobrescritas pelo valor cadastrado no banco quando existir.
  */
 
 import { TaxRegime } from './taxDTO';
@@ -33,6 +36,11 @@ export enum RateNature {
   /** 2027+: valor efetivamente devido */
   DEVIDO = 'DEVIDO',
 }
+
+/** Origem da alíquota usada no cálculo */
+export type ReformaAliquotaFonte =
+  | 'CADASTRADA'          // linha em reforma_aliquotas_anuais
+  | 'REFERENCIA_MERCADO'; // fallback de simulação (CBS 8,8% / IBS transição)
 
 // ─── Modelo de dados versionado (tabelas reforma_*) ──────────────────────────
 
@@ -107,15 +115,17 @@ export interface ReformaTaxLineResult {
   natureza: RateNature;
   /** true quando natureza === DEVIDO (valor a recolher de fato) */
   collectible: boolean;
-  /** false quando não há alíquota cadastrada em reforma_aliquotas_anuais para o ano */
+  /** true quando há alíquota utilizável (cadastrada ou referência de mercado) */
   aliquota_publicada: boolean;
+  /** Origem da alíquota aplicada */
+  fonte_aliquota?: ReformaAliquotaFonte;
   notes?: string;
 }
 
 export interface ReformaCalculationResult {
   ano: number;
   regime: TaxRegime;
-  /** false quando o ano é anterior a 2026, ou Simples Nacional antes de 2027 */
+  /** false quando o ano é anterior a 2026, ou Simples Nacional em 2026 */
   applicable: boolean;
   motivo_nao_aplicavel?: string;
   revenues: number;
@@ -124,5 +134,13 @@ export interface ReformaCalculationResult {
   total_devido: number;
   /** Soma das linhas com collectible=false (ex.: 2026, informativo) */
   total_informativo: number;
+  /** Soma das alíquotas CBS+IBS aplicadas (fração, ex.: 0.265 = 26,5%) */
+  aliquota_efetiva: number;
+  /** Rótulo da fase do cronograma (testes / CBS plena / transição / definitivo) */
+  fase?: string;
+  /** Fração IBS na transição ICMS/ISS (0–1), quando aplicável */
+  percentual_ibs_transicao?: number;
+  /** Fração ICMS/ISS legado remanescente (0–1), quando aplicável */
+  percentual_icms_iss_legado?: number;
   generated_at: string;
 }
