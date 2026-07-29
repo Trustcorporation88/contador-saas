@@ -47,6 +47,9 @@ const FluxoCaixaPage = lazy(() => import("../pages/Relatorios/FluxoCaixaPage"));
 const BalancoPage = lazy(() => import("../pages/Relatorios/BalancoPage"));
 const DREPage = lazy(() => import("../pages/Relatorios/DREPage"));
 const OutrosPage = lazy(() => import("../pages/Relatorios/OutrosPage"));
+const IndicadoresPage = lazy(
+  () => import("../pages/Indicadores/IndicadoresPage"),
+);
 const ImpostosPage = lazy(() => import("../pages/Impostos/ImpostosPage"));
 const AuditoriaPage = lazy(() => import("../pages/Auditoria/AuditoriaPage"));
 const ConfiguracoesPage = lazy(
@@ -306,6 +309,16 @@ const router = createBrowserRouter([
               <RoleRoute allowedPath="/lancamentos">
                 <Suspense fallback={<LoadingScreen />}>
                   <LancadorPage />
+                </Suspense>
+              </RoleRoute>
+            ),
+          },
+          {
+            path: "indicadores",
+            element: (
+              <RoleRoute allowedPath="/indicadores">
+                <Suspense fallback={<LoadingScreen />}>
+                  <IndicadoresPage />
                 </Suspense>
               </RoleRoute>
             ),

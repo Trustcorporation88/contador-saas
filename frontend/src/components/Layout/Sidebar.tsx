@@ -52,6 +52,7 @@ const navItems: NavItem[] = [
     label: 'Relatórios',
     icon: BarChart3,
     children: [
+      { label: 'Principais Indicadores', path: '/indicadores' },
       { label: 'Fluxo de Caixa',      path: '/relatorios/fluxo-caixa' },
       { label: 'Balanço Patrimonial', path: '/relatorios/balanco' },
       { label: 'DRE',                 path: '/relatorios/dre'     },
@@ -88,7 +89,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();
   const role = useAuthStore((state) => state.user?.role) as UserRole | undefined;
   const [reportsOpen, setReportsOpen] = useState(
-    location.pathname.startsWith('/relatorios')
+    location.pathname.startsWith('/relatorios') || location.pathname === '/indicadores'
   );
 
   const visibleItems = navItems
@@ -154,7 +155,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
           if (item.children) {
             const isGroupActive = item.children.some((c) =>
-              location.pathname.startsWith(c.path)
+              location.pathname === c.path || location.pathname.startsWith(`${c.path}/`)
             );
             return (
               <div key={item.label}>

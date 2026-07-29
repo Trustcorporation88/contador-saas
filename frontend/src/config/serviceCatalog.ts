@@ -247,6 +247,34 @@ export const serviceCatalog: ServiceDefinition[] = [
     ],
   },
   {
+    title: "Principais Indicadores",
+    path: "/indicadores",
+    category: "relatorio",
+    status: "hibrido",
+    summary:
+      "Mapa FP&A de margens, rentabilidade, capital, estrutura, dividendos e valuation.",
+    howItWorks:
+      "Calcula no frontend os indicadores disponiveis a partir do Balanco e da DRE; mantem catalogo educacional para Capex, dividendos e valuation sem cotacao.",
+    requiredData: [
+      "Balanco patrimonial valido",
+      "DRE do periodo com receita e resultado",
+      "CMV discriminado para margem bruta",
+    ],
+    bestResultsTips: [
+      "Feche o mes antes da leitura gerencial",
+      "Classifique custos e despesas financeiras corretamente",
+      "Combine com Saude Financeira e Benchmark Setorial",
+    ],
+    dataSources: ["Reports API + calculo local"],
+    backendRoutes: [
+      "/companies/:id/reports/balance-sheet",
+      "/companies/:id/reports/income-statement",
+    ],
+    notes: [
+      "Capex, dividend yield, payout e P/L ficam indisponiveis ate haver DFC completo ou cotacao.",
+    ],
+  },
+  {
     title: "Fluxo de Caixa",
     path: "/relatorios/fluxo-caixa",
     category: "relatorio",
