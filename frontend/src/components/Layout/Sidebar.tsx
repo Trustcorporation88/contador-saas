@@ -26,9 +26,10 @@ import {
   Users,
   X,
   Scale,
+  GraduationCap,
 } from 'lucide-react';
 
-// â”€â”€â”€ Nav structure â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Nav structure ───────────────────────────────────────────────────────────
 
 interface NavItem {
   label: string;
@@ -52,11 +53,17 @@ const navItems: NavItem[] = [
     label: 'Relatórios',
     icon: BarChart3,
     children: [
-      { label: 'Principais Indicadores e Skills', path: '/indicadores' },
       { label: 'Fluxo de Caixa',      path: '/relatorios/fluxo-caixa' },
       { label: 'Balanço Patrimonial', path: '/relatorios/balanco' },
       { label: 'DRE',                 path: '/relatorios/dre'     },
       { label: 'Outros Relatórios',   path: '/relatorios/outros'  },
+    ],
+  },
+  {
+    label: 'Contabilidade Teórica',
+    icon: GraduationCap,
+    children: [
+      { label: 'Indicadores e Skills', path: '/indicadores' },
     ],
   },
   { label: 'Apuração Impostos',  icon: Calculator,  path: '/impostos'      },
@@ -64,21 +71,28 @@ const navItems: NavItem[] = [
   { label: 'Central de Serviços', icon: ClipboardList, path: '/servicos/hub'   },
   { label: 'Guia Operacional',   icon: BookOpen, path: '/servicos'    },
   { label: 'Configurações',      icon: Settings,    path: '/configuracoes' },
-  // â”€â”€ Módulos inovadores â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  { label: 'Saúde Financeira',   icon: HeartPulse,  path: '/saude',        badge: 'âœ¦' },
-  { label: 'Simulador Fiscal',   icon: Sliders,     path: '/simulador',    badge: 'âœ¦' },
-  { label: 'Benchmark Setorial', icon: GitCompareArrows, path: '/benchmark', badge: 'âœ¦' },
-  { label: 'Risco Fiscal SPED',  icon: ShieldAlert, path: '/risco-fiscal', badge: 'âœ¦' },
-  { label: 'Reforma Tributária', icon: Scale,       path: '/reforma-tributaria', badge: 'âœ¦' },
-  { label: 'Open Finance',       icon: Landmark,    path: '/open-finance', badge: 'âœ¦' },
-  { label: 'Copiloto IA',        icon: Bot,         path: '/copiloto',     badge: 'âœ¦' },
-  { label: 'Prova Criptográfica',icon: Lock,        path: '/prova-hash',   badge: 'âœ¦' },
+  // ── Módulos inovadores ────────────────────────────────────────────────────
+  { label: 'Saúde Financeira',   icon: HeartPulse,  path: '/saude',        badge: '✦' },
+  { label: 'Simulador Fiscal',   icon: Sliders,     path: '/simulador',    badge: '✦' },
+  { label: 'Benchmark Setorial', icon: GitCompareArrows, path: '/benchmark', badge: '✦' },
+  { label: 'Risco Fiscal SPED',  icon: ShieldAlert, path: '/risco-fiscal', badge: '✦' },
+  { label: 'Reforma Tributária', icon: Scale,       path: '/reforma-tributaria', badge: '✦' },
+  { label: 'Open Finance',       icon: Landmark,    path: '/open-finance', badge: '✦' },
+  { label: 'Copiloto IA',        icon: Bot,         path: '/copiloto',     badge: '✦' },
+  { label: 'Prova Criptográfica',icon: Lock,        path: '/prova-hash',   badge: '✦' },
 ];
 
-// â”€â”€â”€ Divider between standard and innovative â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const INNOVATIVE_PATHS = ['/saude', '/simulador', '/benchmark', '/risco-fiscal', '/reforma-tributaria', '/open-finance', '/copiloto', '/prova-hash'];
 
-// â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function isPathActive(pathname: string, path: string) {
+  return pathname === path || pathname.startsWith(`${path}/`);
+}
+
+function groupShouldStartOpen(pathname: string, children: { path: string }[]) {
+  return children.some((c) => isPathActive(pathname, c.path));
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 interface SidebarProps {
   isOpen: boolean;
@@ -88,9 +102,20 @@ interface SidebarProps {
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();
   const role = useAuthStore((state) => state.user?.role) as UserRole | undefined;
-  const [reportsOpen, setReportsOpen] = useState(
-    location.pathname.startsWith('/relatorios') || location.pathname === '/indicadores'
-  );
+
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    for (const item of navItems) {
+      if (item.children) {
+        initial[item.label] = groupShouldStartOpen(location.pathname, item.children);
+      }
+    }
+    return initial;
+  });
+
+  const toggleGroup = (label: string) => {
+    setOpenGroups((prev) => ({ ...prev, [label]: !prev[label] }));
+  };
 
   const visibleItems = navItems
     .filter((item) => {
@@ -149,18 +174,16 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
         {visibleItems.map((item, idx) => {
-          // Divider before innovative section
           const prevPath = navItems[idx - 1]?.path;
-          const showDivider = item.badge === 'âœ¦' && (!prevPath || !INNOVATIVE_PATHS.includes(prevPath));
+          const showDivider = item.badge === '✦' && (!prevPath || !INNOVATIVE_PATHS.includes(prevPath));
 
           if (item.children) {
-            const isGroupActive = item.children.some((c) =>
-              location.pathname === c.path || location.pathname.startsWith(`${c.path}/`)
-            );
+            const isGroupActive = item.children.some((c) => isPathActive(location.pathname, c.path));
+            const isOpenGroup = openGroups[item.label] ?? isGroupActive;
             return (
               <div key={item.label}>
                 <button
-                  onClick={() => setReportsOpen((o) => !o)}
+                  onClick={() => toggleGroup(item.label)}
                   className={clsx(
                     'nav-item w-full justify-between',
                     isGroupActive && 'nav-item-active'
@@ -170,12 +193,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                     <item.icon className="h-4 w-4 shrink-0" />
                     {item.label}
                   </span>
-                  {reportsOpen
+                  {isOpenGroup
                     ? <ChevronDown className="h-3.5 w-3.5" />
                     : <ChevronRight className="h-3.5 w-3.5" />}
                 </button>
 
-                {reportsOpen && (
+                {isOpenGroup && (
                   <div className="ml-7 mt-1 space-y-1 border-l border-white/10 pl-3 animate-slide-in-left">
                     {item.children.map((child) => (
                       <NavLink
@@ -229,7 +252,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/45">Workspace</p>
           <p className="mt-1 text-sm font-semibold text-white">Console Contábil</p>
-          <p className="mt-2 text-xs text-white/50">v1.0.0 Â· {new Date().getFullYear()}</p>
+          <p className="mt-2 text-xs text-white/50">v1.0.0 · {new Date().getFullYear()}</p>
         </div>
       </div>
       </aside>
