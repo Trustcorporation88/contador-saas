@@ -17,12 +17,13 @@ const upload = multer({
       'application/pkcs12',
       'application/octet-stream',
     ];
-    const isPfx = file.originalname.toLowerCase().endsWith('.pfx');
+    const name = file.originalname.toLowerCase();
+    const isPfx = name.endsWith('.pfx') || name.endsWith('.p12');
     if (allowed.includes(file.mimetype) || isPfx) {
       cb(null, true);
       return;
     }
-    cb(new Error('Envie um certificado A1 (.pfx)'));
+    cb(new Error('Envie um certificado A1 (.pfx ou .p12)'));
   },
 });
 

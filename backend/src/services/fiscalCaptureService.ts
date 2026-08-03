@@ -7,6 +7,7 @@ import { getDatabase } from '../config/database';
 import { envConfig } from '../config/env';
 import { logger } from '../middleware/requestLogger';
 import { decryptSecret, encryptSecret, decryptSecretWithLegacyFallback } from '../utils/certEncryption';
+import { assertPfxReadyToSave } from '../utils/pfxCertificate';
 
 export type FiscalDocType = 'nfe' | 'nfse';
 
@@ -211,6 +212,19 @@ export class FiscalCaptureService {
 
     const cnpj = onlyDigits(data.cnpj);
     const uf = data.uf.toLowerCase().slice(0, 2);
+
+    // Busca CNPJ da empresa para cruzar com o certificado
+    const company = await db('companies').where({ id: companyId }).first();
+    const companyCnpj = company?.cnpj ? onlyDigits(String(company.cnpj)) : null;
+
+    // Valida senha, validade e CNPJ ANTES de gravar qualquer coisa
+    const parsed = assertPfxReadyToSave({
+      pfxBuffer: data.pfxBuffer,
+      password: data.password,
+      informedCnpj: cnpj,
+      companyCnpj,
+    });
+
     const pfxPath = path.join(certsDir, `${companyId}.pfx`);
     const pfxDataB64 = data.pfxBuffer.toString('base64');
 
@@ -229,14 +243,19 @@ export class FiscalCaptureService {
     const now = new Date();
     const existing = await db('fiscal_certificates').where({ company_id: companyId }).first();
 
+    // Preferir validade lida do certificado; fallback ao valor enviado pelo cliente
+    const certValidUntil = parsed.notAfter
+      || (data.certValidUntil ? new Date(data.certValidUntil) : null);
+
     const row = {
       company_id: companyId,
-      cnpj,
+      // CNPJ canônico = o do certificado (já validado)
+      cnpj: parsed.subjectCnpj || cnpj,
       uf,
       pfx_path: pfxPath,
       pfx_data: encryptedPfxData,
       password_encrypted: encryptedPassword,
-      cert_valid_until: data.certValidUntil ? new Date(data.certValidUntil) : null,
+      cert_valid_until: certValidUntil,
       serpro_motor_enabled: Boolean(data.serproMotor),
       active: true,
       updated_at: now,
@@ -251,6 +270,13 @@ export class FiscalCaptureService {
         created_at: now,
       });
     }
+
+    logger.info('Certificado A1 validado e salvo', {
+      companyId,
+      cnpj: row.cnpj,
+      validUntil: certValidUntil?.toISOString(),
+      daysUntilExpiry: parsed.daysUntilExpiry,
+    });
 
     const saved = await db('fiscal_certificates').where({ company_id: companyId }).first();
     return this.mapCertificate(saved);

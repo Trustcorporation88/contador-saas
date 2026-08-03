@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { FiscalCaptureService } from '../services/fiscalCaptureService';
 import { logger } from '../middleware/requestLogger';
+import { PfxValidationError } from '../utils/pfxCertificate';
 
 export class FiscalCaptureController {
   static async uploadCertificate(req: Request, res: Response): Promise<void> {
@@ -48,6 +49,13 @@ export class FiscalCaptureController {
       res.status(201).json({ success: true, data: saved });
     } catch (error) {
       const message = (error as Error).message;
+
+      if (error instanceof PfxValidationError || (error as { status?: number }).status === 400) {
+        logger.warn('Certificado A1 rejeitado na validação', { error: message });
+        res.status(400).json({ success: false, error: message });
+        return;
+      }
+
       logger.error('Erro ao cadastrar certificado fiscal', { error: message });
       res.status(500).json({
         success: false,
