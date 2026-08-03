@@ -3,7 +3,7 @@
  * Lei 6.404/76 — Débitos = Créditos (Ativo = Passivo + PL)
  * Inspiração UX: Xero Journal Entry + QuickBooks Advanced Journal
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -17,6 +17,10 @@ import { JournalService } from '../../services/journalService';
 import { AccountService, type APIAccount } from '../../services/accountService';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import {
+  DocumentDropZone,
+  type DocumentExtractResult,
+} from '../../components/Lancamentos/DocumentDropZone';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -35,6 +39,66 @@ function brl(n: number) {
 
 function parseBRL(v: string): number {
   return parseFloat(v.replace(/\./g, '').replace(',', '.')) || 0;
+}
+
+/** Normaliza código contábil para comparação (1.1.2.1 ≈ 1.1.2.01) */
+function normalizeAccountCode(code: string): string {
+  return code
+    .split('.')
+    .map((part) => String(parseInt(part, 10) || 0))
+    .join('.');
+}
+
+/**
+ * Localiza conta analítica sugerida pelo OCR no plano da empresa.
+ * Tenta código exato → código normalizado → prefixo → nome/keywords.
+ */
+function findSuggestedAccount(
+  accounts: APIAccount[],
+  suggested: { account_code: string; account_name: string },
+): APIAccount | undefined {
+  const analytical = accounts.filter((a) => a.is_analytical && a.is_active !== false);
+  const code = suggested.account_code?.trim();
+  const name = (suggested.account_name || '').toLowerCase();
+
+  if (code) {
+    const exact = analytical.find((a) => a.code === code);
+    if (exact) return exact;
+
+    const normalized = normalizeAccountCode(code);
+    const byNorm = analytical.find((a) => normalizeAccountCode(a.code) === normalized);
+    if (byNorm) return byNorm;
+
+    const byPrefix = analytical.find(
+      (a) =>
+        normalizeAccountCode(a.code).startsWith(normalized) ||
+        normalized.startsWith(normalizeAccountCode(a.code)),
+    );
+    if (byPrefix) return byPrefix;
+  }
+
+  if (name) {
+    const byName = analytical.find((a) => a.name.toLowerCase().includes(name) || name.includes(a.name.toLowerCase()));
+    if (byName) return byName;
+  }
+
+  const keywords: Array<{ match: RegExp; prefer: RegExp }> = [
+    { match: /estoq|mercador/i, prefer: /mercador|estoq/i },
+    { match: /fornecedor/i, prefer: /fornecedor/i },
+    { match: /cliente/i, prefer: /^clientes?$/i },
+    { match: /receita|venda/i, prefer: /venda|receita|servi[cç]o/i },
+    { match: /compra/i, prefer: /compra/i },
+  ];
+
+  for (const { match, prefer } of keywords) {
+    if (!match.test(name) && !match.test(code || '')) continue;
+    const hit =
+      analytical.find((a) => prefer.test(a.name)) ||
+      analytical.find((a) => match.test(a.name));
+    if (hit) return hit;
+  }
+
+  return undefined;
 }
 
 // ─── Zod schema ───────────────────────────────────────────────────────────────
@@ -60,6 +124,8 @@ const schema = z.object({
 }, { message: 'Total débitos ≠ total créditos', path: ['lines'] });
 
 type FormValues = z.infer<typeof schema>;
+
+const EMPTY_ACCOUNTS: APIAccount[] = [];
 
 // ─── Account Select ───────────────────────────────────────────────────────────
 
@@ -154,6 +220,11 @@ interface AmountFieldProps {
 function AmountField({ value, onChange, placeholder = '0,00', disabled }: AmountFieldProps) {
   const [raw, setRaw] = useState(value > 0 ? brl(value) : '');
 
+  // Sincroniza quando o valor é preenchido externamente (ex.: OCR)
+  useEffect(() => {
+    setRaw(value > 0 ? brl(value) : '');
+  }, [value]);
+
   return (
     <input
       type="text"
@@ -210,7 +281,7 @@ export default function LancadorPage() {
   });
 
   const { register, control, handleSubmit, watch, setValue, formState: { errors } } = form;
-  const { fields, append, remove } = useFieldArray({ control, name: 'lines' });
+  const { fields, append, remove, replace } = useFieldArray({ control, name: 'lines' });
 
   // Live totals
   const lines = watch('lines');
@@ -246,6 +317,60 @@ export default function LancadorPage() {
   const addLine = useCallback(() => {
     append({ account_id: '', debit: 0, credit: 0, description: '' });
   }, [append]);
+
+  const applyDocumentExtract = useCallback((result: DocumentExtractResult) => {
+    const { upload, preview } = result;
+    const ocr = upload.ocr_data || {};
+
+    const entryDate = preview?.emission_date || ocr.emission_date;
+    if (entryDate) setValue('entry_date', entryDate.slice(0, 10));
+
+    const nfNumber = preview?.nf_number || ocr.nf_number;
+    const issuer = preview?.issuer_name || ocr.issuer_name;
+    const total = preview?.total_value ?? ocr.total_value ?? 0;
+
+    setValue('reference_type', 'NF');
+    if (nfNumber) setValue('reference_number', nfNumber);
+    if (issuer) setValue('reference_issuer', issuer);
+
+    const descParts = [
+      nfNumber ? `NF-e ${nfNumber}` : null,
+      issuer ? issuer : null,
+      total > 0 ? `R$ ${brl(total)}` : null,
+    ].filter(Boolean);
+    if (descParts.length > 0) {
+      setValue('description', descParts.join(' — '));
+    }
+
+    if (preview?.suggested_entries?.length) {
+      const nextLines = preview.suggested_entries.map((entry) => {
+        const account = findSuggestedAccount(accounts, entry);
+        return {
+          account_id: account?.id || '',
+          debit: entry.debit || 0,
+          credit: entry.credit || 0,
+          description: [
+            nfNumber ? `NF-e ${nfNumber}` : null,
+            entry.account_name,
+          ].filter(Boolean).join(' — '),
+        };
+      });
+
+      while (nextLines.length < 2) {
+        nextLines.push({ account_id: '', debit: 0, credit: 0, description: '' });
+      }
+      replace(nextLines);
+      return;
+    }
+
+    // Sem preview: preenche valor nas duas linhas (usuário escolhe as contas)
+    if (total > 0) {
+      replace([
+        { account_id: '', debit: total, credit: 0, description: nfNumber ? `NF-e ${nfNumber}` : '' },
+        { account_id: '', debit: 0, credit: total, description: issuer || '' },
+      ]);
+    }
+  }, [accounts, replace, setValue]);
 
   const onSubmit = (v: FormValues) => { setApiError(''); createMut.mutate(v); };
 
@@ -294,6 +419,12 @@ export default function LancadorPage() {
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
+
+        <DocumentDropZone
+          companyId={currentCompanyId}
+          onExtracted={applyDocumentExtract}
+          disabled={createMut.isPending}
+        />
 
         {/* Header fields */}
         <div className="card p-5">
