@@ -1,6 +1,11 @@
-import { useEffect, useState } from 'react';
+/**
+ * FiscalCapturePanel — Captura automática NF-e/NFS-e com certificado A1
+ * Valida senha, CNPJ e validade no backend antes de salvar.
+ */
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CloudDownload, KeyRound, RefreshCw, ShieldAlert } from 'lucide-react';
+import { CloudDownload, FileUp, KeyRound, RefreshCw, ShieldAlert, X } from 'lucide-react';
+import { clsx } from 'clsx';
 import { Button } from '../ui/Button';
 import { useAuthStore } from '../../store/authStore';
 import { CompanyService } from '../../services/companyService';
@@ -14,14 +19,20 @@ const UFS = [
   'pa', 'pb', 'pr', 'pe', 'pi', 'rj', 'rn', 'rs', 'ro', 'rr', 'sc', 'sp', 'se', 'to',
 ];
 
+const PFX_ACCEPT = '.pfx,.p12,application/x-pkcs12,application/pkcs12';
+
 export default function FiscalCapturePanel() {
   const qc = useQueryClient();
   const currentCompanyId = useAuthStore((state) => state.currentCompanyId);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
+
   const [cnpj, setCnpj] = useState('');
   const [uf, setUf] = useState('sp');
   const [password, setPassword] = useState('');
   const [serproMotor, setSerproMotor] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [dragging, setDragging] = useState(false);
   const [syncTipo, setSyncTipo] = useState<FiscalDocType>('all');
   const [formError, setFormError] = useState('');
   const [syncInfo, setSyncInfo] = useState('');
@@ -42,6 +53,27 @@ export default function FiscalCapturePanel() {
     };
     return map[docType] || docType.toUpperCase();
   };
+
+  const pickPfx = useCallback((next: File | null) => {
+    if (!next) {
+      setFile(null);
+      return;
+    }
+    const name = next.name.toLowerCase();
+    const okExt = name.endsWith('.pfx') || name.endsWith('.p12');
+    const okMime = [
+      'application/x-pkcs12',
+      'application/pkcs12',
+      'application/octet-stream',
+    ].includes(next.type) || !next.type;
+    if (!okExt && !okMime) {
+      setFormError('Envie um certificado A1 (.pfx ou .p12).');
+      setFile(null);
+      return;
+    }
+    setFormError('');
+    setFile(next);
+  }, []);
 
   const { data: status, isLoading } = useQuery({
     queryKey: ['fiscal-capture-status', currentCompanyId],
@@ -74,7 +106,8 @@ export default function FiscalCapturePanel() {
 
   const uploadMutation = useMutation({
     mutationFn: () => {
-      if (!file) throw new Error('Selecione o arquivo .pfx');
+      if (!file) throw new Error('Arraste ou selecione o arquivo .pfx');
+      if (!password.trim()) throw new Error('Informe a senha do certificado');
       const cnpjDigits = cnpj.replace(/\D/g, '');
       if (cnpjDigits.length !== 14) {
         throw new Error('Informe o CNPJ da empresa com 14 dígitos (não use o e-mail de login)');
@@ -92,6 +125,7 @@ export default function FiscalCapturePanel() {
       setPassword('');
       setFile(null);
       setShowCertForm(false);
+      if (inputRef.current) inputRef.current.value = '';
       await invalidate();
     },
     onError: (error: Error) => setFormError(error.message),
@@ -120,9 +154,6 @@ export default function FiscalCapturePanel() {
   });
 
   const cert = status?.certificate;
-  // status?.sync sozinho não é suficiente: se a API responder um formato
-  // inesperado (status truthy, mas sem o campo sync), .find() em undefined
-  // derruba a página inteira — o ?? [] garante um array mesmo nesse caso.
   const nfeSync = (status?.sync ?? []).find((item) => item.doc_type === 'nfe');
   const nfseSync = (status?.sync ?? []).find((item) => item.doc_type === 'nfse');
 
@@ -143,7 +174,7 @@ export default function FiscalCapturePanel() {
       </div>
 
       {formError && (
-        <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div role="alert" className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {formError}
         </div>
       )}
@@ -233,12 +264,17 @@ export default function FiscalCapturePanel() {
           className="mt-5 grid gap-3 rounded-2xl border border-dashed border-emerald-200 bg-white/80 p-4 md:grid-cols-2"
           onSubmit={(event) => {
             event.preventDefault();
+            setFormError('');
             uploadMutation.mutate();
           }}
         >
+          <p className="md:col-span-2 text-xs text-gray-500">
+            Antes de salvar, o sistema valida senha do .pfx, CNPJ do certificado (deve ser o da empresa) e data de validade.
+          </p>
           <div>
-            <label className="input-label">CNPJ</label>
+            <label className="input-label" htmlFor="fiscal-cert-cnpj">CNPJ</label>
             <input
+              id="fiscal-cert-cnpj"
               className="input-field"
               value={cnpj}
               onChange={(e) => setCnpj(e.target.value.replace(/\D/g, '').slice(0, 14))}
@@ -248,28 +284,116 @@ export default function FiscalCapturePanel() {
             />
           </div>
           <div>
-            <label className="input-label">UF</label>
-            <select className="input-field" value={uf} onChange={(e) => setUf(e.target.value)}>
+            <label className="input-label" htmlFor="fiscal-cert-uf">UF</label>
+            <select
+              id="fiscal-cert-uf"
+              className="input-field"
+              value={uf}
+              onChange={(e) => setUf(e.target.value)}
+            >
               {UFS.map((item) => (
                 <option key={item} value={item}>{item.toUpperCase()}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="input-label">Senha do certificado</label>
-            <input className="input-field" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            <label className="input-label" htmlFor="fiscal-cert-password">Senha do certificado</label>
+            <input
+              id="fiscal-cert-password"
+              className="input-field"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="new-password"
+            />
           </div>
-          <div>
+          <div className="md:col-span-2">
             <label className="input-label">Arquivo .pfx</label>
-            <input className="input-field" type="file" accept=".pfx" onChange={(e) => setFile(e.target.files?.[0] || null)} required />
+            <div
+              role="button"
+              tabIndex={0}
+              data-testid="pfx-drop-zone"
+              aria-label="Área para arrastar certificado A1"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  inputRef.current?.click();
+                }
+              }}
+              onClick={() => inputRef.current?.click()}
+              onDragEnter={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dragDepth.current += 1;
+                setDragging(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dragDepth.current = Math.max(0, dragDepth.current - 1);
+                if (dragDepth.current === 0) setDragging(false);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dragDepth.current = 0;
+                setDragging(false);
+                pickPfx(e.dataTransfer.files?.[0] || null);
+              }}
+              className={clsx(
+                'flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-6 text-center cursor-pointer transition-all',
+                dragging && 'border-emerald-500 bg-emerald-50',
+                !dragging && !file && 'border-gray-300 bg-gray-50/80 hover:border-emerald-400 hover:bg-emerald-50/40',
+                file && 'border-emerald-300 bg-emerald-50/50',
+              )}
+            >
+              <input
+                ref={inputRef}
+                type="file"
+                accept={PFX_ACCEPT}
+                className="hidden"
+                data-testid="pfx-drop-input"
+                onChange={(e) => pickPfx(e.target.files?.[0] || null)}
+              />
+              <FileUp className={clsx('h-6 w-6', dragging ? 'text-emerald-700' : 'text-gray-500')} />
+              {file ? (
+                <div className="flex items-center gap-2 text-sm text-emerald-900">
+                  <span className="font-medium">{file.name}</span>
+                  <button
+                    type="button"
+                    aria-label="Remover arquivo"
+                    className="rounded p-0.5 hover:bg-emerald-100"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      pickPfx(null);
+                      if (inputRef.current) inputRef.current.value = '';
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm font-medium text-gray-800">
+                    {dragging ? 'Solte o .pfx aqui' : 'Arraste o certificado A1 ou clique para selecionar'}
+                  </p>
+                  <p className="text-xs text-gray-500">Arquivos .pfx / .p12</p>
+                </>
+              )}
+            </div>
           </div>
           <label className="flex items-center gap-2 text-sm text-gray-700 md:col-span-2">
             <input type="checkbox" checked={serproMotor} onChange={(e) => setSerproMotor(e.target.checked)} />
             Empresa Simples Nacional — considerar Motor Serpro na apuração
           </label>
           <div className="md:col-span-2">
-            <Button type="submit" loading={uploadMutation.isPending}>
-              {cert ? 'Substituir certificado A1' : 'Cadastrar certificado A1'}
+            <Button type="submit" loading={uploadMutation.isPending} disabled={!file || !password}>
+              {cert ? 'Validar e substituir certificado A1' : 'Validar e cadastrar certificado A1'}
             </Button>
           </div>
         </form>
