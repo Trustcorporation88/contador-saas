@@ -266,7 +266,7 @@ export default function LancadorPage() {
     enabled:  !!currentCompanyId,
     staleTime: 60_000,
   });
-  const accounts = accountData?.data ?? [];
+  const accounts = accountData?.data ?? EMPTY_ACCOUNTS;
 
   // Form
   const form = useForm<FormValues>({
