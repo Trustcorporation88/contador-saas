@@ -165,12 +165,16 @@ function CompanyForm({
           setValue('phone', result.contato.telefone);
         }
         if (result.endereco) {
-          if (result.endereco.logradouro) setValue('address', result.endereco.logradouro);
+          const log = String(result.endereco.logradouro || '').trim();
+          if (log && !/^(undefined|null)$/i.test(log)) setValue('address', log);
           if (result.endereco.numero) setValue('endereco_numero', result.endereco.numero);
+          else setValue('endereco_numero', 'S/N');
           if (result.endereco.bairro) setValue('endereco_bairro', result.endereco.bairro);
           if (result.endereco.municipio) setValue('city', result.endereco.municipio);
           if (result.endereco.uf) setValue('state', result.endereco.uf);
           if (result.endereco.cep) setValue('postal_code', result.endereco.cep);
+          const ibge = String(result.endereco.codigo_municipio_ibge || '').replace(/\D/g, '');
+          if (ibge.length === 7) setValue('codigo_municipio', ibge);
         }
         setValue('crt', result.simples_nacional ? '1' : '3');
         

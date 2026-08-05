@@ -46,6 +46,15 @@ function novoItem(): ItemForm {
 const brl = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
+/** Evita gravar o texto literal "undefined"/"null" vindo de APIs mal mapeadas. */
+function cleanAddr(value?: string | null): string {
+  if (value == null) return '';
+  const trimmed = String(value).trim();
+  if (!trimmed) return '';
+  if (/^(undefined|null|n\/a|nao informado|não informado)$/i.test(trimmed)) return '';
+  return trimmed;
+}
+
 export default function NfeEmissaoPage() {
   const companyId = useAuthStore((s) => s.currentCompanyId) || '';
   const qc = useQueryClient();
@@ -128,10 +137,10 @@ export default function NfeEmissaoPage() {
                 : destIe || undefined,
           indicador_ie: Number(indicadorIe),
           endereco: {
-            logradouro,
-            numero,
-            bairro,
-            municipio,
+            logradouro: cleanAddr(logradouro),
+            numero: cleanAddr(numero) || 'S/N',
+            bairro: cleanAddr(bairro),
+            municipio: cleanAddr(municipio),
             uf: uf.toUpperCase(),
             cep: cep.replace(/\D/g, ''),
             cod_municipio: codMunicipio.replace(/\D/g, '') || undefined,
@@ -156,13 +165,18 @@ export default function NfeEmissaoPage() {
         if (!Number.isInteger(n) || n < 1) {
           throw new Error('Informe um número de NF-e válido.');
         }
-        // Edição de rascunho/pendente: verificação OK já basta (checkbox é pré-marcado).
-        // Emissão nova / salto de numeração: exige confirmação explícita.
+        // Reemissão (PENDENTE/RASCUNHO): se a verificação liberou o número
+        // (checkOk) e ele é reutilizável / sem lacuna, não exige clique extra
+        // no checkbox — o banner de edição já explica o fluxo.
+        // Emissão nova ou salto de numeração: exige checkbox explícito.
         const confirmado =
-          confirmarNumeroManual || (Boolean(editando) && checkOk && !checkSalto);
-        if (!confirmado || !checkOk) {
+          confirmarNumeroManual
+          || (Boolean(editando) && checkOk && (checkReutilizavel || !checkSalto));
+        if (!checkOk || !confirmado) {
           throw new Error(
-            'Valide o número/série no SEFAZ e confirme o checkbox antes de emitir.',
+            editando
+              ? 'Clique em Verificar no SEFAZ e confirme o checkbox antes de atualizar e reenviar.'
+              : 'Valide o número/série no SEFAZ e confirme o checkbox antes de emitir.',
           );
         }
         payload.numero = n;
@@ -210,8 +224,11 @@ export default function NfeEmissaoPage() {
   const validar = (): string | null => {
     if (destCpfCnpj.replace(/\D/g, '').length < 11) return 'Informe um CPF/CNPJ válido do destinatário.';
     if (!destNome.trim()) return 'Informe a razão social / nome do destinatário.';
-    if (!logradouro || !bairro || !municipio || !uf || !cep)
-      return 'Preencha o endereço completo do destinatário.';
+    const log = cleanAddr(logradouro);
+    const bai = cleanAddr(bairro);
+    const mun = cleanAddr(municipio);
+    if (!log || !bai || !mun || !uf || !cep)
+      return 'Preencha o endereço completo do destinatário (logradouro, bairro, município, UF e CEP).';
     if (Number(indicadorIe) === 1) {
       const ie = destIe.replace(/\D/g, '');
       if (!ie || /^0+$/.test(ie)) {
@@ -338,10 +355,10 @@ export default function NfeEmissaoPage() {
           setDestIe(ieDigits);
         }
       }
-      setLogradouro(end?.logradouro || '');
-      setNumero(end?.numero || '');
-      setBairro(end?.bairro || '');
-      setMunicipio(end?.municipio || '');
+      setLogradouro(cleanAddr(end?.logradouro));
+      setNumero(cleanAddr(end?.numero) || 'S/N');
+      setBairro(cleanAddr(end?.bairro));
+      setMunicipio(cleanAddr(end?.municipio));
       setUf((end?.uf || '').toUpperCase());
       setCep(end?.cep || '');
       setCodMunicipio(end?.cod_municipio || '');
@@ -382,10 +399,12 @@ export default function NfeEmissaoPage() {
         setCheckOk(result.disponivel);
         setCheckSalto(salto);
         setCheckReutilizavel(reutilizavel);
-        // Disponível e sem lacuna: confirma automaticamente na edição.
-        setConfirmarNumeroManual(Boolean(result.disponivel && !salto));
+        // Disponível (e sem lacuna) ou reutilizável: confirma automaticamente na edição.
+        setConfirmarNumeroManual(Boolean(result.disponivel && (!salto || reutilizavel)));
         if (result.disponivel) setErro('');
       } catch (e) {
+        // Em edição, se a verificação falhar por rede, ainda permite confirmar
+        // manualmente depois — mas deixa checkOk false até o usuário clicar em Verificar.
         setCheckOk(false);
         setCheckNumeracao(e instanceof Error ? e.message : 'Falha na verificação');
       } finally {
@@ -424,20 +443,39 @@ export default function NfeEmissaoPage() {
       if (data.tipo === 'cnpj') {
         if (data.razao_social) setDestNome(data.razao_social);
         if (data.contato?.email && !destEmail) setDestEmail(data.contato.email);
-        if (data.endereco?.logradouro) setLogradouro(data.endereco.logradouro);
-        if (data.endereco?.numero) setNumero(data.endereco.numero);
-        if (data.endereco?.bairro) setBairro(data.endereco.bairro);
-        if (data.endereco?.municipio) setMunicipio(data.endereco.municipio);
-        if (data.endereco?.uf) setUf(data.endereco.uf.toUpperCase());
-        if (data.endereco?.cep) setCep(data.endereco.cep);
-        setCnpjLookupInfo('CNPJ consultado: razão social e endereço preenchidos automaticamente.');
+        const end = data.endereco;
+        const log = cleanAddr(end?.logradouro);
+        const num = cleanAddr(end?.numero);
+        const bai = cleanAddr(end?.bairro);
+        const mun = cleanAddr(end?.municipio);
+        if (log) setLogradouro(log);
+        else setLogradouro('');
+        setNumero(num || 'S/N');
+        if (bai) setBairro(bai);
+        if (mun) setMunicipio(mun);
+        if (end?.uf) setUf(end.uf.toUpperCase());
+        if (end?.cep) setCep(end.cep);
+        const ibge = cleanAddr(end?.codigo_municipio_ibge).replace(/\D/g, '');
+        if (ibge.length === 7) setCodMunicipio(ibge);
+
+        if (!log || !bai || !mun || !end?.cep) {
+          setCnpjLookupInfo(
+            'CNPJ consultado, mas o endereço na Receita está incompleto. Preencha logradouro/número manualmente.',
+          );
+        } else {
+          setCnpjLookupInfo('CNPJ consultado: razão social e endereço preenchidos automaticamente.');
+        }
       } else {
         if (data.nome) setDestNome(data.nome);
         const end = data.endereco;
-        if (end?.logradouro) setLogradouro(end.logradouro);
-        if (end?.numero) setNumero(end.numero);
-        if (end?.bairro) setBairro(end.bairro);
-        if (end?.municipio) setMunicipio(end.municipio);
+        const log = cleanAddr(end?.logradouro);
+        const num = cleanAddr(end?.numero);
+        if (log) setLogradouro(log);
+        else setLogradouro('');
+        if (num) setNumero(num);
+        else if (log) setNumero('S/N');
+        if (end?.bairro) setBairro(cleanAddr(end.bairro));
+        if (end?.municipio) setMunicipio(cleanAddr(end.municipio));
         if (end?.uf) setUf(end.uf.toUpperCase());
         if (end?.cep) setCep(end.cep);
         setCnpjLookupInfo('CPF consultado: nome e endereço preenchidos quando disponíveis.');
@@ -752,9 +790,8 @@ export default function NfeEmissaoPage() {
                     setCheckOk(result.disponivel);
                     setCheckSalto(salto);
                     setCheckReutilizavel(reutilizavel);
-                    // Após verificar com sucesso: marca confirmação (exceto lacuna,
-                    // que exige atenção consciente do usuário).
-                    setConfirmarNumeroManual(Boolean(result.disponivel && !salto));
+                    // Disponível (sem lacuna) ou reutilizável: confirma automaticamente.
+                    setConfirmarNumeroManual(Boolean(result.disponivel && (!salto || reutilizavel)));
                     if (result.disponivel) setErro('');
                   } catch (e) {
                     setCheckOk(false);

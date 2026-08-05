@@ -31,7 +31,7 @@ const mockBrasilApiResponse = {
     descricao_situacao_cadastral:  'ATIVA',
     situacao_cadastral:            2,
     data_situacao_cadastral:       '2020-01-01',
-    descricao_tipo_logradouro:     'Rua',
+    descricao_tipo_de_logradouro:  'Rua',
     logradouro:                    'das Flores',
     numero:                        '100',
     complemento:                   'Sala 1',
@@ -39,6 +39,7 @@ const mockBrasilApiResponse = {
     municipio:                     'São Paulo',
     uf:                            'SP',
     cep:                           '01310100',
+    codigo_municipio_ibge:         3550308,
     ddd_telefone_1:                '11999999999',
     email:                         'contato@teste.com',
     porte:                         'MICRO EMPRESA',
@@ -186,6 +187,41 @@ describe('CnpjService', () => {
         cnae_principal: expect.objectContaining({ codigo: expect.any(Number) }),
         fonte:          expect.stringContaining('BrasilAPI'),
       });
+      expect(result.endereco.logradouro).toBe('Rua das Flores');
+      expect(result.endereco.logradouro).not.toMatch(/undefined/i);
+      expect(result.endereco.codigo_municipio_ibge).toBe('3550308');
+    });
+
+    it('não deve gerar logradouro "undefined" quando tipo/logradouro vêm vazios da BrasilAPI', async () => {
+      mockedAxios.get = jest.fn().mockImplementation((url: string) => {
+        if (url.includes('trustcorp')) {
+          return Promise.reject({ response: { status: 404 }, message: 'Not Found' });
+        }
+        if (url.includes('brasilapi')) {
+          return Promise.resolve({
+            data: {
+              ...mockBrasilApiResponse.data,
+              descricao_tipo_de_logradouro: '',
+              // Simula o bug: campo legado ausente (undefined) + logradouro vazio
+              descricao_tipo_logradouro: undefined,
+              logradouro: '',
+              numero: '',
+              bairro: 'PARQUE JULIO NOBREGA',
+              municipio: 'BAURU',
+              uf: 'SP',
+              cep: '17031450',
+            },
+          });
+        }
+        return Promise.reject(new Error(`URL não mockada: ${url}`));
+      });
+
+      CnpjService.invalidateCache('11222333000181');
+      const result = await CnpjService.lookup('11222333000181');
+      expect(result.endereco.logradouro).toBe('');
+      expect(result.endereco.logradouro).not.toContain('undefined');
+      expect(result.endereco.numero).toBe('');
+      expect(result.endereco.bairro).toBe('PARQUE JULIO NOBREGA');
     });
   });
 

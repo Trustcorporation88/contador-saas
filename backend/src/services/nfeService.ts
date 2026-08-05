@@ -476,11 +476,15 @@ export class NfeService {
       !jaEmitidaCapturada &&
       !jaEmitidaSefaz &&
       !foraDeOrdem;
-    const disponivel =
-      disponivelBase &&
-      (sefaz.disponivel === true ||
-        sefaz.disponivel === null ||
-        sefaz.disponivel === undefined);
+    // RASCUNHO/PENDENTE: liberar reemissão mesmo se a consulta SEFAZ vier
+    // ambígua/offline — a autorização real confirma. Só bloqueia se a SEFAZ
+    // confirmar que a nota já foi autorizada (ja_emitida_sefaz === true).
+    const disponivel = localReutilizavel
+      ? !jaEmitidaSefaz
+      : disponivelBase &&
+        (sefaz.disponivel === true ||
+          sefaz.disponivel === null ||
+          sefaz.disponivel === undefined);
 
     let mensagem: string;
     if (localReutilizavel) {
