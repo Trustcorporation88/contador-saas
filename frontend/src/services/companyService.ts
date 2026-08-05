@@ -79,6 +79,7 @@ export interface CnpjLookupResult {
     municipio: string;
     uf: string;
     cep: string;
+    codigo_municipio_ibge?: string;
   };
   contato: {
     telefone: string;

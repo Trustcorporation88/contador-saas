@@ -31,6 +31,8 @@ export interface CnpjLookupResult {
     municipio: string;
     uf: string;
     cep: string;
+    /** Código IBGE do município (7 dígitos), quando disponível */
+    codigo_municipio_ibge?: string;
   };
   contato: {
     telefone: string;
@@ -78,7 +80,10 @@ interface BrasilApiCnpjResponse {
   nome_fantasia: string;
   descricao_situacao_cadastral: string;
   situacao_cadastral: number;
-  descricao_tipo_logradouro: string;
+  /** Campo oficial da BrasilAPI (com "de") */
+  descricao_tipo_de_logradouro?: string;
+  /** Alias legado / mocks */
+  descricao_tipo_logradouro?: string;
   logradouro: string;
   numero: string;
   complemento: string;
@@ -97,6 +102,7 @@ interface BrasilApiCnpjResponse {
   capital_social: number;
   opcao_pelo_simples: boolean;
   opcao_pelo_mei: boolean;
+  codigo_municipio_ibge?: string | number;
 }
 
 function sanitizeDigits(value: string): string {
@@ -105,9 +111,33 @@ function sanitizeDigits(value: string): string {
 
 function pickString(...values: unknown[]): string {
   for (const value of values) {
-    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      // APIs às vezes serializam null/undefined como texto literal
+      if (!trimmed) continue;
+      if (/^(undefined|null|n\/a|nao informado|não informado)$/i.test(trimmed)) continue;
+      return trimmed;
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return String(value);
+    }
   }
   return '';
+}
+
+/** Monta logradouro a partir de tipo + nome, sem gerar o texto "undefined". */
+function composeLogradouro(...parts: unknown[]): string {
+  const cleaned = parts
+    .map((p) => pickString(p))
+    .filter(Boolean);
+  // Evita duplicar tipo se já veio no nome (ex.: "RUA RUA DAS FLORES")
+  if (cleaned.length >= 2) {
+    const [tipo, ...rest] = cleaned;
+    const nome = rest.join(' ').trim();
+    if (nome.toUpperCase().startsWith(tipo.toUpperCase() + ' ')) return nome;
+    return `${tipo} ${nome}`.trim();
+  }
+  return cleaned.join(' ').trim();
 }
 
 function pickNumber(...values: unknown[]): number {
@@ -134,6 +164,16 @@ function pickBoolean(...values: unknown[]): boolean {
 }
 
 function mapBrasilApiResponse(data: BrasilApiCnpjResponse, cached: boolean): CnpjLookupResult {
+  // BrasilAPI usa "descricao_tipo_de_logradouro" (com "de"); alguns mocks antigos usam sem.
+  const tipoLogradouro = pickString(
+    data.descricao_tipo_de_logradouro,
+    data.descricao_tipo_logradouro,
+  );
+  const nomeLogradouro = pickString(data.logradouro);
+  const codigoIbge = pickString(
+    data.codigo_municipio_ibge,
+  );
+
   return {
     cnpj: data.cnpj,
     razao_social: data.razao_social,
@@ -141,20 +181,21 @@ function mapBrasilApiResponse(data: BrasilApiCnpjResponse, cached: boolean): Cnp
     situacao: data.descricao_situacao_cadastral,
     ativa: data.situacao_cadastral === 2,
     endereco: {
-      logradouro: `${data.descricao_tipo_logradouro} ${data.logradouro}`.trim(),
-      numero: data.numero,
-      complemento: data.complemento,
-      bairro: data.bairro,
-      municipio: data.municipio,
-      uf: data.uf,
-      cep: data.cep,
+      logradouro: composeLogradouro(tipoLogradouro, nomeLogradouro),
+      numero: pickString(data.numero),
+      complemento: pickString(data.complemento),
+      bairro: pickString(data.bairro),
+      municipio: pickString(data.municipio),
+      uf: pickString(data.uf),
+      cep: pickString(data.cep),
+      codigo_municipio_ibge: codigoIbge || undefined,
     },
     contato: {
-      telefone: data.ddd_telefone_1,
-      email: data.email,
+      telefone: pickString(data.ddd_telefone_1),
+      email: pickString(data.email),
     },
-    porte: data.descricao_porte,
-    natureza_juridica: data.natureza_juridica,
+    porte: pickString(data.descricao_porte),
+    natureza_juridica: pickString(data.natureza_juridica),
     cnae_principal: { codigo: data.cnae_fiscal, descricao: data.cnae_fiscal_descricao },
     cnaes_secundarios: data.cnaes_secundarios ?? [],
     socios: (data.qsa ?? []).map((s) => ({ nome: s.nome_socio, qualificacao: s.qualificacao_socio })),
@@ -196,13 +237,38 @@ function mapTrustcorpCnpjResponse(raw: unknown, documento: string, cached: boole
     situacao: pickString(data?.situacao, data?.status, data?.descricao_situacao_cadastral, data?.descricaoSituacaoCadastral),
     ativa: pickBoolean(data?.ativa, data?.ativo, data?.situacao === 'ATIVA', data?.status === 'ATIVA'),
     endereco: {
-      logradouro: pickString(endereco?.logradouro, endereco?.logradouroCompleto, data?.logradouro, data?.logradouroCompleto, data?.logradouroCompletoEndereco),
+      logradouro: composeLogradouro(
+        pickString(
+          endereco?.tipo_logradouro,
+          endereco?.tipoLogradouro,
+          endereco?.descricao_tipo_logradouro,
+          endereco?.descricao_tipo_de_logradouro,
+          data?.descricao_tipo_de_logradouro,
+          data?.descricao_tipo_logradouro,
+        ),
+        pickString(
+          endereco?.logradouro,
+          endereco?.logradouroCompleto,
+          endereco?.rua,
+          data?.logradouro,
+          data?.logradouroCompleto,
+          data?.logradouroCompletoEndereco,
+          data?.rua,
+        ),
+      ),
       numero: pickString(endereco?.numero, data?.numero),
       complemento: pickString(endereco?.complemento, data?.complemento),
       bairro: pickString(endereco?.bairro, data?.bairro, data?.bairroCidade),
       municipio: pickString(endereco?.municipio, data?.municipio, data?.cidade, data?.municipioDescricao),
       uf: pickString(endereco?.uf, data?.uf, data?.estado),
       cep: pickString(endereco?.cep, data?.cep),
+      codigo_municipio_ibge: pickString(
+        endereco?.codigo_municipio_ibge,
+        endereco?.codigoMunicipioIbge,
+        data?.codigo_municipio_ibge,
+        data?.codigoMunicipioIbge,
+        data?.codigo_municipio,
+      ) || undefined,
     },
     contato: {
       telefone: pickString(contato?.telefone, contato?.celular, data?.telefone, data?.ddd_telefone_1, data?.dddTelefone),
@@ -365,6 +431,9 @@ export class CnpjService {
               municipio: trustcorpResult.endereco.municipio || brasilResult.endereco.municipio,
               uf: trustcorpResult.endereco.uf || brasilResult.endereco.uf,
               cep: trustcorpResult.endereco.cep || brasilResult.endereco.cep,
+              codigo_municipio_ibge:
+                trustcorpResult.endereco.codigo_municipio_ibge
+                || brasilResult.endereco.codigo_municipio_ibge,
             },
             contato: {
               telefone: trustcorpResult.contato.telefone || brasilResult.contato.telefone,
