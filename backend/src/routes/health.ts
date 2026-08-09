@@ -5,25 +5,26 @@
 
 import { Router } from 'express';
 import { HealthController } from '../controllers/healthController';
+import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
 
 /**
  * GET /api/v1/health
- * Health check básico da aplicação
+ * Health check básico da aplicação — público, é o alvo do healthcheck do deploy.
  */
 router.get('/', HealthController.health);
 
 /**
  * GET /api/v1/health/cache
- * Health check detalhado do sistema de cache Redis
- */
-router.get('/cache', HealthController.cacheHealth);
-
-/**
  * GET /api/v1/health/database
- * Health check do banco de dados PostgreSQL
+ *
+ * Detalhes de infraestrutura (latência do banco, tamanho do pool, memória do
+ * Redis, contagem de tokens revogados) eram públicos e serviam de mapa para
+ * reconhecimento. Passam a exigir autenticação; o healthcheck do deploy usa
+ * `/health` e `/api/v1/health`, que continuam abertos.
  */
-router.get('/database', HealthController.databaseHealth);
+router.get('/cache', authenticateToken, HealthController.cacheHealth);
+router.get('/database', authenticateToken, HealthController.databaseHealth);
 
 export default router;

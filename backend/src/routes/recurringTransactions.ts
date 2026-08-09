@@ -6,12 +6,20 @@
 
 import express, { Router } from 'express';
 import { RecurringTransactionController } from '../controllers/recurringTransactionController';
+import { authenticateToken } from '../middleware/auth';
+import { validateTenantAccess } from '../middleware/multiTenant';
 
 /**
  * Criar e configurar router de lançamentos recorrentes
  */
 export const createRecurringTransactionsRouter = (): Router => {
   const router = express.Router({ mergeParams: true });
+
+  // Sem validateTenantAccess, os controllers usavam o :companyId da URL sem
+  // checar se o usuário pertence à empresa: qualquer usuário autenticado lia e
+  // alterava os lançamentos recorrentes de qualquer outra empresa. As rotas
+  // irmãs (accounts, journal-entries, nfe, ...) já aplicavam os dois.
+  router.use(authenticateToken, validateTenantAccess);
 
   /**
    * POST /companies/:companyId/recurring-transactions
