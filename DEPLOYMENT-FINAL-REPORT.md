@@ -345,7 +345,7 @@ curl https://contador-saas-api.onrender.com/api/v1/health
 **Admin Login**:
 ```bash
 curl -X POST https://contador-saas-api.onrender.com/api/v1/auth/login \
-  -d '{"email":"admin@procontador.com.br","password":"ProContador@2026"}'
+  -d '{"email":"admin@procontador.com.br","password":"<ADMIN_PASSWORD>"}'
 # Expected: 200 with accessToken
 ```
 

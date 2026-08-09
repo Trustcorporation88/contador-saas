@@ -263,7 +263,7 @@ AFTER BACKEND DEPLOYMENT (T+5 min):
   
   2. Test admin login:
      curl -X POST https://contador-saas-api.onrender.com/api/v1/auth/login \
-       -d '{"email":"admin@procontador.com.br","password":"ProContador@2026"}'
+       -d "{\"email\":\"admin@procontador.com.br\",\"password\":\"$ADMIN_PASSWORD\"}"
      → Expected: 200 with accessToken
 
 AFTER FRONTEND DEPLOYMENT (T+8 min):

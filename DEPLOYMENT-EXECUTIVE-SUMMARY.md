@@ -205,7 +205,7 @@ curl https://procontador.com.br/login
 # 1. Login with bootstrap credentials
 curl -X POST https://contador-saas-api.onrender.com/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email": "admin@procontador.com.br", "password": "ProContador@2026"}'
+  -d '{"email": "admin@procontador.com.br", "password": "<ADMIN_PASSWORD>"}'
 → Expected: 200 { accessToken, refreshToken }
 
 # 2. Access admin panel at https://procontador.com.br

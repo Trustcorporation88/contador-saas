@@ -92,12 +92,17 @@ test_authentication() {
     
     log_info "Testing admin bootstrap login..."
     
+    if [ -z "$ADMIN_PASSWORD" ]; then
+        log_error "Defina ADMIN_PASSWORD no ambiente para rodar o teste de login."
+        return 1
+    fi
+
     response=$(curl -s -X POST "$API_BASE/auth/login" \
         -H "Content-Type: application/json" \
-        -d '{
-            "email": "admin@procontador.com.br",
-            "password": "ProContador@2026"
-        }')
+        -d "{
+            \"email\": \"${ADMIN_EMAIL:-admin@procontador.com.br}\",
+            \"password\": \"$ADMIN_PASSWORD\"
+        }")
     
     # Check if response contains token
     if echo "$response" | grep -q "accessToken"; then

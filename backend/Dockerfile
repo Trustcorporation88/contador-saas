@@ -15,7 +15,7 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-RUN apk add --no-cache dumb-init python3 py3-pip \
+RUN apk add --no-cache dumb-init python3 py3-pip tzdata \
     libxml2 libxslt openssl \
     && apk add --no-cache --virtual .py-build-deps \
     python3-dev gcc musl-dev libffi-dev openssl-dev libxml2-dev libxslt-dev \
@@ -38,6 +38,10 @@ ENV FISCAL_XML_ROOT=/app/data/fiscal-xmls
 ENV FISCAL_CERTS_DIR=/app/data/fiscal-certs
 ENV PYTHON_BIN=python3
 ENV NODE_ENV=production
+# Sem TZ o container roda em UTC: a NF-e emitida depois das 21h (horário de
+# Brasília) sai com dhEmi do dia seguinte, e a AAMM da chave de acesso pode
+# virar o mês na última noite. O horário fiscal precisa ser o local.
+ENV TZ=America/Sao_Paulo
 
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001 && \

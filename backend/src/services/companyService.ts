@@ -156,32 +156,27 @@ export class CompanyService {
       // Auto-associar admin se fornecido
       if (adminUserId) {
         const companyUserId = randomUUID();
-        try {
-          await trx('company_users').insert({
-            id: companyUserId,
-            user_id: adminUserId,
-            company_id: companyId,
-            role: 'admin',
-            permissions: JSON.stringify(['*']),
-            is_active: true,
-            created_at: now,
-            updated_at: now,
-          });
-        } catch (assocErr) {
-          // Sem permissions column / schema legado: tenta mínimo
-          logger.warn('company_users insert com permissions falhou; tentando sem permissions', {
-            error: assocErr instanceof Error ? assocErr.message : String(assocErr),
-          });
-          await trx('company_users').insert({
-            id: companyUserId,
-            user_id: adminUserId,
-            company_id: companyId,
-            role: 'admin',
-            is_active: true,
-            created_at: now,
-            updated_at: now,
+        // Checa a coluna ANTES de inserir. No PostgreSQL, um INSERT que falha
+        // aborta a transação inteira: o try//catch anterior tentava um segundo
+        // insert que sempre estourava "current transaction is aborted", ou
+        // seja, o fallback para schema legado nunca funcionou.
+        const temPermissions = await trx.schema.hasColumn('company_users', 'permissions');
+        if (!temPermissions) {
+          logger.warn('company_users sem coluna permissions; associando admin sem permissões', {
+            companyId,
           });
         }
+
+        await trx('company_users').insert({
+          id: companyUserId,
+          user_id: adminUserId,
+          company_id: companyId,
+          role: 'admin',
+          ...(temPermissions ? { permissions: JSON.stringify(['*']) } : {}),
+          is_active: true,
+          created_at: now,
+          updated_at: now,
+        });
 
         await this.auditAction(adminUserId, companyId, 'CREATE', 'Company created', true, trx);
       }

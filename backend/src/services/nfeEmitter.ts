@@ -67,6 +67,16 @@ function getPythonBin(): string {
   return process.env.PYTHON_BIN || (process.env.NODE_ENV === 'production' ? 'python3' : 'python');
 }
 
+/**
+ * Teto de tempo para os processos Python que falam com a SEFAZ.
+ * Sem isso, uma indisponibilidade da SEFAZ deixava o processo filho pendurado
+ * e a requisição HTTP aberta indefinidamente, esgotando o pool de conexões.
+ */
+function getSefazTimeoutMs(envVar: string, padrao: number): number {
+  const bruto = Number(process.env[envVar]);
+  return Number.isFinite(bruto) && bruto > 0 ? bruto : padrao;
+}
+
 function digits(value: unknown): string {
   return String(value ?? '').replace(/\D/g, '');
 }
@@ -145,16 +155,21 @@ interface NfeItemRow {
   aliquota_cofins?: number | string;
 }
 
-function validarEmitente(company: CompanyRow): void {
+export function validarEmitente(company: CompanyRow): void {
   const faltando: string[] = [];
   if (!digits(company.cnpj)) faltando.push('CNPJ');
   if (!company.legal_name) faltando.push('razão social');
   if (!company.address) faltando.push('logradouro');
   if (!company.endereco_bairro) faltando.push('bairro');
   if (!company.city) faltando.push('município');
-  if (!company.state) faltando.push('UF');
-  if (!digits(company.postal_code)) faltando.push('CEP');
-  if (!digits(company.codigo_municipio)) faltando.push('código IBGE do município');
+  if (String(company.state ?? '').trim().length !== 2) faltando.push('UF (sigla de 2 letras)');
+  if (digits(company.postal_code).length !== 8) faltando.push('CEP (8 dígitos)');
+  // O código do município tem que ter 7 dígitos (IBGE). Um código de 4 dígitos
+  // (o da Receita, que algumas consultas de CNPJ devolvem) passava a validação
+  // antiga de "não vazio" e só era recusado pela SEFAZ, com mensagem obscura.
+  if (digits(company.codigo_municipio).length !== 7) {
+    faltando.push('código IBGE do município (7 dígitos)');
+  }
   if (faltando.length > 0) {
     throw Object.assign(
       new Error(
@@ -165,7 +180,7 @@ function validarEmitente(company: CompanyRow): void {
   }
 }
 
-function buildPayload(
+export function buildPayload(
   company: CompanyRow,
   nfe: NfeRow,
   itens: NfeItemRow[],
@@ -185,6 +200,22 @@ function buildPayload(
     }
   }
   const destEndereco = (dest.endereco as Record<string, unknown>) || {};
+
+  // Município do destinatário: o fallback para o código do emitente só faz
+  // sentido dentro da mesma UF. Em UF diferente, a SEFAZ rejeita o cMun por não
+  // pertencer à UF informada — melhor recusar aqui, com mensagem clara.
+  const destUf = String((destEndereco.uf as string) || company.state || '').toUpperCase();
+  const emitUf = String(company.state || '').toUpperCase();
+  const destCodMunicipio = digits(destEndereco.cod_municipio);
+  if (destUf !== emitUf && destCodMunicipio.length !== 7) {
+    throw Object.assign(
+      new Error(
+        `Destinatário em ${destUf}, fora da UF do emitente (${emitUf}): informe o código IBGE `
+        + 'do município do destinatário (7 dígitos) para a SEFAZ aceitar a nota.',
+      ),
+      { status: 422 },
+    );
+  }
 
   // Normaliza IE do destinatário (evita cStat 232 com IE vazia/0000).
   let indicadorIe = Number(dest.indicador_ie ?? 9);
@@ -241,8 +272,8 @@ function buildPayload(
       numero: destEndereco.numero || 'S/N',
       bairro: destEndereco.bairro || 'NAO INFORMADO',
       municipio: destEndereco.municipio || company.city,
-      cod_municipio: digits(destEndereco.cod_municipio) || digits(company.codigo_municipio),
-      uf: (destEndereco.uf as string) || company.state,
+      cod_municipio: destCodMunicipio || digits(company.codigo_municipio),
+      uf: destUf,
       cep: digits(destEndereco.cep) || digits(company.postal_code),
     },
     itens: itens.map((it) => {
@@ -277,9 +308,13 @@ function spawnEmitir(payloadFile: string): Promise<NfeEmissionResult> {
   const scriptPath = path.join(automationDir, 'emitir_nfe.py');
   const python = getPythonBin();
 
+  const timeoutMs = getSefazTimeoutMs('NFE_EMISSION_TIMEOUT_MS', 180_000);
+
   return new Promise((resolve) => {
     const child = spawn(python, [scriptPath, payloadFile], {
       cwd: automationDir,
+      timeout: timeoutMs,
+      killSignal: 'SIGKILL',
       env: {
         ...process.env,
         DATABASE_URL: envConfig.database.url,
@@ -303,14 +338,18 @@ function spawnEmitir(payloadFile: string): Promise<NfeEmissionResult> {
       });
     });
 
-    child.on('close', () => {
+    child.on('close', (_code, signal) => {
       const line = stdout.split('\n').find((l) => l.startsWith('NFE_RESULT:'));
       if (!line) {
+        const expirou = signal === 'SIGKILL' || signal === 'SIGTERM';
         resolve({
           ok: false,
           ambiente: getAmbiente(),
           cStat: '',
-          motivo: 'Motor de emissão não retornou resultado. ' + (stderr.slice(-400) || ''),
+          motivo: expirou
+            ? `Sem resposta da SEFAZ em ${Math.round(timeoutMs / 1000)}s. A nota pode ter sido `
+              + 'transmitida: consulte a numeração antes de reenviar, para não emitir em duplicidade.'
+            : 'Motor de emissão não retornou resultado. ' + (stderr.slice(-400) || ''),
           protocolo: '',
           chave: '',
         });
@@ -409,9 +448,13 @@ function spawnCancelar(payloadFile: string): Promise<NfeCancelamentoResult> {
   const scriptPath = path.join(automationDir, 'cancelar_nfe.py');
   const python = getPythonBin();
 
+  const timeoutMs = getSefazTimeoutMs('NFE_CANCEL_TIMEOUT_MS', 120_000);
+
   return new Promise((resolve) => {
     const child = spawn(python, [scriptPath, payloadFile], {
       cwd: automationDir,
+      timeout: timeoutMs,
+      killSignal: 'SIGKILL',
       env: {
         ...process.env,
         DATABASE_URL: envConfig.database.url,
@@ -434,14 +477,18 @@ function spawnCancelar(payloadFile: string): Promise<NfeCancelamentoResult> {
       });
     });
 
-    child.on('close', () => {
+    child.on('close', (_code, signal) => {
       const line = stdout.split('\n').find((l) => l.startsWith('NFE_CANCEL_RESULT:'));
       if (!line) {
+        const expirou = signal === 'SIGKILL' || signal === 'SIGTERM';
         resolve({
           ok: false,
           ambiente: getAmbiente(),
           cStat: '',
-          motivo: 'Motor de cancelamento não retornou resultado. ' + (stderr.slice(-400) || ''),
+          motivo: expirou
+            ? `Sem resposta da SEFAZ em ${Math.round(timeoutMs / 1000)}s ao cancelar. `
+              + 'Consulte a situação da nota antes de tentar de novo.'
+            : 'Motor de cancelamento não retornou resultado. ' + (stderr.slice(-400) || ''),
           protocolo: '',
         });
         return;
@@ -610,9 +657,12 @@ export async function verificarNumeracaoSefaz(opts: {
       );
     }
 
+    const timeoutMs = getSefazTimeoutMs('NFE_CHECK_TIMEOUT_MS', 60_000);
     const result = await new Promise<NumeracaoCheckResult>((resolve) => {
       const child = spawn(getPythonBin(), [scriptPath, payloadFile], {
         cwd: automationDir,
+        timeout: timeoutMs,
+        killSignal: 'SIGKILL',
         env: process.env,
       });
       let stdout = '';
@@ -623,18 +673,33 @@ export async function verificarNumeracaoSefaz(opts: {
       child.stderr.on('data', (d) => {
         stderr += d.toString();
       });
-      child.on('close', () => {
+      child.on('error', (error) => {
+        resolve({
+          ok: false,
+          sefaz_online: false,
+          ja_emitida_sefaz: null,
+          cStat: '',
+          motivo: `Falha ao executar o verificador de numeração: ${error.message}`,
+          fonte: 'erro',
+          serie: opts.serie,
+          numero: opts.numero,
+        });
+      });
+      child.on('close', (_code, signal) => {
         const line = stdout
           .split('\n')
           .map((l) => l.trim())
           .find((l) => l.startsWith('NFE_CHECK:'));
         if (!line) {
+          const expirou = signal === 'SIGKILL' || signal === 'SIGTERM';
           resolve({
             ok: false,
             sefaz_online: false,
             ja_emitida_sefaz: null,
             cStat: '',
-            motivo: 'Motor de verificação não retornou resultado. ' + (stderr.slice(-400) || ''),
+            motivo: expirou
+              ? `Consulta de numeração sem resposta em ${Math.round(timeoutMs / 1000)}s (SEFAZ lenta ou indisponível).`
+              : 'Motor de verificação não retornou resultado. ' + (stderr.slice(-400) || ''),
             fonte: 'erro',
             serie: opts.serie,
             numero: opts.numero,

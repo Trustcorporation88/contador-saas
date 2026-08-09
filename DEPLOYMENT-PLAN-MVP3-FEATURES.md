@@ -165,13 +165,13 @@ curl -X POST https://contador-saas-api.onrender.com/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "admin@procontador.com.br",
-    "password": "ProContador@2026"
+    "password": "<ADMIN_PASSWORD>"
   }'
 # Expected: 200 OK, { accessToken, refreshToken, user: {...} }
 
 # Verificar em produção: https://procontador.com.br
 # 1. Abrir login
-# 2. Inserir admin@procontador.com.br / ProContador@2026
+# 2. Inserir admin@procontador.com.br / <ADMIN_PASSWORD>
 # 3. Deve autenticar e redirecionar para dashboard
 # 4. Dashboard deve carregar sem erros JS
 ```

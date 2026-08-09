@@ -110,6 +110,15 @@ export async function down(knex: Knex): Promise<void> {
  * Seed data for testing (opcional)
  */
 export async function seed(knex: Knex): Promise<void> {
+  // Este seed cria um usuário 'admin' com senha conhecida (Test@123456) e o
+  // papel 'admin' libera qualquer empresa no middleware multi-tenant. Rodar
+  // isso em produção seria uma porta aberta para toda a base.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'Seed de usuário de teste não roda em produção (criaria um admin com senha conhecida).',
+    );
+  }
+
   // Seed com usuário de teste
   const userExists = await knex('users').where('email', 'test@example.com').first();
 

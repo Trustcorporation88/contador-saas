@@ -33,6 +33,38 @@ def _digits(value) -> str:
     return "".join(ch for ch in str(value or "") if ch.isdigit())
 
 
+def _ratear(total: Decimal, brutos: list[Decimal]) -> list[Decimal]:
+    """Rateia um valor de nota (frete/desconto) entre os itens.
+
+    A NF-e 4.00 não tem campo de frete/desconto "da nota": vFrete e vDesc do
+    total (ICMSTot) são o SOMATÓRIO dos vFrete/vDesc dos itens. Sem o rateio,
+    o valor informado pelo usuário simplesmente não entra no documento fiscal
+    e o vNF sai diferente do total pago.
+
+    O rateio é proporcional ao valor bruto de cada item; o resíduo de
+    arredondamento vai para o último item, para a soma fechar exatamente com
+    o total informado (senão a SEFAZ rejeita por divergência de somatório).
+    """
+    quantidade = len(brutos)
+    if quantidade == 0 or total <= 0:
+        return [Decimal("0")] * quantidade
+
+    soma = sum(brutos)
+    partes: list[Decimal] = []
+    acumulado = Decimal("0")
+    for indice in range(quantidade):
+        if indice == quantidade - 1:
+            parte = total - acumulado
+        elif soma > 0:
+            parte = _dec(total * brutos[indice] / soma)
+            acumulado += parte
+        else:
+            parte = _dec(total / quantidade)
+            acumulado += parte
+        partes.append(parte)
+    return partes
+
+
 def _normalizar_ie_destinatario(dest: dict) -> tuple[int, str, bool]:
     """Normaliza indIEDest + IE para evitar rejeição SEFAZ 232.
 
@@ -153,16 +185,34 @@ def _construir_nota(payload: dict):
         totais_tributos_aproximado=_dec(payload.get("tributos_aproximado", 0)),
     )
 
-    total_produtos = Decimal("0")
-    for item in itens:
-        qtd = Decimal(str(item["quantidade"]))
-        vun = Decimal(str(item["valor_unitario"]))
-        bruto = _dec(qtd * vun)
-        total_produtos += bruto
+    quantidades = [Decimal(str(item["quantidade"])) for item in itens]
+    unitarios = [Decimal(str(item["valor_unitario"])) for item in itens]
+    brutos = [_dec(q * v) for q, v in zip(quantidades, unitarios)]
+    total_produtos = sum(brutos, Decimal("0"))
+
+    valor_frete = _dec(payload.get("frete", 0))
+    valor_desconto = _dec(payload.get("desconto", 0))
+    if valor_desconto > total_produtos + valor_frete:
+        raise ValueError(
+            "Desconto informado (R$ {:.2f}) é maior que o total dos produtos mais o frete "
+            "(R$ {:.2f}).".format(valor_desconto, total_produtos + valor_frete)
+        )
+
+    fretes_item = _ratear(valor_frete, brutos)
+    descontos_item = _ratear(valor_desconto, brutos)
+
+    for indice, item in enumerate(itens):
+        qtd = quantidades[indice]
+        vun = unitarios[indice]
+        bruto = brutos[indice]
+        frete_item = fretes_item[indice]
+        desconto_item = descontos_item[indice]
+        # Base de cálculo da operação (MOC NF-e): vProd + vFrete - vDesc.
+        base = bruto + frete_item - desconto_item
 
         icms_mod = str(item.get("icms_modalidade", "102"))
         icms_aliq = Decimal(str(item.get("icms_aliquota", 0)))
-        icms_bc = bruto if icms_mod in ("00", "10", "20", "70") else Decimal("0")
+        icms_bc = base if icms_mod in ("00", "10", "20", "70") else Decimal("0")
         icms_valor = _dec(icms_bc * icms_aliq / 100)
 
         # PIS/COFINS: CST NT (04–09) NÃO leva vPIS/vCOFINS no item; o pynfe ainda
@@ -178,8 +228,8 @@ def _construir_nota(payload: dict):
             pis_bc = Decimal("0")
             pis_valor = Decimal("0")
         else:
-            pis_bc = bruto
-            pis_valor = _dec(bruto * pis_aliq / 100)
+            pis_bc = base
+            pis_valor = _dec(base * pis_aliq / 100)
 
         cofins_aliq = Decimal(str(item.get("cofins_aliquota", 0) or 0))
         cofins_mod = str(item.get("cofins_modalidade") or "").strip()
@@ -190,8 +240,8 @@ def _construir_nota(payload: dict):
             cofins_bc = Decimal("0")
             cofins_valor = Decimal("0")
         else:
-            cofins_bc = bruto
-            cofins_valor = _dec(bruto * cofins_aliq / 100)
+            cofins_bc = base
+            cofins_valor = _dec(base * cofins_aliq / 100)
 
         # SEFAZ rejeita cEAN/cEANTrib vazios (cStat 883). Sem código de barras
         # o literal obrigatório é "SEM GTIN" (NT 2017.001 / NT 2021.003).
@@ -212,6 +262,8 @@ def _construir_nota(payload: dict):
             quantidade_tributavel=qtd,
             valor_unitario_tributavel=vun,
             valor_total_bruto=bruto,
+            total_frete=frete_item,
+            desconto=desconto_item,
             compoe_valor_total=1,
             ind_total=1,
             icms_modalidade=icms_mod,
@@ -233,8 +285,6 @@ def _construir_nota(payload: dict):
             cofins_valor=cofins_valor,
         )
 
-    valor_frete = _dec(payload.get("frete", 0))
-    valor_desconto = _dec(payload.get("desconto", 0))
     valor_pago = _dec(total_produtos + valor_frete - valor_desconto)
 
     nota.adicionar_pagamento(
