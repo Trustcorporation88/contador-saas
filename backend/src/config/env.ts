@@ -125,8 +125,14 @@ const envSchema = joi.object({
   DATABASE_IDLE_TIMEOUT_MILLIS: joi.number().default(30000),
   DATABASE_CONNECTION_TIMEOUT_MILLIS: joi.number().default(10000),
   JWT_SECRET: joi.string().required(),
-  JWT_REFRESH_SECRET: joi.string().default(joi.ref('JWT_SECRET')),
-  JWT_EXPIRY: joi.string().default('1h'),
+  JWT_REFRESH_SECRET: joi.string().optional(),
+  JWT_EXPIRY: joi.string().optional(),
+  // Nomes usados nos arquivos de deploy (render.yaml, docker-compose). Como o
+  // Joi roda com stripUnknown, quem configurasse REFRESH_TOKEN_SECRET tinha o
+  // valor descartado em silêncio e o refresh token acabava assinado com o
+  // mesmo segredo do access token.
+  REFRESH_TOKEN_SECRET: joi.string().optional(),
+  JWT_EXPIRES_IN: joi.string().optional(),
   JWT_REFRESH_EXPIRY: joi.string().default('7d'),
   JWT_ALGORITHM: joi.string().valid('HS256', 'HS512').default('HS256'),
   CORS_ORIGIN: joi.string().default('http://localhost:3000'),
@@ -190,6 +196,11 @@ if (error) {
   throw new Error(`Environment validation failed: ${error.message}`);
 }
 
+/** Nome canônico primeiro; alias de deploy como fallback. */
+const jwtRefreshSecret: string =
+  envVars.JWT_REFRESH_SECRET || envVars.REFRESH_TOKEN_SECRET || envVars.JWT_SECRET;
+const jwtExpiry: string = envVars.JWT_EXPIRY || envVars.JWT_EXPIRES_IN || '1h';
+
 /**
  * Export validated configuration object
  */
@@ -214,8 +225,8 @@ export const envConfig: EnvConfig = {
 
   jwt: {
     secret: envVars.JWT_SECRET,
-    refreshSecret: envVars.JWT_REFRESH_SECRET,
-    expiry: envVars.JWT_EXPIRY,
+    refreshSecret: jwtRefreshSecret,
+    expiry: jwtExpiry,
     refreshExpiry: envVars.JWT_REFRESH_EXPIRY,
     algorithm: envVars.JWT_ALGORITHM,
   },

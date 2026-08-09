@@ -76,8 +76,17 @@ export async function applyCompanyContext(
   } catch (error) {
     logger.error('applyCompanyContext error', {
       error: (error as Error).message,
+      userId: req.user?.id,
     });
-    next();
+    // Seguir em frente aqui não expõe outra empresa (a troca só acontece na
+    // linha acima, depois da validação), mas serve os dados da empresa ANTERIOR
+    // como se fossem os da empresa que o usuário pediu. Num sistema contábil
+    // isso leva o usuário a lançar na empresa errada acreditando ter trocado.
+    res.status(503).json({
+      success: false,
+      error: 'Não foi possível confirmar a troca de empresa. Tente novamente.',
+      code: 'COMPANY_CONTEXT_UNAVAILABLE',
+    });
   }
 }
 

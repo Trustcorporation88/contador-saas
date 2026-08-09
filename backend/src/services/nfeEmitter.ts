@@ -81,8 +81,17 @@ function digits(value: unknown): string {
   return String(value ?? '').replace(/\D/g, '');
 }
 
+/**
+ * Grava o payload do processo Python. O arquivo carrega a senha do certificado
+ * A1 em texto claro, então vai com permissão 0600 — o writeJson padrão criava
+ * com 0644, legível por qualquer usuário do sistema.
+ */
+async function escreverPayloadSeguro(caminho: string, payload: unknown): Promise<void> {
+  await fs.writeFile(caminho, JSON.stringify(payload), { mode: 0o600 });
+}
+
 /** CRT a partir do regime tributário da empresa. */
-function crtFromRegime(taxRegime: string | null | undefined, explicit?: string | null): string {
+export function crtFromRegime(taxRegime: string | null | undefined, explicit?: string | null): string {
   if (explicit) return String(explicit);
   const r = String(taxRegime || '').toLowerCase();
   if (r === 'simples_nacional' || r === 'simples') return '1';
@@ -96,8 +105,10 @@ async function materializePfx(
 ): Promise<string> {
   if (pfxData) {
     const target = path.join(getCertsDir(), `${companyId}.pfx`);
-    await fs.ensureDir(path.dirname(target));
-    await fs.writeFile(target, Buffer.from(pfxData, 'base64'));
+    // O .pfx contém a chave privada da empresa: 0700 no diretório, 0600 no
+    // arquivo (o padrão deixava o certificado legível por qualquer usuário).
+    await fs.ensureDir(path.dirname(target), { mode: 0o700 });
+    await fs.writeFile(target, Buffer.from(pfxData, 'base64'), { mode: 0o600 });
     return target;
   }
   if (pfxPath && (await fs.pathExists(pfxPath))) return pfxPath;
@@ -138,6 +149,7 @@ interface NfeRow {
   dest_endereco?: string;
   valor_frete?: number | string;
   valor_desconto?: number | string;
+  forma_pagamento?: string;
   informacoes_adicionais?: string;
 }
 
@@ -246,7 +258,9 @@ export function buildPayload(
     frete: Number(nfe.valor_frete ?? 0),
     desconto: Number(nfe.valor_desconto ?? 0),
     info_adicional: nfe.informacoes_adicionais || '',
-    forma_pagamento: '01',
+    // tPag escolhido pelo usuário. Estava fixo em '01': toda nota saía como
+    // paga em dinheiro, mesmo quando a venda foi no cartão, boleto ou PIX.
+    forma_pagamento: String(nfe.forma_pagamento || '01').padStart(2, '0'),
     emitente: {
       cnpj: digits(company.cnpj),
       razao_social: company.legal_name,
@@ -416,7 +430,7 @@ export async function emitirNfeReal(
   const payload = buildPayload(company, nfe, itens, ambiente, certPath, certSenha);
 
   const payloadFile = path.join(os.tmpdir(), `nfe-payload-${randomUUID()}.json`);
-  await fs.writeJson(payloadFile, payload, { spaces: 0 });
+  await escreverPayloadSeguro(payloadFile, payload);
 
   try {
     const result = await spawnEmitir(payloadFile);
@@ -574,7 +588,7 @@ export async function cancelarNfeReal(
   };
 
   const payloadFile = path.join(os.tmpdir(), `nfe-cancel-${randomUUID()}.json`);
-  await fs.writeJson(payloadFile, payload, { spaces: 0 });
+  await escreverPayloadSeguro(payloadFile, payload);
 
   try {
     const result = await spawnCancelar(payloadFile);
@@ -645,7 +659,7 @@ export async function verificarNumeracaoSefaz(opts: {
   };
 
   const payloadFile = path.join(os.tmpdir(), `nfe-check-${randomUUID()}.json`);
-  await fs.writeJson(payloadFile, payload, { spaces: 0 });
+  await escreverPayloadSeguro(payloadFile, payload);
 
   try {
     const automationDir = getAutomationDir();

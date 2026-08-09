@@ -65,6 +65,51 @@ function extractLeafPem(opensslStdout: string): string | null {
   return matches && matches.length > 0 ? matches[0] : null;
 }
 
+/** OID ICP-Brasil do CNPJ do titular, dentro do subjectAltName. */
+const OID_CNPJ_ICP_BRASIL = '2.16.76.1.3.3';
+
+/**
+ * Extrai o CNPJ do subjectAltName (OID ICP-Brasil 2.16.76.1.3.3).
+ *
+ * Nem todo certificado A1 traz o CNPJ no CN: em vários e-CNPJ ele existe
+ * apenas nesta extensão. `crypto.X509Certificate.subjectAltName` mostra só
+ * "othername:<unsupported>" — o OpenSSL é quem sabe decodificar o conteúdo.
+ */
+export function extractCnpjFromSanText(opensslTextOutput: string): string | null {
+  if (!opensslTextOutput) return null;
+
+  const oidEscapado = OID_CNPJ_ICP_BRASIL.replace(/\./g, '\\.');
+  // Formatos vistos no OpenSSL: "othername: 2.16.76.1.3.3::12345678000199"
+  // e "othername: 2.16.76.1.3.3:UTF8:12345678000199".
+  const ancorado = opensslTextOutput.match(
+    new RegExp(`${oidEscapado}\\s*:[^,\\n]*?(\\d{14})`),
+  );
+  if (ancorado) return ancorado[1];
+
+  return null;
+}
+
+/** Dump textual do certificado, para ler extensões que o Node não decodifica. */
+function opensslCertText(pem: string): string {
+  const dir = mkdtempSync(join(tmpdir(), 'pfx-text-'));
+  const pemPath = join(dir, 'cert.pem');
+  try {
+    writeFileSync(pemPath, pem, { mode: 0o600 });
+    const result = spawnSync('openssl', ['x509', '-in', pemPath, '-noout', '-text'], {
+      encoding: 'utf8',
+    });
+    return `${result.stdout || ''}`;
+  } catch {
+    return '';
+  } finally {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // ignore cleanup errors
+    }
+  }
+}
+
 /**
  * Extrai o certificado folha do .pfx via OpenSSL.
  * Senha errada → PfxValidationError.
@@ -194,7 +239,10 @@ export function parseAndValidatePfx(
   }
 
   const subject = x509.subject || '';
-  const subjectCnpj = extractCnpjFromText(subject);
+  // Subject primeiro (é onde a maioria dos A1 de NF-e traz "RAZAO SOCIAL:CNPJ");
+  // se não estiver lá, cai na extensão ICP-Brasil.
+  const subjectCnpj =
+    extractCnpjFromText(subject) || extractCnpjFromSanText(opensslCertText(pem));
   const cnMatch = subject.match(/CN\s*=\s*([^,\n]+)/i);
   const subjectCn = cnMatch ? cnMatch[1].trim() : null;
 
@@ -234,7 +282,18 @@ export function assertPfxReadyToSave(params: {
     );
   }
 
-  if (company && company !== parsed.subjectCnpj) {
+  // Sem o CNPJ da empresa não há como cruzar, e a checagem era simplesmente
+  // pulada: dava para cadastrar o certificado de uma empresa na tenant de
+  // outra, bastando informar no formulário o CNPJ do próprio certificado.
+  if (!company) {
+    throw new PfxValidationError(
+      'A empresa está sem CNPJ cadastrado, então não é possível conferir se o certificado é dela. '
+        + 'Preencha o CNPJ da empresa antes de enviar o certificado A1.',
+      422,
+    );
+  }
+
+  if (company !== parsed.subjectCnpj) {
     throw new PfxValidationError(
       `O certificado pertence ao CNPJ ${parsed.subjectCnpj}, mas a empresa cadastrada é ${company}. ` +
         'Use o certificado A1 da própria empresa.',

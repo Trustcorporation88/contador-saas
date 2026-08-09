@@ -207,52 +207,52 @@ export class CompanyService {
     const page = Math.max(filters?.page || 1, 1);
     const offset = (page - 1) * limit;
 
-    console.log('[COMPANY_SERVICE_LIST] Pagination:', { limit, page, offset });
-
-    let query = db('companies').where('is_active', true);
-    console.log('[COMPANY_SERVICE_LIST] Initial query created');
+    // Toda coluna vai qualificada com `companies.`: para usuário não-admin há
+    // join com company_users, que também tem id, is_active e created_at. Sem o
+    // prefixo o PostgreSQL recusa a query ("column reference is ambiguous") e a
+    // listagem de empresas — a primeira tela depois do login — dava 500 para
+    // todo usuário comum. Só passava para admin, que não faz o join.
+    let query = db('companies').where('companies.is_active', true);
 
     // Se não é admin, filtrar apenas empresas do usuário
     if (!adminMode && userId) {
-      console.log('[COMPANY_SERVICE_LIST] User mode - applying join with company_users');
       query = query
         .join('company_users', 'companies.id', '=', 'company_users.company_id')
         .where('company_users.user_id', userId)
         .where('company_users.is_active', true)
         .select('companies.*');
-      console.log('[COMPANY_SERVICE_LIST] Join applied successfully');
     }
 
     // Aplicar filtros de busca
     if (filters?.search) {
-      query = query.whereRaw('LOWER(legal_name) LIKE LOWER(?)', [`%${filters.search}%`]);
+      query = query.whereRaw('LOWER(companies.legal_name) LIKE LOWER(?)', [`%${filters.search}%`]);
     }
 
     if (filters?.tax_regime) {
-      query = query.where('tax_regime', filters.tax_regime);
+      query = query.where('companies.tax_regime', filters.tax_regime);
     }
 
     if (filters?.created_from) {
-      query = query.where('created_at', '>=', filters.created_from);
+      query = query.where('companies.created_at', '>=', filters.created_from);
     }
 
     if (filters?.created_to) {
-      query = query.where('created_at', '<=', filters.created_to);
+      query = query.where('companies.created_at', '<=', filters.created_to);
     }
 
-    console.log('[COMPANY_SERVICE_LIST] About to count records');
     // Contar total de registros
-    const countQuery = query.clone().count('id as total').first();
-    console.log('[COMPANY_SERVICE_LIST] Executing count query...');
-    const countResult = (await countQuery) as any;
-    console.log('[COMPANY_SERVICE_LIST] Count result:', { countResult, total: countResult?.total });
-    const total = parseInt(countResult?.total || 0, 10);
+    const countResult = (await query
+      .clone()
+      .clearSelect()
+      .count('companies.id as total')
+      .first()) as { total?: string } | undefined;
+    const total = parseInt(String(countResult?.total ?? 0), 10);
 
     // Paginar e ordenar
     const companies = (await query
-      .orderBy('created_at', 'desc')
+      .orderBy('companies.created_at', 'desc')
       .limit(limit)
-      .offset(offset)) as any[];
+      .offset(offset)) as Record<string, unknown>[];
     // Formatar resposta
     const response = {
       data: companies.map((c) => this.formatCompanyResponse(c)),

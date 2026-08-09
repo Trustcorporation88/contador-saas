@@ -857,6 +857,45 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           console.log('✓ 021_reforma_aliquotas_referencia_2027_2033 completed');
         },
       },
+      {
+        name: '022_nfe_forma_pagamento',
+        up: async (db) => {
+          const hasNfe = await db.schema.hasTable('nfe');
+          if (!hasNfe) return;
+
+          // tPag do grupo <pag>. O usuário já escolhia a forma de pagamento no
+          // formulário e o DTO a recebia, mas ela não era gravada em lugar
+          // nenhum — e o emissor mandava '01' (dinheiro) fixo para a SEFAZ.
+          const hasColumn = await db.schema.hasColumn('nfe', 'forma_pagamento');
+          if (!hasColumn) {
+            console.log('[MIGRATIONS] Adding nfe.forma_pagamento...');
+            await db.schema.alterTable('nfe', (table) => {
+              table.string('forma_pagamento', 2).defaultTo('01');
+            });
+          }
+          console.log('✓ 022_nfe_forma_pagamento completed');
+        },
+      },
+      {
+        name: '023_nfe_transmitindo_em',
+        up: async (db) => {
+          const hasNfe = await db.schema.hasTable('nfe');
+          if (!hasNfe) return;
+
+          // Trava de transmissão à SEFAZ, com expiração. Dois cliques em
+          // "Autorizar" transmitiam a mesma nota duas vezes (a segunda voltava
+          // como duplicidade 539). É um timestamp e não um status novo para que
+          // uma queda no meio da transmissão não deixe a nota presa.
+          const hasColumn = await db.schema.hasColumn('nfe', 'transmitindo_em');
+          if (!hasColumn) {
+            console.log('[MIGRATIONS] Adding nfe.transmitindo_em...');
+            await db.schema.alterTable('nfe', (table) => {
+              table.timestamp('transmitindo_em').nullable();
+            });
+          }
+          console.log('✓ 023_nfe_transmitindo_em completed');
+        },
+      },
     ];
 
     for (const migration of migrations) {

@@ -105,6 +105,7 @@ export interface NfeRecord {
   status_sefaz?:         string;
   status_motivo?:        string;
   natureza_operacao:     string;
+  forma_pagamento?:      string;   // tPag do grupo <pag>
   informacoes_adicionais?: string;
   data_emissao:          string;
   data_autorizacao?:     string;

@@ -104,7 +104,15 @@ jest.mock('../../src/config/database', () => {
     clone:       jest.fn().mockReturnValue(mockDb),
     update:      jest.fn().mockReturnValue(mockDb),
     insert:      jest.fn().mockReturnValue(mockDb),
+    onConflict:  jest.fn().mockReturnValue(mockDb),
+    merge:       jest.fn().mockReturnValue(mockDb),
+    // proximoNumero reserva a numeração com um UPDATE ... RETURNING atômico
+    raw:         jest.fn((sql: string) => ({ __raw: sql })),
     returning:   jest.fn().mockImplementation(() => {
+      if (_currentTable === 'nfe_numeracao') {
+        mockNumeracao.ultimo_numero += 1;
+        return Promise.resolve([{ ultimo_numero: mockNumeracao.ultimo_numero }]);
+      }
       if (_currentTable === 'nfe') return Promise.resolve([nfeAutorizada]);
       return Promise.resolve([nfeRecord]);
     }),
@@ -151,6 +159,11 @@ jest.mock('../../src/services/nfeEmitter', () => ({
   cancelarNfeReal: jest.fn(),
   getEmissionMode: jest.fn(() => 'mock'),
   getAmbiente: jest.fn(() => 'homologacao'),
+  crtFromRegime: jest.fn((taxRegime?: string | null, explicit?: string | null) => {
+    if (explicit) return String(explicit);
+    const r = String(taxRegime || '').toLowerCase();
+    return r === 'simples_nacional' || r === 'simples' ? '1' : '3';
+  }),
   verificarNumeracaoSefaz: jest.fn().mockResolvedValue({
     ok: true,
     sefaz_online: true,
@@ -273,6 +286,97 @@ describe('NfeService', () => {
       await expect(
         NfeService.create('company-uuid-1', baseCreateDTO)
       ).rejects.toMatchObject({ status: 422 });
+    });
+
+    it('grava a forma de pagamento escolhida', async () => {
+      const { __trx } = require('../../src/config/database');
+      await NfeService.create('company-uuid-1', {
+        ...baseCreateDTO,
+        forma_pagamento: '17',
+      });
+      const inserido = __trx.insert.mock.calls
+        .map((args: unknown[]) => args[0] as Record<string, unknown>)
+        .reverse()
+        .find((arg: Record<string, unknown>) => arg?.forma_pagamento !== undefined);
+      expect(inserido?.forma_pagamento).toBe('17');
+      expect(xmlGerado()).toContain('<tPag>17</tPag>');
+    });
+
+    it('normaliza forma de pagamento de um dígito', async () => {
+      await NfeService.create('company-uuid-1', { ...baseCreateDTO, forma_pagamento: '3' });
+      expect(xmlGerado()).toContain('<tPag>03</tPag>');
+    });
+
+    it('recusa forma de pagamento fora da tabela da SEFAZ', async () => {
+      await expect(
+        NfeService.create('company-uuid-1', { ...baseCreateDTO, forma_pagamento: '77' })
+      ).rejects.toMatchObject({ status: 400 });
+    });
+
+    it('sem pagamento (tPag 90) zera o vPag', async () => {
+      await NfeService.create('company-uuid-1', { ...baseCreateDTO, forma_pagamento: '90' });
+      const xml = xmlGerado();
+      expect(xml).toContain('<tPag>90</tPag>');
+      expect(xml).toContain('<vPag>0.00</vPag>');
+    });
+
+    it('no Simples Nacional grava ICMS/PIS/COFINS zerados, como sai no XML', async () => {
+      const { db, __mockCompany, __trx } = require('../../src/config/database');
+      db.first.mockResolvedValueOnce({ ...__mockCompany, tax_regime: 'simples_nacional' });
+      await NfeService.create('company-uuid-1', baseCreateDTO);
+      const itens = __trx.insert.mock.calls
+        .map((args: unknown[]) => args[0])
+        .reverse()
+        .find((arg: unknown) => Array.isArray(arg)) as Record<string, unknown>[];
+      expect(itens[0].valor_icms).toBe(0);
+      expect(itens[0].valor_pis).toBe(0);
+      expect(itens[0].valor_cofins).toBe(0);
+      // o valor do produto continua íntegro
+      expect(itens[0].valor_total).toBe(1000);
+    });
+
+    it('recusa NF-e sem itens', async () => {
+      await expect(
+        NfeService.create('company-uuid-1', { ...baseCreateDTO, itens: [] })
+      ).rejects.toMatchObject({ status: 400 });
+    });
+
+    it('recusa documento de destinatário com tamanho inválido', async () => {
+      await expect(
+        NfeService.create('company-uuid-1', {
+          ...baseCreateDTO,
+          destinatario: { ...baseCreateDTO.destinatario, cpf_cnpj: '1234567' },
+        })
+      ).rejects.toMatchObject({ status: 400 });
+    });
+
+    it('exige NCM no item', async () => {
+      await expect(
+        NfeService.create('company-uuid-1', {
+          ...baseCreateDTO,
+          itens: [{ ...baseCreateDTO.itens[0], ncm: undefined }],
+        })
+      ).rejects.toMatchObject({ status: 400 });
+    });
+
+    it('recusa quantidade zerada', async () => {
+      await expect(
+        NfeService.create('company-uuid-1', {
+          ...baseCreateDTO,
+          itens: [{ ...baseCreateDTO.itens[0], quantidade: 0 }],
+        })
+      ).rejects.toMatchObject({ status: 400 });
+    });
+
+    it('valida os dados antes de reservar número da série', async () => {
+      const { db } = require('../../src/config/database');
+      const antes = db.update.mock.calls.length;
+      await expect(
+        NfeService.create('company-uuid-1', { ...baseCreateDTO, itens: [] })
+      ).rejects.toMatchObject({ status: 400 });
+      // nenhuma reserva de numeração: um erro de validação não pode queimar
+      // um número e abrir lacuna que exige inutilização na SEFAZ
+      expect(db.update.mock.calls.length).toBe(antes);
     });
 
     it('recusa desconto maior que produtos + frete', async () => {
@@ -527,6 +631,31 @@ describe('NfeService', () => {
       expect((resultado as any).reutilizavel).toBe(true);
       expect(resultado.mensagem).toMatch(/PENDENTE|reenviar/i);
       expect(resultado.local?.id).toBe('nfe-pendente-823');
+    });
+
+    it('bloqueia PENDENTE cujo número já apareceu nas capturas da SEFAZ (evita 539)', async () => {
+      // Cenário real: a autorização foi concluída na SEFAZ, mas a resposta se
+      // perdeu e a nota ficou PENDENTE aqui. O XML voltou pela captura DFe.
+      // Reenviar levaria cStat 539 (duplicidade).
+      setup({
+        capturados: [823],
+        ultimoNumeroLocal: 822,
+        localEncontrado: {
+          id: 'nfe-pendente-823',
+          status: 'PENDENTE',
+          chave_acesso: null,
+          data_emissao: '2026-07-27T12:00:00.000Z',
+        },
+      });
+
+      const resultado = await NfeService.verificarNumeracao('company-uuid-1', {
+        serie: 1,
+        numero: 823,
+      });
+
+      expect(resultado.disponivel).toBe(false);
+      expect((resultado as any).ja_emitida_capturada).toBe(true);
+      expect(resultado.mensagem).toMatch(/já tem uma NF-e autorizada|não reenvie/i);
     });
 
     it('continua bloqueando se o número local já está AUTORIZADA', async () => {

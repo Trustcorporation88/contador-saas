@@ -55,7 +55,7 @@ services:
       HOST: 0.0.0.0
       DATABASE_URL: postgresql://contador_user:contador_password@postgres:5432/contador_db
       JWT_SECRET: change-me-in-prod
-      REFRESH_TOKEN_SECRET: change-me-in-prod-refresh
+      JWT_REFRESH_SECRET: change-me-in-prod-refresh
       DEEPSEEK_API_KEY: ''
       DEEPSEEK_MODEL: deepseek-chat
       # Redis Configuration

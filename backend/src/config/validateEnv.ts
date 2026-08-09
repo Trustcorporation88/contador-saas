@@ -62,6 +62,31 @@ export function validateEnvironmentSecurity(): void {
     );
   }
 
+  // AVISO: certificados A1 não devem depender do segredo do JWT
+  if (isProd && !process.env.FISCAL_CERT_ENCRYPTION_KEY) {
+    warnings.push(
+      'FISCAL_CERT_ENCRYPTION_KEY is not set in production. '
+        + 'Certificate passwords fall back to a key derived from JWT_SECRET, '
+        + 'so leaking the JWT secret also exposes every client A1 certificate.',
+    );
+  }
+
+  // AVISO: contas de demonstração têm credenciais compartilhadas
+  if (isProd && String(process.env.ENABLE_REGIME_DEMO_USERS || '').toLowerCase() === 'true') {
+    warnings.push(
+      'ENABLE_REGIME_DEMO_USERS is true in production. '
+        + 'Demo accounts share one password across four tenants — keep them off unless needed.',
+    );
+  }
+
+  // AVISO: emissão simulada nunca deve ficar ligada em produção
+  if (isProd && String(process.env.NFE_EMISSION_MODE || '').toLowerCase() === 'mock') {
+    errors.push(
+      'NFE_EMISSION_MODE is "mock" in production. '
+        + 'NF-e would be "authorized" locally without ever reaching SEFAZ — no fiscal validity.',
+    );
+  }
+
   // AVISO: bcrypt rounds deve ser >= 10
   if (envConfig.bcryptRounds < 10) {
     warnings.push(

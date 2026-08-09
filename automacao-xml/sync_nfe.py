@@ -77,7 +77,20 @@ def sync_empresa_nfe(empresa: EmpresaConfig, company_id: str | None = None) -> S
             docs = root.findall(".//ns:docZip", NS)
 
             if not docs:
-                # cStat 137 ou resposta sem docs: fim normal (sem XMLs novos).
+                # Sem cStat legível E sem documentos: a resposta não é uma lista
+                # vazia legítima (137), é uma resposta que não conseguimos
+                # interpretar — SOAP inesperado, namespace diferente, erro de
+                # infraestrutura. Tratar como sucesso aqui esconde a falha, que é
+                # justamente o que o resto desta função corrige.
+                if not c_stat:
+                    msg = (
+                        "Resposta da SEFAZ DistDFe sem cStat e sem documentos — "
+                        "não foi possível confirmar a consulta. "
+                        f"Trecho: {resposta.text[:200].strip()}"
+                    )
+                    save_cursor(company_id, "nfe", nsu, status="error", error=msg)
+                    raise RuntimeError(msg)
+                # cStat 137/138 sem docs: fim normal (sem XMLs novos).
                 break
 
             for doc in docs:
