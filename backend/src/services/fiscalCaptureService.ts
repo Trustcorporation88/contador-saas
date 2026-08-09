@@ -16,7 +16,6 @@ export interface FiscalCertificateRecord {
   company_id: string;
   cnpj: string;
   uf: string;
-  pfx_path: string;
   cert_valid_until: string | null;
   serpro_motor_enabled: boolean;
   active: boolean;
@@ -360,8 +359,6 @@ export class FiscalCaptureService {
   static async runReprocess(companyId: string): Promise<{
     success: boolean;
     message: string;
-    stdout?: string;
-    stderr?: string;
   }> {
     assertValidCompanyId(companyId);
     const automationDir = getAutomationDir();
@@ -386,14 +383,22 @@ export class FiscalCaptureService {
       FISCAL_CERTS_DIR: getCertsDir(),
     };
 
-    return this.spawnPython(scriptPath, [companyId], env);
+    const result = await this.spawnPython(scriptPath, [companyId], env);
+    if (!result.success) {
+      logger.warn('Reprocessamento de capturas fiscais falhou', {
+        companyId,
+        message: result.message,
+        stdout: result.stdout?.slice(-2000),
+        stderr: result.stderr?.slice(-2000),
+      });
+    }
+    const { stdout: _stdout, stderr: _stderr, ...resposta } = result;
+    return resposta;
   }
 
   static async runSync(companyId: string, tipo: 'nfe' | 'nfse' | 'all' = 'all'): Promise<{
     success: boolean;
     message: string;
-    stdout?: string;
-    stderr?: string;
     nfe_capturados?: number;
     nfse_capturados?: number;
     nfe_nsu?: string | null;
@@ -438,9 +443,12 @@ export class FiscalCaptureService {
       };
     }
 
-    // Nome de arquivo único por execução: evita que duas sincronizações
-    // concorrentes da mesma empresa sobrescrevam/removam o config uma da outra.
-    const configPath = path.join(automationDir, `.runtime-${companyId}-${randomUUID()}.json`);
+    // Este arquivo carrega a senha do certificado em texto claro: fica em um
+    // diretório temporário só do processo (0700), com permissão 0600, e é
+    // removido no finally — não no diretório da aplicação, onde sobreviveria a
+    // uma falha no meio do caminho.
+    const runtimeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'fiscal-sync-'));
+    const configPath = path.join(runtimeDir, `empresas-${randomUUID()}.json`);
     const empresaConfig = [
       {
         company_id: companyId,
@@ -451,7 +459,7 @@ export class FiscalCaptureService {
         serpro_motor: Boolean(cert.serpro_motor_enabled),
       },
     ];
-    await fs.writeJson(configPath, empresaConfig, { spaces: 2 });
+    await fs.writeFile(configPath, JSON.stringify(empresaConfig), { mode: 0o600 });
 
     const env = {
       ...process.env,
@@ -460,16 +468,19 @@ export class FiscalCaptureService {
       FISCAL_CERTS_DIR: getCertsDir(),
     };
 
-    const result = await this.spawnPython(schedulerPath, [
-      '--config',
-      configPath,
-      '--company-id',
-      companyId,
-      '--tipo',
-      tipo,
-    ], env);
-
-    await fs.remove(configPath).catch(() => undefined);
+    let result: { success: boolean; message: string; stdout?: string; stderr?: string };
+    try {
+      result = await this.spawnPython(schedulerPath, [
+        '--config',
+        configPath,
+        '--company-id',
+        companyId,
+        '--tipo',
+        tipo,
+      ], env);
+    } finally {
+      await fs.remove(runtimeDir).catch(() => undefined);
+    }
 
     const parsed = parseCaptureResult(result.stdout || '');
     const combined = {
@@ -510,7 +521,19 @@ export class FiscalCaptureService {
       }
     }
 
-    return combined;
+    // stdout/stderr do Python carregam caminhos do servidor e stack traces:
+    // ficam no log, não na resposta da API.
+    if (!combined.success) {
+      logger.warn('Captura fiscal falhou', {
+        companyId,
+        tipo,
+        message: combined.message,
+        stdout: result.stdout?.slice(-2000),
+        stderr: result.stderr?.slice(-2000),
+      });
+    }
+    const { stdout: _stdout, stderr: _stderr, ...resposta } = combined;
+    return resposta;
   }
 
   private static async isPythonAvailable(): Promise<boolean> {
@@ -528,11 +551,18 @@ export class FiscalCaptureService {
   ): Promise<{ success: boolean; message: string; stdout?: string; stderr?: string }> {
     const python = getPythonBin();
     const commandArgs = [scriptPath, ...args];
+    // Sem teto de tempo, uma consulta travada na SEFAZ deixava o processo filho
+    // pendurado e a requisição HTTP aberta indefinidamente.
+    const timeoutMs = Number(process.env.FISCAL_CAPTURE_TIMEOUT_MS) > 0
+      ? Number(process.env.FISCAL_CAPTURE_TIMEOUT_MS)
+      : 300_000;
 
     return new Promise((resolve) => {
       const child = spawn(python, commandArgs, {
         env,
         cwd: path.dirname(scriptPath),
+        timeout: timeoutMs,
+        killSignal: 'SIGKILL',
       });
 
       let stdout = '';
@@ -553,7 +583,7 @@ export class FiscalCaptureService {
         });
       });
 
-      child.on('close', (code) => {
+      child.on('close', (code, signal) => {
         if (code === 0) {
           resolve({
             success: true,
@@ -561,25 +591,28 @@ export class FiscalCaptureService {
             stdout,
             stderr,
           });
-        } else {
-          resolve({
-            success: false,
-            message: `Captura retornou código ${code}.`,
-            stdout,
-            stderr,
-          });
+          return;
         }
+        const expirou = signal === 'SIGKILL' || signal === 'SIGTERM';
+        resolve({
+          success: false,
+          message: expirou
+            ? `Captura interrompida após ${Math.round(timeoutMs / 1000)}s sem resposta da SEFAZ. Tente novamente.`
+            : `Captura retornou código ${code}.`,
+          stdout,
+          stderr,
+        });
       });
     });
   }
 
+  /** Projeção segura para a API: sem pfx_path (caminho interno do servidor). */
   private static mapCertificate(row: Record<string, unknown>): FiscalCertificateRecord {
     return {
       id: String(row.id),
       company_id: String(row.company_id),
       cnpj: String(row.cnpj),
       uf: String(row.uf),
-      pfx_path: String(row.pfx_path),
       cert_valid_until: row.cert_valid_until
         ? new Date(row.cert_valid_until as string | Date).toISOString()
         : null,
