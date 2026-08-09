@@ -12,8 +12,13 @@ const RAILWAY_DB =
 
 const LOGIN = {
   email: process.env.ADMIN_EMAIL || 'admin@procontador.com.br',
-  password: process.env.ADMIN_PASSWORD || 'ProContador@2026',
+  password: process.env.ADMIN_PASSWORD,
 };
+
+if (!LOGIN.password) {
+  console.error('Defina ADMIN_PASSWORD no ambiente antes de rodar este script.');
+  process.exit(1);
+}
 
 async function login(baseUrl) {
   const res = await fetch(`${baseUrl}/auth/login`, {

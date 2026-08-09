@@ -27,10 +27,13 @@ services:
       # ── Admin bootstrap ───────────────────────────────────
       - key: ADMIN_BOOTSTRAP_EMAIL
         value: admin@procontador.com.br
+      # Nunca versionar a senha do admin: defina no dashboard.
+      # Com FORCE_RESET=true a senha do arquivo era reaplicada a cada deploy,
+      # então qualquer um com acesso ao repositório entrava como admin.
       - key: ADMIN_BOOTSTRAP_PASSWORD
-        value: ProContador@2026
+        sync: false
       - key: ADMIN_BOOTSTRAP_FORCE_RESET
-        value: 'true'
+        value: 'false'
 
       # ── CORS ──────────────────────────────────────────────
       - key: CORS_ORIGIN

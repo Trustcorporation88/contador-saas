@@ -55,7 +55,11 @@ Set-Content -Path $envPath -Value $envContent -Encoding UTF8
 Write-Host "OK .env criado em $envPath" -ForegroundColor Green
 
 Write-Host '-> Buscando empresas na API procontador...' -ForegroundColor Cyan
-$loginBody = (@{ email = 'admin@procontador.com.br'; password = 'ProContador@2026' } | ConvertTo-Json -Compress)
+$adminEmail = if ($env:ADMIN_EMAIL) { $env:ADMIN_EMAIL } else { 'admin@procontador.com.br' }
+if (-not $env:ADMIN_PASSWORD) {
+  throw 'Defina a variavel de ambiente ADMIN_PASSWORD antes de rodar este script.'
+}
+$loginBody = (@{ email = $adminEmail; password = $env:ADMIN_PASSWORD } | ConvertTo-Json -Compress)
 $login = Invoke-RestMethod -Uri 'https://procontador.com.br/api/v1/auth/login' -Method POST -ContentType 'application/json' -Body $loginBody
 $token = $login.data.accessToken
 $list = Invoke-RestMethod -Uri 'https://procontador.com.br/api/v1/companies?limit=100' -Headers @{ Authorization = "Bearer $token" }
