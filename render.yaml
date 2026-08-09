@@ -37,7 +37,7 @@ services:
 
       # ── CORS ──────────────────────────────────────────────
       - key: CORS_ORIGIN
-        value: https://contador-saas-ashy.vercel.app,https://procontador.com.br,https://www.procontador.com.br,http://localhost:5173
+        value: https://contador-saas-ashy.vercel.app,https://procontador.com.br,https://www.procontador.com.br
 
       # ── Rate limiting ─────────────────────────────────────
       - key: ENABLE_RATE_LIMITING

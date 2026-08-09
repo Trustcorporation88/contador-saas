@@ -22,6 +22,8 @@ app.disable('x-powered-by');
 app.set('trust proxy', 1);
 
 const mutatingMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const isProduction = envConfig.nodeEnv === 'production';
+
 const fallbackOrigins = [
   'https://procontador.com.br',
   'https://www.procontador.com.br',
@@ -29,23 +31,29 @@ const fallbackOrigins = [
   'https://contador-saas-trustcorporation88s-projects.vercel.app',
   'https://cnpj.trustcorp.com.br',
   'https://app.ocontador.app',
-  'http://localhost:5173',
-  'http://localhost:3000',
 ];
+// localhost só fora de produção: com credentials habilitado, deixá-lo na lista
+// em produção permite que uma página local converse com a API real.
+const developmentOrigins = ['http://localhost:5173', 'http://localhost:3000'];
+
 const allowedOrigins = Array.from(
   new Set(
     envConfig.corsOrigin
       .split(',')
       .map((item) => item.trim())
       .filter(Boolean)
-      .concat(fallbackOrigins),
+      .concat(fallbackOrigins)
+      .concat(isProduction ? [] : developmentOrigins),
   ),
 );
 const allowedOriginPatterns: RegExp[] = [
-  /^https:\/\/[a-z0-9-]+\.vercel\.app$/i,
   /^https:\/\/([a-z0-9-]+\.)?procontador\.com\.br$/i,
   /^https:\/\/([a-z0-9-]+\.)?trustcorp\.com\.br$/i,
-  /^http:\/\/localhost:(3000|5173)$/i,
+  // Previews do Vercel deste projeto. O padrão anterior era
+  // `[a-z0-9-]+\.vercel\.app`, que liberava QUALQUER deploy de terceiro no
+  // vercel.app a conversar com a API.
+  /^https:\/\/contador-saas[a-z0-9-]*\.vercel\.app$/i,
+  ...(isProduction ? [] : [/^http:\/\/localhost:(3000|5173)$/i]),
 ];
 
 function isAllowedOrigin(origin: string): boolean {
@@ -145,21 +153,6 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     const isError = res.statusCode >= 500;
     trackRequest(isError);
   });
-  next();
-});
-
-// DEBUG: Log all requests to /api/v1/companies
-app.use((req: Request, _res: Response, next: NextFunction) => {
-  if (req.path === '/companies' && req.method === 'GET') {
-    console.log('[COMPANIES_ENDPOINT_DEBUG]', {
-      method: req.method,
-      path: req.path,
-      fullPath: req.originalUrl,
-      headers: req.headers,
-      user: (req as any).user,
-      timestamp: new Date().toISOString(),
-    });
-  }
   next();
 });
 
