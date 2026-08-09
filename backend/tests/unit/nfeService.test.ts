@@ -56,11 +56,13 @@ jest.mock('../../src/config/database', () => {
     xml_nfe: '<nfeProc versao="4.00">...</nfeProc>',
   };
   const nfeAutorizada = { ...nfeRecord, status: 'AUTORIZADA', protocolo: '20251234567890123', data_autorizacao: new Date().toISOString() };
+  // Nomes de coluna iguais aos da tabela `companies` (state/legal_name/city),
+  // senão o teste passa com um cadastro que não existe no banco real.
   const mockCompany = {
-    id: 'company-uuid-1', cnpj: '11222333000181', razao_social: 'EMPRESA TESTE LTDA',
-    inscricao_estadual: '123456789', inscricao_municipal: '987654321', uf: 'SP',
-    cep: '01310100', logradouro: 'Av Paulista', numero_endereco: '1000',
-    municipio: 'São Paulo', codigo_municipio: '3550308',
+    id: 'company-uuid-1', cnpj: '11222333000181', legal_name: 'EMPRESA TESTE LTDA',
+    inscricao_estadual: '123456789', inscricao_municipal: '987654321', state: 'SP',
+    postal_code: '01310100', address: 'Av Paulista', endereco_numero: '1000',
+    city: 'São Paulo', codigo_municipio: '3550308',
   };
   const mockNumeracao = { serie: 1, modelo: 55, ultimo_numero: 0 };
 
@@ -136,6 +138,8 @@ jest.mock('../../src/config/database', () => {
   return {
     db: mockDb,
     getDatabase: jest.fn().mockResolvedValue(mockDb),
+    __trx: mockTrx,
+    __mockCompany: mockCompany,
     __setFiscalCapturas: (numeros: (number | string)[]) => {
       fiscalCapturesState.numeros = numeros.map(String);
     },
@@ -220,6 +224,65 @@ describe('NfeService', () => {
       const nfe = await NfeService.create('company-uuid-1', baseCreateDTO);
       // 1000 × 3% = 30
       expect(nfe.valor_cofins).toBeCloseTo(30, 0);
+    });
+
+    /** XML gravado em `nfe.xml_nfe` na última chamada de create(). */
+    function xmlGerado(): string {
+      const { __trx } = require('../../src/config/database');
+      const chamada = __trx.insert.mock.calls
+        .map((args: unknown[]) => args[0] as Record<string, unknown>)
+        .reverse()
+        .find((arg: Record<string, unknown>) => typeof arg?.xml_nfe === 'string');
+      return String(chamada?.xml_nfe ?? '');
+    }
+
+    it('escapa caracteres especiais do XML (& < > em descrição e razão social)', async () => {
+      await NfeService.create('company-uuid-1', {
+        ...baseCreateDTO,
+        natureza_operacao: 'VENDA & REMESSA',
+        destinatario: { ...baseCreateDTO.destinatario, razao_social: 'PADARIA PÃO & CIA' },
+        itens: [{ ...baseCreateDTO.itens[0], descricao: 'CAFÉ <ESPECIAL> & TORRADO' }],
+      });
+      const xml = xmlGerado();
+      expect(xml).toContain('PADARIA PÃO &amp; CIA');
+      expect(xml).toContain('CAFÉ &lt;ESPECIAL&gt; &amp; TORRADO');
+      expect(xml).toContain('VENDA &amp; REMESSA');
+      // XML precisa continuar bem formado — sem "&" solto nem tag inventada
+      expect(xml).not.toMatch(/&(?!(amp|lt|gt|quot|apos|#\d+);)/);
+      expect(xml).not.toContain('<ESPECIAL>');
+    });
+
+    it('usa o cUF e o município da empresa, não São Paulo fixo', async () => {
+      const { db, __mockCompany } = require('../../src/config/database');
+      db.first.mockResolvedValueOnce({
+        ...__mockCompany,
+        state: 'MG',
+        city: 'Belo Horizonte',
+        codigo_municipio: '3106200',
+      });
+      await NfeService.create('company-uuid-1', baseCreateDTO);
+      const xml = xmlGerado();
+      expect(xml).toContain('<cUF>31</cUF>');
+      expect(xml).toContain('<cMunFG>3106200</cMunFG>');
+      expect(xml).toContain('Id="NFe31');
+    });
+
+    it('recusa emissão quando a empresa está sem UF cadastrada', async () => {
+      const { db, __mockCompany } = require('../../src/config/database');
+      db.first.mockResolvedValueOnce({ ...__mockCompany, state: null });
+      await expect(
+        NfeService.create('company-uuid-1', baseCreateDTO)
+      ).rejects.toMatchObject({ status: 422 });
+    });
+
+    it('recusa desconto maior que produtos + frete', async () => {
+      await expect(
+        NfeService.create('company-uuid-1', {
+          ...baseCreateDTO,
+          valor_frete: 0,
+          valor_desconto: 99999,
+        })
+      ).rejects.toMatchObject({ status: 400 });
     });
 
     it('deve lançar 404 se empresa não existir', async () => {
@@ -492,14 +555,39 @@ describe('NfeService', () => {
   // ── getXml ────────────────────────────────────────────────────────────────
 
   describe('getXml()', () => {
-    it('deve retornar XML da NF-e', async () => {
+    it('devolve o xml_proc (assinado + protocolo) quando a nota está autorizada', async () => {
       const { db } = require('../../src/config/database');
       db.first.mockResolvedValueOnce({
-        xml_nfe: '<nfeProc versao="4.00">...</nfeProc>',
+        xml_nfe: '<NFe>previa nao assinada</NFe>',
+        xml_proc: '<nfeProc versao="4.00"><protNFe/></nfeProc>',
         status:  'AUTORIZADA',
       });
       const xml = await NfeService.getXml('nfe-uuid-1', 'company-uuid-1');
-      expect(xml).toContain('nfeProc');
+      expect(xml).toContain('protNFe');
+      expect(xml).not.toContain('previa nao assinada');
+    });
+
+    it('devolve a prévia local enquanto a nota é rascunho', async () => {
+      const { db } = require('../../src/config/database');
+      db.first.mockResolvedValueOnce({
+        xml_nfe: '<NFe>previa local</NFe>',
+        xml_proc: null,
+        status:  'RASCUNHO',
+      });
+      const xml = await NfeService.getXml('nfe-uuid-1', 'company-uuid-1');
+      expect(xml).toContain('previa local');
+    });
+
+    it('não entrega prévia não assinada como se fosse nota autorizada', async () => {
+      const { db } = require('../../src/config/database');
+      db.first.mockResolvedValueOnce({
+        xml_nfe: '<NFe>previa local</NFe>',
+        xml_proc: null,
+        status:  'AUTORIZADA',
+      });
+      await expect(
+        NfeService.getXml('nfe-uuid-1', 'company-uuid-1')
+      ).rejects.toMatchObject({ status: 404 });
     });
 
     it('deve lançar 404 se NF-e não existir', async () => {

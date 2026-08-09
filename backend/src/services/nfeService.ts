@@ -72,6 +72,33 @@ function gerarChaveAcesso(
   return base + calcDigitoChave(base);
 }
 
+/** Código de UF do IBGE (cUF da chave de acesso e do grupo <ide>). */
+const CODIGO_UF: Record<string, string> = {
+  RO: '11', AC: '12', AM: '13', RR: '14', PA: '15', AP: '16', TO: '17',
+  MA: '21', PI: '22', CE: '23', RN: '24', PB: '25', PE: '26', AL: '27',
+  SE: '28', BA: '29', MG: '31', ES: '32', RJ: '33', SP: '35', PR: '41',
+  SC: '42', RS: '43', MS: '50', MT: '51', GO: '52', DF: '53',
+};
+
+function codigoUf(uf: string | null | undefined): string {
+  return CODIGO_UF[String(uf ?? '').trim().toUpperCase()] ?? '';
+}
+
+/**
+ * Escapa texto para interpolação segura em XML.
+ * Sem isso, uma descrição de produto ou razão social com "&", "<" ou ">"
+ * (ex.: "CAFÉ & CIA") gera um XML malformado, que o contador não consegue
+ * abrir nem importar no SPED.
+ */
+function esc(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 /** Gera protocolo mock (ano + 15 dígitos aleatórios) */
 function gerarProtocolo(): string {
   const ano = new Date().getFullYear();
@@ -85,24 +112,40 @@ const fmt4 = (v: number) => v.toFixed(4);
 
 // ─── Geração de XML ───────────────────────────────────────────────────────────
 
+/**
+ * Data/hora de emissão no formato TData da NF-e (com offset).
+ * `toISOString()` cru rotulado como "-03:00" adiantava a hora em 3 horas.
+ */
+function dhEmi(date: Date, offsetMinutes = -180): string {
+  const deslocado = new Date(date.getTime() + offsetMinutes * 60_000);
+  const sinal = offsetMinutes <= 0 ? '-' : '+';
+  const abs = Math.abs(offsetMinutes);
+  const hh = String(Math.floor(abs / 60)).padStart(2, '0');
+  const mm = String(abs % 60).padStart(2, '0');
+  return deslocado.toISOString().replace(/\.\d{3}Z$/, `${sinal}${hh}:${mm}`);
+}
+
 function gerarXmlNfe(
   nfe:        NfeRecord,
   dest_email: string | undefined,
   itens:      (NfeItemDTO & { numero_item: number; valor_total: number; valor_icms: number; valor_pis: number; valor_cofins: number })[],
   chave:      string,
+  emit:       { uf?: string | null; codigo_municipio?: string | null },
 ): string {
-  const now = new Date().toISOString().replace(/\.\d{3}Z$/, '-03:00');
-  const dtEmissao = now;
+  const dtEmissao = dhEmi(new Date(nfe.data_emissao ?? Date.now()));
+  const cUF = codigoUf(emit.uf) || chave.slice(0, 2);
+  const cMunFG = String(emit.codigo_municipio ?? '').replace(/\D/g, '');
+  const tpAmb = nfe.ambiente === 'producao' ? '1' : '2';
 
   const itensXml = itens.map(item => `
     <det nItem="${item.numero_item}">
       <prod>
-        <cProd>${item.codigo_produto}</cProd>
+        <cProd>${esc(item.codigo_produto)}</cProd>
         <cEAN>SEM GTIN</cEAN>
-        <xProd>${item.descricao}</xProd>
-        <NCM>${item.ncm ?? '00000000'}</NCM>
-        <CFOP>${item.cfop}</CFOP>
-        <uCom>${item.unidade ?? 'UN'}</uCom>
+        <xProd>${esc(item.descricao)}</xProd>
+        <NCM>${esc(item.ncm ?? '00000000')}</NCM>
+        <CFOP>${esc(item.cfop)}</CFOP>
+        <uCom>${esc(item.unidade ?? 'UN')}</uCom>
         <qCom>${fmt4(item.quantidade)}</qCom>
         <vUnCom>${fmt4(item.valor_unitario)}</vUnCom>
         <vProd>${fmt2(item.valor_total)}</vProd>
@@ -113,7 +156,7 @@ function gerarXmlNfe(
         <ICMS>
           <ICMS00>
             <orig>0</orig>
-            <CST>${item.cst_icms ?? '00'}</CST>
+            <CST>${esc(item.cst_icms ?? '00')}</CST>
             <modBC>3</modBC>
             <vBC>${fmt2(item.valor_total)}</vBC>
             <pICMS>${fmt2(item.aliquota_icms ?? 0)}</pICMS>
@@ -122,7 +165,7 @@ function gerarXmlNfe(
         </ICMS>
         <PIS>
           <PISAliq>
-            <CST>${item.cst_pis ?? '01'}</CST>
+            <CST>${esc(item.cst_pis ?? '01')}</CST>
             <vBC>${fmt2(item.valor_total)}</vBC>
             <pPIS>${fmt2(item.aliquota_pis ?? 0.65)}</pPIS>
             <vPIS>${fmt2(item.valor_pis)}</vPIS>
@@ -130,7 +173,7 @@ function gerarXmlNfe(
         </PIS>
         <COFINS>
           <COFINSAliq>
-            <CST>${item.cst_cofins ?? '01'}</CST>
+            <CST>${esc(item.cst_cofins ?? '01')}</CST>
             <vBC>${fmt2(item.valor_total)}</vBC>
             <pCOFINS>${fmt2(item.aliquota_cofins ?? 3)}</pCOFINS>
             <vCOFINS>${fmt2(item.valor_cofins)}</vCOFINS>
@@ -144,20 +187,20 @@ function gerarXmlNfe(
   <NFe xmlns="http://www.portalfiscal.inf.br/nfe">
     <infNFe versao="4.00" Id="NFe${chave}">
       <ide>
-        <cUF>35</cUF>
+        <cUF>${cUF}</cUF>
         <cNF>${chave.slice(35, 43)}</cNF>
-        <natOp>${nfe.natureza_operacao}</natOp>
+        <natOp>${esc(nfe.natureza_operacao)}</natOp>
         <mod>${nfe.modelo}</mod>
         <serie>${nfe.serie}</serie>
         <nNF>${nfe.numero}</nNF>
         <dhEmi>${dtEmissao}</dhEmi>
         <tpNF>1</tpNF>
         <idDest>1</idDest>
-        <cMunFG>3550308</cMunFG>
+        <cMunFG>${cMunFG}</cMunFG>
         <tpImp>1</tpImp>
         <tpEmis>1</tpEmis>
         <cDV>${chave[43]}</cDV>
-        <tpAmb>2</tpAmb>
+        <tpAmb>${tpAmb}</tpAmb>
         <finNFe>1</finNFe>
         <indFinal>0</indFinal>
         <indPres>1</indPres>
@@ -165,14 +208,14 @@ function gerarXmlNfe(
         <verProc>4.00</verProc>
       </ide>
       <emit>
-        <CNPJ>${nfe.emit_cnpj}</CNPJ>
-        <xNome>${nfe.emit_razao_social}</xNome>
+        <CNPJ>${esc(nfe.emit_cnpj)}</CNPJ>
+        <xNome>${esc(nfe.emit_razao_social)}</xNome>
         <CRT>1</CRT>
       </emit>
       <dest>
-        <${nfe.dest_cpf_cnpj.length === 14 ? 'CNPJ' : 'CPF'}>${nfe.dest_cpf_cnpj}</${nfe.dest_cpf_cnpj.length === 14 ? 'CNPJ' : 'CPF'}>
-        <xNome>${nfe.dest_razao_social}</xNome>
-        ${dest_email ? `<email>${dest_email}</email>` : ''}
+        <${nfe.dest_cpf_cnpj.length === 14 ? 'CNPJ' : 'CPF'}>${esc(nfe.dest_cpf_cnpj)}</${nfe.dest_cpf_cnpj.length === 14 ? 'CNPJ' : 'CPF'}>
+        <xNome>${esc(nfe.dest_razao_social)}</xNome>
+        ${dest_email ? `<email>${esc(dest_email)}</email>` : ''}
         <indIEDest>9</indIEDest>
       </dest>
       ${itensXml}
@@ -208,7 +251,7 @@ function gerarXmlNfe(
           <vPag>${fmt2(nfe.valor_total)}</vPag>
         </detPag>
       </pag>
-      ${nfe.informacoes_adicionais ? `<infAdic><infCpl>${nfe.informacoes_adicionais}</infCpl></infAdic>` : ''}
+      ${nfe.informacoes_adicionais ? `<infAdic><infCpl>${esc(nfe.informacoes_adicionais)}</infCpl></infAdic>` : ''}
     </infNFe>
   </NFe>
 </nfeProc>`;
@@ -242,16 +285,25 @@ async function mockSefazCancel(_chave: string, _justificativa: string): Promise<
 
 // ─── Cálculo de impostos por item ─────────────────────────────────────────────
 
+/**
+ * Arredonda para centavos com meio-para-cima, igual ao ROUND_HALF_UP usado no
+ * emissor Python. Somar valores não arredondados e só arredondar o total fazia
+ * o valor gravado divergir em centavos do XML autorizado.
+ */
+function round2(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 function calcularImpostosItem(item: NfeItemDTO): {
   valor_total: number;
   valor_icms: number;
   valor_pis: number;
   valor_cofins: number;
 } {
-  const valor_total = item.quantidade * item.valor_unitario;
-  const valor_icms  = valor_total * (item.aliquota_icms  ?? 0)    / 100;
-  const valor_pis   = valor_total * (item.aliquota_pis   ?? 0.65) / 100;
-  const valor_cofins = valor_total * (item.aliquota_cofins ?? 3)   / 100;
+  const valor_total = round2(item.quantidade * item.valor_unitario);
+  const valor_icms  = round2(valor_total * (item.aliquota_icms  ?? 0)    / 100);
+  const valor_pis   = round2(valor_total * (item.aliquota_pis   ?? 0.65) / 100);
+  const valor_cofins = round2(valor_total * (item.aliquota_cofins ?? 3)   / 100);
   return { valor_total, valor_icms, valor_pis, valor_cofins };
 }
 
@@ -609,19 +661,44 @@ export class NfeService {
       };
     });
 
-    const valor_produtos = itensCalc.reduce((s, i) => s + i.valor_total, 0);
-    const valor_icms     = itensCalc.reduce((s, i) => s + i.valor_icms,  0);
-    const valor_pis      = itensCalc.reduce((s, i) => s + i.valor_pis,   0);
-    const valor_cofins   = itensCalc.reduce((s, i) => s + i.valor_cofins, 0);
-    const valor_frete    = dto.valor_frete    ?? 0;
-    const valor_desconto = dto.valor_desconto ?? 0;
-    const valor_total    = valor_produtos + valor_frete - valor_desconto;
+    const valor_produtos = round2(itensCalc.reduce((s, i) => s + i.valor_total, 0));
+    const valor_icms     = round2(itensCalc.reduce((s, i) => s + i.valor_icms,  0));
+    const valor_pis      = round2(itensCalc.reduce((s, i) => s + i.valor_pis,   0));
+    const valor_cofins   = round2(itensCalc.reduce((s, i) => s + i.valor_cofins, 0));
+    const valor_frete    = round2(dto.valor_frete    ?? 0);
+    const valor_desconto = round2(dto.valor_desconto ?? 0);
+    if (valor_frete < 0 || valor_desconto < 0) {
+      throw Object.assign(
+        new Error('Frete e desconto não podem ser negativos.'),
+        { status: 400 },
+      );
+    }
+    if (valor_desconto > valor_produtos + valor_frete) {
+      throw Object.assign(
+        new Error(
+          `Desconto (R$ ${valor_desconto.toFixed(2)}) é maior que o total dos produtos mais o frete (R$ ${(valor_produtos + valor_frete).toFixed(2)}).`,
+        ),
+        { status: 400 },
+      );
+    }
+    const valor_total    = round2(valor_produtos + valor_frete - valor_desconto);
 
-    // Gerar chave de acesso
-    const aamm  = new Date().toISOString().slice(2, 7).replace('-', '');
+    // Gerar chave de acesso. O cUF vem da UF da empresa: com '35' fixo, a chave
+    // do rascunho saía com o código de São Paulo para empresa de qualquer estado.
+    const cUF = codigoUf(company.state);
+    if (!cUF) {
+      throw Object.assign(
+        new Error(
+          'UF da empresa inválida ou não cadastrada. Informe a UF (sigla de 2 letras) no cadastro da empresa antes de emitir NF-e.',
+        ),
+        { status: 422 },
+      );
+    }
+    const emissao = new Date();
+    const aamm  = dhEmi(emissao).slice(2, 7).replace('-', '');
     const cnpj  = (company.cnpj ?? '').replace(/\D/g, '');
     const cNF   = String(Math.floor(Math.random() * 1e8)).padStart(8, '0');
-    const chave = gerarChaveAcesso('35', aamm, cnpj, modelo, serie, numero, 1, cNF);
+    const chave = gerarChaveAcesso(cUF, aamm, cnpj, modelo, serie, numero, 1, cNF);
 
     // Se já existe RASCUNHO/PENDENTE com este número, atualiza em vez de
     // inserir (evita unique conflict e destrava emissão após falha anterior).
@@ -663,12 +740,15 @@ export class NfeService {
       status:           NfeStatus.RASCUNHO,
       natureza_operacao: dto.natureza_operacao ?? 'VENDA',
       informacoes_adicionais: dto.informacoes_adicionais,
-      data_emissao:     new Date().toISOString(),
-      created_at:       reutilizarId ? existente.created_at : new Date().toISOString(),
-      updated_at:       new Date().toISOString(),
+      data_emissao:     emissao.toISOString(),
+      created_at:       reutilizarId ? existente.created_at : emissao.toISOString(),
+      updated_at:       emissao.toISOString(),
     };
 
-    const xml = gerarXmlNfe(nfeBase, dto.destinatario.email, itensCalc, chave);
+    const xml = gerarXmlNfe(nfeBase, dto.destinatario.email, itensCalc, chave, {
+      uf: company.state,
+      codigo_municipio: company.codigo_municipio,
+    });
 
     return await db.transaction(async trx => {
       let record: NfeRecord;
@@ -964,11 +1044,31 @@ export class NfeService {
     return { data: data as NfeRecord[], total: parseInt(count), page, limit };
   }
 
-  /** Obter XML da NF-e (para download ou integração) */
+  /**
+   * Obter XML da NF-e (para download ou integração).
+   *
+   * Para nota AUTORIZADA devolve o `xml_proc` — o nfeProc assinado e com o
+   * protocolo da SEFAZ, que é o documento com valor fiscal e o único aceito
+   * pela contabilidade/SPED. O `xml_nfe` é apenas a prévia do rascunho gerada
+   * localmente (não assinada), e servi-la como se fosse a nota autorizada
+   * entregava ao usuário um arquivo sem validade.
+   */
   static async getXml(id: string, companyId: string): Promise<string> {
     const db = await getDatabase();
-    const nfe = await db('nfe').where({ id, company_id: companyId }).select('xml_nfe', 'status').first();
+    const nfe = await db('nfe')
+      .where({ id, company_id: companyId })
+      .select('xml_nfe', 'xml_proc', 'status')
+      .first();
     if (!nfe) throw Object.assign(new Error('NF-e não encontrada'), { status: 404 });
+    if (nfe.xml_proc) return nfe.xml_proc as string;
+    if (nfe.status === NfeStatus.AUTORIZADA) {
+      throw Object.assign(
+        new Error(
+          'XML autorizado (nfeProc) não disponível para esta NF-e. Baixe o XML pelo portal da SEFAZ ou reprocesse a autorização.',
+        ),
+        { status: 404 },
+      );
+    }
     if (!nfe.xml_nfe) throw Object.assign(new Error('XML não disponível'), { status: 404 });
     return nfe.xml_nfe as string;
   }
