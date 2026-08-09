@@ -34,6 +34,7 @@ import {
   getEmissionMode,
   getAmbiente,
   verificarNumeracaoSefaz,
+  crtFromRegime,
 } from './nfeEmitter';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -106,6 +107,28 @@ function gerarProtocolo(): string {
   return `${ano}${rand}`;
 }
 
+/**
+ * tPag aceitos no grupo <pag> da NF-e 4.00 (NT 2020.006).
+ * 90 = sem pagamento; 99 = outros.
+ */
+const FORMAS_PAGAMENTO = new Set([
+  '01', '02', '03', '04', '05', '10', '11', '12', '13',
+  '15', '16', '17', '18', '19', '90', '99',
+]);
+
+function normalizarFormaPagamento(valor: unknown): string {
+  const tPag = String(valor ?? '').trim().padStart(2, '0');
+  if (!FORMAS_PAGAMENTO.has(tPag)) {
+    throw Object.assign(
+      new Error(
+        `Forma de pagamento inválida ("${String(valor)}"). Use um tPag da NF-e 4.00 (ex.: 01 dinheiro, 03 cartão de crédito, 15 boleto, 17 PIX, 90 sem pagamento).`,
+      ),
+      { status: 400 },
+    );
+  }
+  return tPag;
+}
+
 /** Formata valor para 2 casas em XML */
 const fmt2 = (v: number) => v.toFixed(2);
 const fmt4 = (v: number) => v.toFixed(4);
@@ -136,6 +159,7 @@ function gerarXmlNfe(
   const cUF = codigoUf(emit.uf) || chave.slice(0, 2);
   const cMunFG = String(emit.codigo_municipio ?? '').replace(/\D/g, '');
   const tpAmb = nfe.ambiente === 'producao' ? '1' : '2';
+  const tPag = String(nfe.forma_pagamento || '01').padStart(2, '0');
 
   const itensXml = itens.map(item => `
     <det nItem="${item.numero_item}">
@@ -247,8 +271,8 @@ function gerarXmlNfe(
       </transp>
       <pag>
         <detPag>
-          <tPag>01</tPag>
-          <vPag>${fmt2(nfe.valor_total)}</vPag>
+          <tPag>${esc(tPag)}</tPag>
+          <vPag>${fmt2(tPag === '90' ? 0 : nfe.valor_total)}</vPag>
         </detPag>
       </pag>
       ${nfe.informacoes_adicionais ? `<infAdic><infCpl>${esc(nfe.informacoes_adicionais)}</infCpl></infAdic>` : ''}
@@ -294,22 +318,56 @@ function round2(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-function calcularImpostosItem(item: NfeItemDTO): {
+/**
+ * Impostos do item, na mesma regra que o emissor usa para montar o XML.
+ *
+ * No Simples Nacional a nota sai com CSOSN 102 e PIS/COFINS CST 07, todos com
+ * valor zero (o imposto está no DAS). O cálculo aqui aplicava 0,65% e 3% de
+ * qualquer jeito, então o valor gravado no banco não batia com o documento
+ * autorizado e os relatórios mostravam imposto que a nota não tem.
+ */
+function calcularImpostosItem(
+  item: NfeItemDTO,
+  simplesNacional: boolean,
+): {
   valor_total: number;
   valor_icms: number;
   valor_pis: number;
   valor_cofins: number;
 } {
   const valor_total = round2(item.quantidade * item.valor_unitario);
-  const valor_icms  = round2(valor_total * (item.aliquota_icms  ?? 0)    / 100);
-  const valor_pis   = round2(valor_total * (item.aliquota_pis   ?? 0.65) / 100);
-  const valor_cofins = round2(valor_total * (item.aliquota_cofins ?? 3)   / 100);
+  if (simplesNacional) {
+    return { valor_total, valor_icms: 0, valor_pis: 0, valor_cofins: 0 };
+  }
+  const valor_icms  = round2(valor_total * (item.aliquota_icms   ?? 0) / 100);
+  const valor_pis   = round2(valor_total * (item.aliquota_pis    ?? 0) / 100);
+  const valor_cofins = round2(valor_total * (item.aliquota_cofins ?? 0) / 100);
   return { valor_total, valor_icms, valor_pis, valor_cofins };
 }
 
 // ─── Serviço principal ────────────────────────────────────────────────────────
 
 export class NfeService {
+
+  /**
+   * Validade da trava de transmissão à SEFAZ. Vencida, a nota volta a aceitar
+   * nova tentativa — cobre queda do processo no meio da autorização.
+   */
+  private static readonly TRANSMISSAO_LOCK_MS = 10 * 60 * 1000;
+
+  /** Solta a trava de transmissão (nova tentativa fica liberada). */
+  private static async liberarTravaTransmissao(id: string, companyId: string): Promise<void> {
+    try {
+      const db = await getDatabase();
+      await db('nfe').where({ id, company_id: companyId }).update({ transmitindo_em: null });
+    } catch (error) {
+      logger.warn('Falha ao liberar trava de transmissão da NF-e', {
+        id,
+        companyId,
+        error: (error as Error).message,
+      });
+    }
+  }
 
   /**
    * Maior número de NF-e (série/modelo) emitido por esta empresa e encontrado
@@ -382,33 +440,57 @@ export class NfeService {
     }
   }
 
-  /** Próximo número de NF-e para empresa/série */
+  /**
+   * Próximo número de NF-e para empresa/série.
+   *
+   * A reserva é feita em um único UPDATE ... RETURNING, atômico no banco. Ler
+   * o contador e gravar depois deixava duas emissões simultâneas pegarem o
+   * mesmo número: a segunda estourava na constraint única como erro 500, ou
+   * (pior) as duas iam para a SEFAZ com o mesmo número.
+   */
   private static async proximoNumero(
     companyId: string,
     serie: number,
     modelo: number,
   ): Promise<number> {
     const db = await getDatabase();
-    const row = await db('nfe_numeracao')
-      .where({ company_id: companyId, serie, modelo })
-      .first();
     const capturado = await NfeService.maxNumeroCapturado(companyId, serie, modelo);
+    const piso = Math.max(capturado ?? 0, 0);
 
-    if (!row) {
-      const inicial = Math.max(capturado ?? 0, 0) + 1;
-      await db('nfe_numeracao').insert({
-        company_id: companyId,
-        serie,
-        modelo,
-        ultimo_numero: inicial,
-      });
-      return inicial;
-    }
-    const next = Math.max(Number(row.ultimo_numero), capturado ?? 0) + 1;
-    await db('nfe_numeracao')
+    const reservado = await db('nfe_numeracao')
       .where({ company_id: companyId, serie, modelo })
-      .update({ ultimo_numero: next });
-    return next;
+      .update({
+        // GREATEST cobre o caso de nota emitida fora do ProContador com número
+        // maior que o contador local.
+        ultimo_numero: db.raw('GREATEST(ultimo_numero, ?) + 1', [piso]),
+      })
+      .returning('ultimo_numero');
+
+    const numero = Array.isArray(reservado) && reservado.length > 0
+      ? Number(
+        typeof reservado[0] === 'object'
+          ? (reservado[0] as { ultimo_numero: number | string }).ultimo_numero
+          : reservado[0],
+      )
+      : NaN;
+
+    if (Number.isFinite(numero) && numero > 0) return numero;
+
+    // Primeira nota da série: cria a linha. onConflict cobre duas requisições
+    // simultâneas chegando aqui juntas — a perdedora incrementa a linha da
+    // vencedora em vez de falhar.
+    const inicial = piso + 1;
+    const [criado] = await db('nfe_numeracao')
+      .insert({ company_id: companyId, serie, modelo, ultimo_numero: inicial })
+      .onConflict(['company_id', 'serie', 'modelo'])
+      .merge({ ultimo_numero: db.raw('GREATEST(nfe_numeracao.ultimo_numero, ?) + 1', [piso]) })
+      .returning('ultimo_numero');
+
+    return Number(
+      typeof criado === 'object'
+        ? (criado as { ultimo_numero: number | string }).ultimo_numero
+        : criado,
+    );
   }
 
   /** Atualiza contador local para não regredir após número manual. */
@@ -491,9 +573,16 @@ export class NfeService {
     // Notas emitidas pela própria empresa fora do ProContador (outro emissor,
     // portal da SEFAZ, etc.) e trazidas pela captura automática (Distribuição
     // DFe) também ocupam o número, mesmo sem registro na tabela `nfe` local.
-    const jaEmitidaCapturada = !jaEmitidaLocal
-      ? await NfeService.numeroJaCapturado(companyId, serie, modelo, numero)
-      : false;
+    //
+    // A consulta vale também quando existe registro local reutilizável: é
+    // exatamente o caso da nota que ficou PENDENTE porque a resposta da SEFAZ
+    // se perdeu, mas foi autorizada de verdade e voltou na captura. Antes a
+    // checagem era pulada sempre que havia registro local, o número era dado
+    // como livre e a reemissão levava cStat 539 (duplicidade).
+    const jaEmitidaCapturada =
+      !jaEmitidaLocal || localReutilizavel
+        ? await NfeService.numeroJaCapturado(companyId, serie, modelo, numero)
+        : false;
     let ultimoNumeroRegistrado: number | null = numeracao
       ? Number(numeracao.ultimo_numero)
       : null;
@@ -529,17 +618,29 @@ export class NfeService {
       !jaEmitidaSefaz &&
       !foraDeOrdem;
     // RASCUNHO/PENDENTE: liberar reemissão mesmo se a consulta SEFAZ vier
-    // ambígua/offline — a autorização real confirma. Só bloqueia se a SEFAZ
-    // confirmar que a nota já foi autorizada (ja_emitida_sefaz === true).
+    // ambígua/offline — a autorização real confirma. Bloqueia apenas quando há
+    // confirmação de que a nota existe na SEFAZ: consulta por chave
+    // (ja_emitida_sefaz) ou XML já capturado para o mesmo número.
     const disponivel = localReutilizavel
-      ? !jaEmitidaSefaz
+      ? !jaEmitidaSefaz && !jaEmitidaCapturada
       : disponivelBase &&
         (sefaz.disponivel === true ||
           sefaz.disponivel === null ||
           sefaz.disponivel === undefined);
 
     let mensagem: string;
-    if (localReutilizavel) {
+    if (localReutilizavel && jaEmitidaCapturada) {
+      // A tentativa anterior chegou a ser autorizada — só a resposta se perdeu.
+      // Reenviar aqui resultaria em cStat 539 (duplicidade).
+      mensagem =
+        `Número ${numero} série ${serie} está ${local.status} no ProContador, mas a SEFAZ já ` +
+        'tem uma NF-e autorizada com esse número (encontrada nas notas capturadas): a emissão '
+        + 'anterior foi concluída e só a resposta se perdeu. Não reenvie — use o próximo número livre.';
+    } else if (localReutilizavel && jaEmitidaSefaz) {
+      mensagem =
+        `Número ${numero} série ${serie} está ${local.status} no ProContador, mas a SEFAZ confirma `
+        + 'NF-e já autorizada com essa chave. Não reenvie — use o próximo número livre.';
+    } else if (localReutilizavel) {
       mensagem =
         `Número ${numero} série ${serie} está ${local.status} no ProContador ` +
         '(emissão anterior incompleta). Confirme para atualizar os dados e reenviar à SEFAZ.';
@@ -595,6 +696,44 @@ export class NfeService {
   }
 
   /**
+   * Checagens que não dependem de acesso ao banco: destinatário e itens.
+   * Rodam antes da reserva de numeração para não queimar um número da série.
+   */
+  private static validarDadosBasicos(dto: CreateNfeDTO): void {
+    if (!Array.isArray(dto.itens) || dto.itens.length === 0) {
+      throw Object.assign(
+        new Error('Informe pelo menos um item na NF-e.'),
+        { status: 400 },
+      );
+    }
+
+    const documento = String(dto.destinatario?.cpf_cnpj ?? '').replace(/\D/g, '');
+    if (documento.length !== 11 && documento.length !== 14) {
+      throw Object.assign(
+        new Error(
+          `Documento do destinatário inválido: use 11 dígitos (CPF) ou 14 (CNPJ). Você enviou ${documento.length} dígito(s).`,
+        ),
+        { status: 400 },
+      );
+    }
+
+    if (!String(dto.destinatario?.razao_social ?? '').trim()) {
+      throw Object.assign(
+        new Error('Informe a razão social / nome do destinatário.'),
+        { status: 400 },
+      );
+    }
+
+    const natureza = String(dto.natureza_operacao ?? '').trim();
+    if (natureza.length > 60) {
+      throw Object.assign(
+        new Error('Natureza da operação deve ter no máximo 60 caracteres.'),
+        { status: 400 },
+      );
+    }
+  }
+
+  /**
    * Criar NF-e (status RASCUNHO)
    * Gera XML e chave de acesso mas NÃO envia ao SEFAZ
    */
@@ -606,6 +745,10 @@ export class NfeService {
     // Buscar dados da empresa emitente
     const company = await db('companies').where({ id: companyId }).first();
     if (!company) throw Object.assign(new Error('Empresa não encontrada'), { status: 404 });
+
+    // Valida ANTES de reservar o número: um erro depois da reserva consome um
+    // número da série e deixa uma lacuna que precisaria ser inutilizada na SEFAZ.
+    NfeService.validarDadosBasicos(dto);
 
     let numero: number;
     if (dto.numero != null) {
@@ -631,6 +774,10 @@ export class NfeService {
       numero = await NfeService.proximoNumero(companyId, serie, modelo);
     }
 
+    // Mesma decisão de regime usada pelo emissor: no Simples a nota sai com
+    // CSOSN 102 e PIS/COFINS zerados, e o valor gravado tem que acompanhar.
+    const simplesNacional = crtFromRegime(company.tax_regime, company.crt) === '1';
+
     // Calcular totais — NCM no banco é VARCHAR(8) só dígitos (ex.: 84212300)
     const itensCalc = dto.itens.map((item, idx) => {
       const ncm = String(item.ncm ?? '')
@@ -639,10 +786,12 @@ export class NfeService {
       const cfop = String(item.cfop ?? '')
         .replace(/\D/g, '')
         .slice(0, 4);
-      if (ncm && ncm.length !== 8) {
+      // NCM é obrigatório na NF-e. Vazio virava "00000000" no emissor e a SEFAZ
+      // rejeitava com mensagem genérica, longe do campo que o usuário errou.
+      if (ncm.length !== 8) {
         throw Object.assign(
           new Error(
-            `NCM inválido no item ${idx + 1}: use 8 dígitos (ex.: 84212300). Você enviou "${item.ncm}".`,
+            `NCM obrigatório no item ${idx + 1}: informe os 8 dígitos (ex.: 84212300)${item.ncm ? `. Você enviou "${item.ncm}"` : ''}.`,
           ),
           { status: 400 },
         );
@@ -653,11 +802,29 @@ export class NfeService {
           { status: 400 },
         );
       }
-      const normalized = { ...item, ncm: ncm || undefined, cfop };
+      if (!String(item.descricao ?? '').trim()) {
+        throw Object.assign(
+          new Error(`Descrição obrigatória no item ${idx + 1}.`),
+          { status: 400 },
+        );
+      }
+      if (!(Number(item.quantidade) > 0)) {
+        throw Object.assign(
+          new Error(`Quantidade do item ${idx + 1} deve ser maior que zero.`),
+          { status: 400 },
+        );
+      }
+      if (!(Number(item.valor_unitario) >= 0)) {
+        throw Object.assign(
+          new Error(`Valor unitário inválido no item ${idx + 1}.`),
+          { status: 400 },
+        );
+      }
+      const normalized = { ...item, ncm, cfop };
       return {
         ...normalized,
         numero_item: idx + 1,
-        ...calcularImpostosItem(normalized),
+        ...calcularImpostosItem(normalized, simplesNacional),
       };
     });
 
@@ -739,6 +906,7 @@ export class NfeService {
       valor_total:      parseFloat(valor_total.toFixed(2)),
       status:           NfeStatus.RASCUNHO,
       natureza_operacao: dto.natureza_operacao ?? 'VENDA',
+      forma_pagamento:  normalizarFormaPagamento(dto.forma_pagamento ?? '01'),
       informacoes_adicionais: dto.informacoes_adicionais,
       data_emissao:     emissao.toISOString(),
       created_at:       reutilizarId ? existente.created_at : emissao.toISOString(),
@@ -777,6 +945,7 @@ export class NfeService {
             status_motivo: null,
             protocolo: null,
             natureza_operacao: nfeBase.natureza_operacao,
+            forma_pagamento: nfeBase.forma_pagamento,
             informacoes_adicionais: nfeBase.informacoes_adicionais,
             data_emissao: nfeBase.data_emissao,
             xml_nfe: xml,
@@ -849,16 +1018,52 @@ export class NfeService {
       );
     }
 
+    // Trava a nota para esta tentativa em um único UPDATE condicional. Dois
+    // cliques em "Autorizar" (ou duas requisições) passavam pela checagem acima
+    // antes de qualquer gravação e transmitiam a MESMA nota duas vezes à SEFAZ —
+    // a segunda voltava como duplicidade 539.
+    //
+    // A trava é um timestamp com expiração, não um status novo: se o processo
+    // morrer no meio da transmissão, a nota se destrava sozinha em vez de ficar
+    // presa em um estado do qual nem authorize() nem cancel() a tiram.
+    const travaExpiraEmMs = NfeService.TRANSMISSAO_LOCK_MS;
+    const travou = await db('nfe')
+      .where({ id, company_id: companyId })
+      .where((qb) =>
+        qb
+          .whereNull('transmitindo_em')
+          .orWhere('transmitindo_em', '<', new Date(Date.now() - travaExpiraEmMs)),
+      )
+      .update({ transmitindo_em: new Date() });
+
+    if (!travou) {
+      throw Object.assign(
+        new Error(
+          'Esta NF-e já está sendo transmitida à SEFAZ. Aguarde o resultado antes de tentar de novo.',
+        ),
+        { status: 409 },
+      );
+    }
+
     const now = new Date().toISOString();
     const mode = getEmissionMode();
 
     // ── Modo real: assina com A1 e transmite à SEFAZ via pynfe ──
     if (mode === 'real') {
       const company = await db('companies').where({ id: companyId }).first();
-      if (!company) throw Object.assign(new Error('Empresa não encontrada'), { status: 404 });
+      if (!company) {
+        await NfeService.liberarTravaTransmissao(id, companyId);
+        throw Object.assign(new Error('Empresa não encontrada'), { status: 404 });
+      }
       const itens = await db('nfe_itens').where({ nfe_id: id }).orderBy('numero_item');
 
-      const result = await emitirNfeReal(company, nfe, itens);
+      let result;
+      try {
+        result = await emitirNfeReal(company, nfe, itens);
+      } catch (error) {
+        await NfeService.liberarTravaTransmissao(id, companyId);
+        throw error;
+      }
 
       if (!result.ok) {
         // Falha de autorização: registra motivo e mantém como PENDENTE
@@ -867,6 +1072,7 @@ export class NfeService {
           status_sefaz:  result.cStat,
           status_motivo: result.motivo,
           ambiente:      result.ambiente,
+          transmitindo_em: null,
         });
         const dup =
           result.cStat === '539' ||
@@ -892,6 +1098,7 @@ export class NfeService {
           ambiente:         result.ambiente,
           xml_proc:         result.xml_proc,
           data_autorizacao: now,
+          transmitindo_em:  null,
         })
         .returning('*');
 
@@ -915,6 +1122,7 @@ export class NfeService {
         status_motivo:    sefaz.motivo,
         protocolo:        sefaz.protocolo,
         data_autorizacao: now,
+        transmitindo_em:  null,
       })
       .returning('*');
 

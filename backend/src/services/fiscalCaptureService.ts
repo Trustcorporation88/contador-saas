@@ -173,15 +173,17 @@ async function materializePfxFile(
   pfxBuffer?: Buffer,
 ): Promise<string> {
   const targetDir = path.dirname(pfxPath);
-  await fs.ensureDir(targetDir);
+  // Chave privada da empresa: 0700 no diretório e 0600 no arquivo. O padrão
+  // gravava o certificado legível por qualquer usuário do sistema.
+  await fs.ensureDir(targetDir, { mode: 0o700 });
 
   if (pfxBuffer && pfxBuffer.length > 0) {
-    await fs.writeFile(pfxPath, pfxBuffer);
+    await fs.writeFile(pfxPath, pfxBuffer, { mode: 0o600 });
     return pfxPath;
   }
 
   if (pfxData) {
-    await fs.writeFile(pfxPath, Buffer.from(pfxData, 'base64'));
+    await fs.writeFile(pfxPath, Buffer.from(pfxData, 'base64'), { mode: 0o600 });
     return pfxPath;
   }
 

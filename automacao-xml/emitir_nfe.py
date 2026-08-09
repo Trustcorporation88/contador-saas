@@ -287,8 +287,12 @@ def _construir_nota(payload: dict):
 
     valor_pago = _dec(total_produtos + valor_frete - valor_desconto)
 
+    t_pag = formaPagamento_do_payload(payload)
+    # tPag 90 (sem pagamento) exige vPag zerado, mas o pynfe trata 0 como
+    # "valor requerido não informado" e recusa a serialização. Então grava o
+    # valor cheio aqui e o grupo <pag> é ajustado depois, em montar_xml.
     nota.adicionar_pagamento(
-        t_pag=str(payload.get("forma_pagamento", "01")),
+        t_pag=t_pag,
         v_pag=valor_pago,
         ind_pag=int(payload.get("indicador_pagamento", 0)),
     )
@@ -296,15 +300,54 @@ def _construir_nota(payload: dict):
     return nota, {"total_produtos": total_produtos, "valor_pago": valor_pago}
 
 
+def formaPagamento_do_payload(payload: dict) -> str:
+    return str(payload.get("forma_pagamento") or "01").zfill(2)
+
+
+def _local_name(tag) -> str:
+    return str(tag).rsplit("}", 1)[-1]
+
+
+def _filho(elemento, nome: str):
+    for filho in elemento:
+        if _local_name(filho.tag) == nome:
+            return filho
+    return None
+
+
+def _zerar_pagamento_sem_valor(arvore) -> None:
+    """Ajusta <pag> para tPag=90 (sem pagamento): vPag tem que ser 0,00.
+
+    A busca ignora namespace: a árvore montada pelo pynfe declara o xmlns como
+    atributo do elemento raiz, então os filhos não ficam qualificados.
+    """
+    for elemento in arvore.iter():
+        if _local_name(elemento.tag) != "detPag":
+            continue
+        t_pag = _filho(elemento, "tPag")
+        v_pag = _filho(elemento, "vPag")
+        if t_pag is not None and v_pag is not None and (t_pag.text or "").strip() == "90":
+            v_pag.text = "0.00"
+
+
 def montar_xml(payload: dict, retorna_string: bool = False):
     """Monta a nota e serializa (sem assinar). Útil para validação offline."""
     from pynfe.entidades.fonte_dados import _fonte_dados
     from pynfe.processamento.serializacao import SerializacaoXML
 
+    from lxml import etree
+
     homologacao = str(payload.get("ambiente", "homologacao")).lower() != "producao"
     _construir_nota(payload)
     serializador = SerializacaoXML(_fonte_dados, homologacao=homologacao)
-    return serializador.exportar(retorna_string=retorna_string)
+    arvore = serializador.exportar(retorna_string=False)
+
+    if formaPagamento_do_payload(payload) == "90":
+        _zerar_pagamento_sem_valor(arvore)
+
+    if retorna_string:
+        return etree.tostring(arvore, encoding="unicode")
+    return arvore
 
 
 def _emitir(payload: dict) -> dict:
