@@ -13,19 +13,28 @@ function normalizeError(err: any): Error {
   return new Error(msg);
 }
 
-const isVercelProduction =
-  typeof window !== "undefined" &&
-  /\.vercel\.app$/i.test(window.location.hostname);
+const hostname =
+  typeof window !== "undefined" ? window.location.hostname : "";
 
-const isHostedFrontend =
-  typeof window !== "undefined" &&
-  /(^|\.)procontador\.com\.br$/i.test(window.location.hostname);
+/**
+ * Em desenvolvimento a API está em outra porta; em qualquer host publicado o
+ * frontend fala com a própria origem (o rewrite /api do vercel.json encaminha
+ * para o backend), o que evita CORS.
+ *
+ * A checagem é por localhost e não por lista de domínios de produção: com a
+ * lista, um domínio novo (app.ocontador.app, por exemplo) não era reconhecido
+ * e o app publicado caía no fallback http://localhost:3000, ou seja, quebrava
+ * inteiro para o usuário final.
+ */
+const isLocalHost =
+  hostname === "localhost" ||
+  hostname === "127.0.0.1" ||
+  hostname === "[::1]" ||
+  hostname.endsWith(".localhost");
 
-const isProduction = isVercelProduction || isHostedFrontend;
-
-const BASE_URL = isProduction
-  ? ""
-  : import.meta.env.VITE_API_URL || "http://localhost:3000";
+const BASE_URL = isLocalHost
+  ? import.meta.env.VITE_API_URL || "http://localhost:3000"
+  : import.meta.env.VITE_API_URL || "";
 
 export const api = axios.create({
   baseURL: `${BASE_URL}/api/v1`,
