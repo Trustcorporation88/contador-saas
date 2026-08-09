@@ -37,6 +37,17 @@ interface UserStore {
   lastLogin?: Date;
   loginAttempts: number;
   lockedUntil?: Date;
+  isActive: boolean;
+}
+
+/**
+ * Usuário ativo? A coluna é `is_active` no schema atual e `active` no legado;
+ * quando nenhuma das duas existe, trata como ativo (não trava base antiga).
+ */
+function isRowActive(row: Record<string, unknown>): boolean {
+  if (row.is_active !== undefined && row.is_active !== null) return Boolean(row.is_active);
+  if (row.active !== undefined && row.active !== null) return Boolean(row.active);
+  return true;
 }
 
 interface RefreshTokenStore {
@@ -220,6 +231,14 @@ export class AuthService {
     const isPasswordValid = await this.verifyPasswordForUser(user, password);
     if (!isPasswordValid) {
       this.recordLoginAttempt(email);
+      throw new InvalidCredentialsError('Invalid email or password');
+    }
+
+    // Conta desativada não entra. Sem esta checagem, desativar um usuário no
+    // banco não tirava o acesso dele — ele continuava logando normalmente.
+    if (user.isActive === false) {
+      this.recordLoginAttempt(email);
+      logger.warn('Tentativa de login em conta desativada', { email });
       throw new InvalidCredentialsError('Invalid email or password');
     }
 
@@ -768,6 +787,7 @@ export class AuthService {
         loginAttempts: Number(dbUser.login_attempts || 0),
         lastLogin: dbUser.last_login ? new Date(dbUser.last_login) : undefined,
         lockedUntil: dbUser.locked_until ? new Date(dbUser.locked_until) : undefined,
+        isActive: isRowActive(dbUser),
       };
 
       usersStore.set(hydratedUser.id, hydratedUser);
@@ -813,6 +833,7 @@ export class AuthService {
       loginAttempts: Number(dbUser.login_attempts || 0),
       lastLogin: dbUser.last_login ? new Date(dbUser.last_login) : undefined,
       lockedUntil: dbUser.locked_until ? new Date(dbUser.locked_until) : undefined,
+      isActive: isRowActive(dbUser),
     };
 
     usersStore.set(hydratedUser.id, hydratedUser);
@@ -897,6 +918,7 @@ export class AuthService {
       companyId: 'test-company-1',
       mfaEnabled: false,
       loginAttempts: 0,
+      isActive: true,
     };
 
     usersStore.set(testUser.id, testUser);

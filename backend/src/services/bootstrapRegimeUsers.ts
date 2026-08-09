@@ -1,5 +1,15 @@
 /**
- * Bootstrap demo users per tax regime for procontador.com.br/login
+ * Contas de demonstração por regime tributário (uma por regime).
+ *
+ * OPT-IN. Antes esta rotina rodava em todo boot, inclusive em produção, criando
+ * quatro usuários com senha fixa no código-fonte E com role 'admin'. Como o
+ * middleware multi-tenant trata 'admin' como acesso liberado a qualquer
+ * empresa (sem checar company_users), qualquer pessoa com acesso ao
+ * repositório entrava na produção e lia os dados de todos os clientes.
+ *
+ * Agora: só cria quando ENABLE_REGIME_DEMO_USERS=true, a senha vem de
+ * REGIME_DEMO_PASSWORD (nada versionado) e os usuários são 'user', restritos
+ * à própria empresa de demonstração pelo vínculo em company_users.
  */
 
 import bcrypt from 'bcrypt';
@@ -10,7 +20,6 @@ import { logger } from '../middleware/requestLogger';
 
 interface RegimeDemoUser {
   email: string;
-  password: string;
   name: string;
   companyName: string;
   tradeName: string;
@@ -21,7 +30,6 @@ interface RegimeDemoUser {
 const REGIME_DEMO_USERS: RegimeDemoUser[] = [
   {
     email: 'lucroreal@procontador.com.br',
-    password: 'LucroReal@2026',
     name: 'Demo Lucro Real',
     companyName: 'Empresa Demo Lucro Real Ltda',
     tradeName: 'Lucro Real',
@@ -30,7 +38,6 @@ const REGIME_DEMO_USERS: RegimeDemoUser[] = [
   },
   {
     email: 'lucropresumido@procontador.com.br',
-    password: 'LucroPresumido@2026',
     name: 'Demo Lucro Presumido',
     companyName: 'Empresa Demo Lucro Presumido Ltda',
     tradeName: 'Lucro Presumido',
@@ -39,7 +46,6 @@ const REGIME_DEMO_USERS: RegimeDemoUser[] = [
   },
   {
     email: 'simplesnacional@procontador.com.br',
-    password: 'SimplesNacional@2026',
     name: 'Demo Simples Nacional',
     companyName: 'Empresa Demo Simples Nacional Ltda',
     tradeName: 'Simples Nacional',
@@ -48,7 +54,6 @@ const REGIME_DEMO_USERS: RegimeDemoUser[] = [
   },
   {
     email: 'mei@procontador.com.br',
-    password: 'Mei@2026',
     name: 'Demo MEI',
     companyName: 'Empresa Demo MEI',
     tradeName: 'MEI',
@@ -59,8 +64,59 @@ const REGIME_DEMO_USERS: RegimeDemoUser[] = [
 
 let bootstrapFinished = false;
 
+/** Só cria as contas de demonstração quando explicitamente habilitado. */
+export function regimeDemoUsersEnabled(): boolean {
+  return String(process.env.ENABLE_REGIME_DEMO_USERS || '').toLowerCase() === 'true';
+}
+
+/**
+ * Fecha o buraco em bases que já rodaram a versão anterior: as contas de
+ * demonstração foram criadas lá com senha do código-fonte e role 'admin', que
+ * dá acesso a qualquer empresa. Desativar aqui evita depender de alguém
+ * lembrar de limpar o banco no dia do deploy.
+ */
+async function desativarContasDemoExistentes(): Promise<void> {
+  const db = await getDatabase();
+  if (!(await db.schema.hasTable('users'))) return;
+
+  const usersColumns = (await db('users').columnInfo()) as Record<string, unknown>;
+  const activeColumn = usersColumns.is_active ? 'is_active' : 'active';
+  const emails = REGIME_DEMO_USERS.map((demo) => demo.email.toLowerCase());
+
+  const existentes = await db('users')
+    .whereRaw(`LOWER(email) IN (${emails.map(() => '?').join(',')})`, emails)
+    .select('id', 'email', 'role');
+  if (existentes.length === 0) return;
+
+  const afetados = await db('users')
+    .whereIn('id', existentes.map((u) => String(u.id)))
+    .update({ role: 'user', [activeColumn]: false, updated_at: new Date() });
+
+  logger.warn(
+    'Contas de demonstração encontradas e desativadas (senha fixa e role admin na versão anterior). '
+      + 'Se precisar delas, defina ENABLE_REGIME_DEMO_USERS=true e REGIME_DEMO_PASSWORD.',
+    { afetados, emails: existentes.map((u) => u.email) },
+  );
+}
+
 export async function bootstrapRegimeDemoUsers(): Promise<void> {
   if (bootstrapFinished) {
+    return;
+  }
+
+  if (!regimeDemoUsersEnabled()) {
+    await desativarContasDemoExistentes();
+    bootstrapFinished = true;
+    return;
+  }
+
+  const demoPassword = process.env.REGIME_DEMO_PASSWORD || '';
+  if (!demoPassword) {
+    logger.warn(
+      'ENABLE_REGIME_DEMO_USERS=true mas REGIME_DEMO_PASSWORD não foi definida — '
+        + 'contas de demonstração não serão criadas.',
+    );
+    bootstrapFinished = true;
     return;
   }
 
@@ -82,7 +138,7 @@ export async function bootstrapRegimeDemoUsers(): Promise<void> {
 
   for (const demo of REGIME_DEMO_USERS) {
     const email = demo.email.toLowerCase().trim();
-    const passwordHash = await bcrypt.hash(demo.password, envConfig.bcryptRounds);
+    const passwordHash = await bcrypt.hash(demoPassword, envConfig.bcryptRounds);
 
     let company = await db('companies').where('cnpj', demo.cnpj).first();
     if (!company) {
@@ -114,7 +170,9 @@ export async function bootstrapRegimeDemoUsers(): Promise<void> {
       const payload: Record<string, unknown> = {
         id: userId,
         email,
-        role: 'admin',
+        // Nunca 'admin': esse papel ignora o vínculo em company_users e abre
+        // todas as empresas da base.
+        role: 'user',
         created_at: new Date(),
         updated_at: new Date(),
       };
@@ -148,8 +206,8 @@ export async function bootstrapRegimeDemoUsers(): Promise<void> {
           id: crypto.randomUUID(),
           user_id: userId,
           company_id: companyId,
-          role: 'admin',
-          permissions: JSON.stringify(['*']),
+          role: 'user',
+          permissions: JSON.stringify(['read']),
           is_active: true,
           created_at: new Date(),
           updated_at: new Date(),
