@@ -37,7 +37,7 @@ export interface FiscalCaptureRecord {
   doc_type: string;
   chave: string;
   direcao: string | null;
-  xml_path: string;
+  // xml_path (caminho no filesystem do servidor) fica fora da resposta da API.
   emitente_cnpj: string | null;
   destinatario_cnpj: string | null;
   valor_total: string | null;
@@ -157,6 +157,35 @@ function buildCaptureFields(
   };
 }
 
+/**
+ * Quais doc types de fato falharam na execução.
+ *
+ * Com `tipo=all`, marcar os dois como erro sempre que a execução falhava
+ * sobrescrevia o status "ok" que o Python já havia gravado para o tipo que
+ * funcionou — a tela mostrava NFS-e em erro depois de uma captura bem-sucedida.
+ * O scheduler prefixa cada erro com "NF-e:" ou "NFS-e:", então dá para saber.
+ */
+function docTypesComFalha(
+  tipo: 'nfe' | 'nfse' | 'all',
+  parsed: CaptureResultSummary | null,
+): Array<'nfe' | 'nfse'> {
+  const solicitados: Array<'nfe' | 'nfse'> = tipo === 'all' ? ['nfe', 'nfse'] : [tipo];
+
+  const erros = parsed?.errors;
+  if (!Array.isArray(erros) || erros.length === 0) {
+    // Sem resultado estruturado (ex.: processo morreu antes de imprimir
+    // CAPTURE_RESULT): não há como distinguir, então marca todos os pedidos.
+    return solicitados;
+  }
+
+  const comFalha = solicitados.filter((docType) => {
+    const prefixo = docType === 'nfe' ? 'nf-e:' : 'nfs-e:';
+    return erros.some((erro) => String(erro).trim().toLowerCase().startsWith(prefixo));
+  });
+
+  return comFalha.length > 0 ? comFalha : solicitados;
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Garante que companyId é um UUID válido antes de usá-lo em caminhos de arquivo. */
@@ -177,13 +206,22 @@ async function materializePfxFile(
   // gravava o certificado legível por qualquer usuário do sistema.
   await fs.ensureDir(targetDir, { mode: 0o700 });
 
-  if (pfxBuffer && pfxBuffer.length > 0) {
-    await fs.writeFile(pfxPath, pfxBuffer, { mode: 0o600 });
-    return pfxPath;
-  }
+  const conteudo = pfxBuffer && pfxBuffer.length > 0
+    ? pfxBuffer
+    : (pfxData ? Buffer.from(pfxData, 'base64') : null);
 
-  if (pfxData) {
-    await fs.writeFile(pfxPath, Buffer.from(pfxData, 'base64'), { mode: 0o600 });
+  if (conteudo) {
+    // Grava em arquivo temporário e renomeia: duas sincronizações simultâneas
+    // da mesma empresa escreviam no mesmo caminho, e o Python podia abrir o
+    // .pfx pela metade. O rename é atômico no mesmo filesystem.
+    const temporario = `${pfxPath}.${randomUUID()}.tmp`;
+    try {
+      await fs.writeFile(temporario, conteudo, { mode: 0o600 });
+      await fs.rename(temporario, pfxPath);
+    } catch (error) {
+      await fs.remove(temporario).catch(() => undefined);
+      throw error;
+    }
     return pfxPath;
   }
 
@@ -342,7 +380,6 @@ export class FiscalCaptureService {
         doc_type: row.doc_type,
         chave: row.chave,
         direcao: row.direcao,
-        xml_path: row.xml_path,
         emitente_cnpj: row.emitente_cnpj,
         destinatario_cnpj: row.destinatario_cnpj,
         valor_total: row.valor_total,
@@ -502,8 +539,7 @@ export class FiscalCaptureService {
 
     if (!combined.success) {
       const errText = combined.message || result.stderr || 'Falha na captura';
-      const docTypes: Array<'nfe' | 'nfse'> =
-        tipo === 'all' ? ['nfe', 'nfse'] : [tipo];
+      const docTypes = docTypesComFalha(tipo, parsed);
       for (const docType of docTypes) {
         await db('fiscal_xml_sync')
           .insert({

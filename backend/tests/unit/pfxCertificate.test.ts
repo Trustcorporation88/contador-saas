@@ -8,10 +8,80 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import {
   assertPfxReadyToSave,
+  extractCnpjFromSanText,
   extractCnpjFromText,
   parseAndValidatePfx,
   PfxValidationError,
 } from '../../src/utils/pfxCertificate';
+
+/**
+ * PFX com o CNPJ apenas no subjectAltName (OID ICP-Brasil 2.16.76.1.3.3),
+ * como vários e-CNPJ reais — o CN não tem o número.
+ */
+function makePfxComCnpjNoSan(options: { cn: string; cnpj: string; password: string }): Buffer {
+  const dir = mkdtempSync(join(tmpdir(), 'pfx-san-test-'));
+  const keyPath = join(dir, 'key.pem');
+  const certPath = join(dir, 'cert.pem');
+  const pfxPath = join(dir, 'cert.pfx');
+  const confPath = join(dir, 'openssl.cnf');
+
+  writeFileSync(
+    confPath,
+    `[req]
+distinguished_name=dn
+req_extensions=ext
+prompt=no
+[dn]
+CN=${options.cn}
+O=ICP-Brasil
+C=BR
+[ext]
+subjectAltName=@san
+[san]
+otherName.1=2.16.76.1.3.3;UTF8:${options.cnpj}
+`,
+  );
+
+  try {
+    const req = spawnSync(
+      'openssl',
+      [
+        'req', '-x509', '-newkey', 'rsa:2048',
+        '-keyout', keyPath,
+        '-out', certPath,
+        '-nodes', '-days', '365',
+        '-config', confPath,
+        '-extensions', 'ext',
+      ],
+      { encoding: 'utf8' },
+    );
+    if (req.status !== 0 || !existsSync(certPath)) {
+      throw new Error(`openssl req (SAN) failed: ${req.stderr}`);
+    }
+
+    const p12 = spawnSync(
+      'openssl',
+      [
+        'pkcs12', '-export',
+        '-inkey', keyPath,
+        '-in', certPath,
+        '-out', pfxPath,
+        '-password', `pass:${options.password}`,
+      ],
+      { encoding: 'utf8' },
+    );
+    if (p12.status !== 0) {
+      throw new Error(`openssl pkcs12 export (SAN) failed: ${p12.stderr}`);
+    }
+    return readFileSync(pfxPath);
+  } finally {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  }
+}
 
 function makePfx(options: {
   cn: string;
@@ -208,5 +278,69 @@ describe('pfxCertificate', () => {
       companyCnpj: CNPJ,
     });
     expect(parsed.subjectCnpj).toBe(CNPJ);
+  });
+
+  it('recusa upload quando a empresa está sem CNPJ (não há como cruzar)', () => {
+    const pfx = makePfx({ cn: `EMPRESA TESTE LTDA:${CNPJ}`, password: PASSWORD });
+    expect(() =>
+      assertPfxReadyToSave({
+        pfxBuffer: pfx,
+        password: PASSWORD,
+        informedCnpj: CNPJ,
+        companyCnpj: null,
+      }),
+    ).toThrow(/sem CNPJ cadastrado/i);
+  });
+
+  describe('CNPJ no subjectAltName (OID ICP-Brasil 2.16.76.1.3.3)', () => {
+    it('extrai do dump textual do OpenSSL', () => {
+      expect(
+        extractCnpjFromSanText(
+          `            X509v3 Subject Alternative Name:\n                othername: 2.16.76.1.3.3::${CNPJ}, email:x@y.com\n`,
+        ),
+      ).toBe(CNPJ);
+      expect(
+        extractCnpjFromSanText(`othername: 2.16.76.1.3.3:UTF8:${CNPJ}`),
+      ).toBe(CNPJ);
+    });
+
+    it('ignora outros OIDs ICP-Brasil (CPF do responsável, por exemplo)', () => {
+      // 2.16.76.1.3.1 traz data de nascimento + CPF do responsável: não é o
+      // CNPJ do titular e não pode ser confundido com ele.
+      expect(extractCnpjFromSanText('othername: 2.16.76.1.3.1::2505198012345678901')).toBeNull();
+      expect(extractCnpjFromSanText('othername:<unsupported>, email:x@y.com')).toBeNull();
+      expect(extractCnpjFromSanText('')).toBeNull();
+    });
+
+    it('aceita certificado cujo CNPJ só existe no SAN', () => {
+      const pfx = makePfxComCnpjNoSan({
+        cn: 'EMPRESA SEM CNPJ NO CN LTDA',
+        cnpj: CNPJ,
+        password: PASSWORD,
+      });
+      const parsed = assertPfxReadyToSave({
+        pfxBuffer: pfx,
+        password: PASSWORD,
+        informedCnpj: CNPJ,
+        companyCnpj: CNPJ,
+      });
+      expect(parsed.subjectCnpj).toBe(CNPJ);
+    });
+
+    it('continua barrando empresa errada quando o CNPJ vem do SAN', () => {
+      const pfx = makePfxComCnpjNoSan({
+        cn: 'EMPRESA SEM CNPJ NO CN LTDA',
+        cnpj: CNPJ,
+        password: PASSWORD,
+      });
+      expect(() =>
+        assertPfxReadyToSave({
+          pfxBuffer: pfx,
+          password: PASSWORD,
+          informedCnpj: CNPJ,
+          companyCnpj: OTHER,
+        }),
+      ).toThrow(/pertence ao CNPJ/i);
+    });
   });
 });
