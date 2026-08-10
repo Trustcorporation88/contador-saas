@@ -26,17 +26,49 @@ export enum TaxStatus {
   FILED    = 'FILED',
 }
 
+/**
+ * Periodicidade da apuração de IRPJ/CSLL.
+ *
+ * Importa porque o limite do adicional de IRPJ vale POR PERÍODO DE APURAÇÃO, não
+ * por consulta. Uma empresa que apura trimestralmente e tem lucro de R$ 100.000
+ * no 1º trimestre e R$ 100.000 no 4º deve R$ 8.000 de adicional (cada trimestre
+ * excede os R$ 60.000). Somando o ano num único período, R$ 200.000 fica abaixo
+ * dos R$ 240.000 e o adicional seria zero — resultado diferente para o mesmo fato.
+ */
+export enum ApuracaoPeriodicidade {
+  MENSAL      = 'MENSAL',
+  TRIMESTRAL  = 'TRIMESTRAL',
+  ANUAL       = 'ANUAL',
+}
+
 // ─── Alíquotas fixas (vigência 2025/2026) ────────────────────────────────────
 
 /** Lucro Real e Lucro Presumido */
 export const TAX_RATES = {
   IRPJ: {
     base_rate:      0.15,   // 15% sobre lucro
-    surcharge_rate: 0.10,   // Adicional 10% sobre lucro > R$20.000/mês
-    surcharge_threshold: 20000,
+    surcharge_rate: 0.10,   // Adicional 10% sobre o excedente
+    /**
+     * Limite do adicional POR MÊS do período de apuração (Lei 9.430/96 art. 4º,
+     * RIR/2018 art. 622). O limite efetivo é este valor multiplicado pelo número
+     * de meses apurados: R$ 60.000 no trimestre, R$ 240.000 no ano.
+     *
+     * O nome carrega "_monthly" de propósito: antes se chamava
+     * surcharge_threshold e era aplicado direto sobre o lucro do período inteiro,
+     * cobrando adicional de quem não devia — um lucro anual de R$ 200.000 gerava
+     * R$ 18.000 de adicional onde o correto é zero.
+     */
+    surcharge_threshold_monthly: 20000,
   },
   CSLL: {
     rate: 0.09,             // 9% geral (15% para financeiras)
+  },
+  /**
+   * Compensação de prejuízo fiscal de períodos anteriores (Lei 9.065/95 art. 15):
+   * limitada a 30% do lucro líquido ajustado pelas adições e exclusões.
+   */
+  PREJUIZO_FISCAL: {
+    limite_compensacao: 0.30,
   },
   PIS: {
     lucro_presumido: 0.0065, // 0,65% cumulativo
@@ -110,6 +142,65 @@ export interface CalculateTaxDTO {
   /** Alíquota de ICMS estadual — também aceita icmsRate */
   icms_rate?:   number;
   icmsRate?:    number;
+  /**
+   * Periodicidade da apuração de IRPJ/CSLL. Quando informada e o período pedido
+   * abranger mais de uma janela (ex.: TRIMESTRAL num período anual), a apuração é
+   * feita janela por janela e somada — cada uma com seu próprio limite de
+   * adicional. Omitida, o período é tratado como uma única janela, que é o
+   * comportamento histórico.
+   */
+  apuracao?:    ApuracaoPeriodicidade;
+  /**
+   * Saldo de prejuízo fiscal de períodos anteriores disponível para compensação
+   * (Lucro Real). Informado pelo contador — o sistema não mantém esse saldo, só
+   * aplica o limite de 30% e reporta quanto foi usado.
+   */
+  prejuizo_fiscal_acumulado?: number;
+  prejuizoFiscalAcumulado?:   number;
+}
+
+// ─── LALUR — adições e exclusões ──────────────────────────────────────────────
+
+export enum AdjustmentType {
+  ADDITION  = 'ADDITION',
+  EXCLUSION = 'EXCLUSION',
+}
+
+/**
+ * Ajuste do LALUR. O lucro real não é o lucro contábil: é o lucro líquido do
+ * período ajustado pelas adições (despesas indedutíveis, multas, brindes) e
+ * exclusões (receitas não tributáveis, dividendos recebidos) previstas em lei.
+ *
+ * Cada ajuste exige justificativa porque o LALUR é um livro fiscal — um valor
+ * sem fundamentação não se sustenta em fiscalização.
+ */
+export interface CreateTaxAdjustmentDTO {
+  period_start:    string;   // YYYY-MM-DD
+  period_end:      string;   // YYYY-MM-DD
+  adjustment_type: AdjustmentType;
+  amount:          number;   // sempre positivo; o tipo define o sinal
+  justification:   string;
+  account_id?:     string;
+}
+
+export interface TaxAdjustment extends CreateTaxAdjustmentDTO {
+  id:         string;
+  company_id: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Memória de cálculo da transição lucro contábil → lucro real. */
+export interface LucroRealMemoria {
+  lucro_contabil:        number;
+  adicoes:               number;
+  exclusoes:             number;
+  lucro_ajustado:        number;
+  prejuizo_disponivel:   number;
+  prejuizo_compensado:   number;
+  limite_compensacao:    number;
+  lucro_real:            number;
 }
 
 export interface TaxAdjustmentDTO {
