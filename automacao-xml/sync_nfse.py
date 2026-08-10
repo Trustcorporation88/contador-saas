@@ -155,7 +155,7 @@ def sync_empresa_nfse(empresa: EmpresaConfig, company_id: str | None = None) -> 
             # Garante chave nao-vazia para evitar colisao no UNIQUE(company_id, chave).
             if not meta.chave:
                 meta.chave = str(chave or chave_arquivo)
-            if registrar_captura(company_id, meta, str(path), hash_xml(xml_bytes)):
+            if registrar_captura(company_id, meta, str(path), hash_xml(xml_bytes), xml_bytes):
                 capturados += 1
 
         novo_nsu = _extrair_nsu_resposta(payload, lote, nsu)

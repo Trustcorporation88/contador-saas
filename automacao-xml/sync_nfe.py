@@ -109,7 +109,9 @@ def sync_empresa_nfe(empresa: EmpresaConfig, company_id: str | None = None) -> S
                 if (
                     meta.tipo_doc != "nfe_evento"
                     and meta.chave
-                    and registrar_captura(company_id, meta, str(path), hash_xml(xml_bytes))
+                    and registrar_captura(
+                        company_id, meta, str(path), hash_xml(xml_bytes), xml_bytes,
+                    )
                 ):
                     capturados += 1
 

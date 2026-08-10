@@ -92,9 +92,21 @@ def ensure_schema() -> None:
                     numero TEXT,
                     serie TEXT,
                     metadata JSONB,
+                    -- Conteudo do XML autorizado. A tabela guardava so xml_path,
+                    -- e em producao o diretorio e temporario: o arquivo sumia no
+                    -- deploy seguinte e o registro apontava para o vazio. O XML e
+                    -- o documento fiscal, com guarda de 5 anos.
+                    xml_content TEXT,
                     captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     UNIQUE (company_id, chave)
                 )
+                """
+            )
+            # Base que ja existia antes desta coluna.
+            cur.execute(
+                """
+                ALTER TABLE fiscal_xml_captures
+                ADD COLUMN IF NOT EXISTS xml_content TEXT
                 """
             )
     else:
@@ -185,11 +197,32 @@ def save_cursor(
         )
 
 
+def _xml_para_texto(xml_content: bytes | str | None) -> str | None:
+    """Normaliza o XML para texto.
+
+    O XML da SEFAZ vem como bytes. Decodifica em UTF-8 e, se falhar, tenta
+    latin-1 antes de desistir: perder o documento por causa de um byte
+    inesperado seria pior que gravar com um caractere trocado. Nunca levanta —
+    o registro da captura nao pode falhar por causa do conteudo.
+    """
+    if xml_content is None:
+        return None
+    if isinstance(xml_content, str):
+        return xml_content
+    for encoding in ("utf-8", "latin-1"):
+        try:
+            return xml_content.decode(encoding)
+        except (UnicodeDecodeError, AttributeError):
+            continue
+    return xml_content.decode("utf-8", errors="replace")
+
+
 def registrar_captura(
     company_id: str,
     meta: MetadadosXml,
     xml_path: str,
     xml_hash: str,
+    xml_content: bytes | str | None = None,
 ) -> bool:
     """Retorna False se já existia."""
     ensure_schema()
@@ -205,9 +238,9 @@ def registrar_captura(
                 INSERT INTO fiscal_xml_captures (
                     id, company_id, doc_type, chave, direcao, xml_path, xml_hash,
                     emitente_cnpj, destinatario_cnpj, valor_total, data_emissao,
-                    modelo, numero, serie, metadata, captured_at
+                    modelo, numero, serie, metadata, xml_content, captured_at
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s
                 )
                 ON CONFLICT (company_id, chave) DO NOTHING
                 RETURNING id
@@ -228,6 +261,7 @@ def registrar_captura(
                     meta.numero,
                     meta.serie,
                     json.dumps(payload),
+                    _xml_para_texto(xml_content),
                     now,
                 ),
             )
