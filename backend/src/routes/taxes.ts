@@ -11,6 +11,11 @@ import { validateTenantAccess } from '../middleware/multiTenant';
  * GET  /appraisal              - Lista apurações salvas (aceita ?tax_type=CBS|IBS)
  * PATCH /appraisal/:id/status  - Atualiza status (PENDING→APPROVED→FILED)
  *
+ * LALUR (adições e exclusões — base do Lucro Real):
+ * POST   /adjustments          - Registra adição ou exclusão
+ * GET    /adjustments          - Lista ajustes do período
+ * DELETE /adjustments/:id      - Remove um ajuste
+ *
  * Reforma Tributária (CBS/IBS):
  * POST /reforma/calculate      - Calcula CBS/IBS de um ano
  * POST /reforma/projecao       - Projeta CBS/IBS ano a ano (ex.: 2026-2033)
@@ -32,6 +37,15 @@ router.get('/appraisal', TaxController.listAppraisals);
 
 /** Atualizar status de apuração */
 router.patch('/appraisal/:id/status', TaxController.updateStatus);
+
+/** LALUR — registrar adição/exclusão que compõe a base do Lucro Real */
+router.post('/adjustments', TaxController.createAdjustment);
+
+/** LALUR — listar ajustes do período */
+router.get('/adjustments', TaxController.listAdjustments);
+
+/** LALUR — remover ajuste */
+router.delete('/adjustments/:id', TaxController.deleteAdjustment);
 
 /** Reforma Tributária — calcular CBS/IBS de um ano */
 router.post('/reforma/calculate', TaxController.calculateReforma);
