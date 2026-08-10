@@ -992,6 +992,36 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           console.log('✓ 025_users_mfa_e_lockout completed');
         },
       },
+      {
+        name: '026_fiscal_xml_captures_conteudo',
+        up: async (db) => {
+          const hasTable = await db.schema.hasTable('fiscal_xml_captures');
+          if (!hasTable) return;
+
+          // A tabela guardava xml_path (um caminho no filesystem) e xml_hash, e
+          // NÃO o documento. Em produção getXmlRoot() desvia para os.tmpdir()
+          // por causa de um EACCES no volume, então o arquivo apontado deixava de
+          // existir no deploy seguinte e o registro ficava apontando para o vazio.
+          //
+          // O XML autorizado É o documento fiscal (o DANFE é só representação), com
+          // guarda de 5 anos. O xml_hash não ajuda a recuperar: serve para provar
+          // alteração, não para reconstruir.
+          //
+          // Guardar no banco segue o que o sistema já faz com nfe.xml_proc e com
+          // fiscal_certificates.pfx_data, e entra no backup diário.
+          const hasColumn = await db.schema.hasColumn('fiscal_xml_captures', 'xml_content');
+          if (!hasColumn) {
+            console.log('[MIGRATIONS] Adding fiscal_xml_captures.xml_content...');
+            await db.schema.alterTable('fiscal_xml_captures', (table) => {
+              // Nullable: capturas antigas não têm o conteúdo, e não há de onde
+              // tirar. Distinguir "sem conteúdo" de "vazio" importa na auditoria.
+              table.text('xml_content').nullable();
+            });
+          }
+
+          console.log('✓ 026_fiscal_xml_captures_conteudo completed');
+        },
+      },
     ];
 
     for (const migration of migrations) {
