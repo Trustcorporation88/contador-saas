@@ -265,6 +265,117 @@ describe('NfeService', () => {
       expect(xml).not.toContain('<ESPECIAL>');
     });
 
+    // ── CRT, grupo de ICMS e IPI no XML de rascunho ──────────────────────────
+
+    it('CRT vem do regime da empresa, não fixo em 1', async () => {
+      const { db, __mockCompany } = require('../../src/config/database');
+      // Empresa no regime normal: CRT 3. Estava <CRT>1</CRT> fixo, então o
+      // rascunho de qualquer empresa dizia Simples Nacional.
+      db.first.mockResolvedValueOnce({ ...__mockCompany, tax_regime: 'lucro_real' });
+      await NfeService.create('company-uuid-1', baseCreateDTO);
+      expect(xmlGerado()).toContain('<CRT>3</CRT>');
+    });
+
+    it('CRT 1 para empresa do Simples Nacional', async () => {
+      const { db, __mockCompany } = require('../../src/config/database');
+      db.first.mockResolvedValueOnce({ ...__mockCompany, tax_regime: 'simples_nacional' });
+      await NfeService.create('company-uuid-1', baseCreateDTO);
+      expect(xmlGerado()).toContain('<CRT>1</CRT>');
+    });
+
+    it('regime normal usa ICMS00 com CST', async () => {
+      const { db, __mockCompany } = require('../../src/config/database');
+      db.first.mockResolvedValueOnce({ ...__mockCompany, tax_regime: 'lucro_presumido' });
+      await NfeService.create('company-uuid-1', baseCreateDTO);
+      const xml = xmlGerado();
+      expect(xml).toContain('<ICMS00>');
+      expect(xml).not.toContain('ICMSSN102');
+    });
+
+    it('Simples Nacional usa ICMSSN102 com CSOSN, não ICMS00 com CST', async () => {
+      const { db, __mockCompany } = require('../../src/config/database');
+      db.first.mockResolvedValueOnce({ ...__mockCompany, tax_regime: 'simples_nacional' });
+      await NfeService.create('company-uuid-1', baseCreateDTO);
+      const xml = xmlGerado();
+      // O rascunho emitia ICMS00/CST para todo mundo, divergindo do XML que o
+      // pynfe transmite (modalidade 102) — e o arquivado para o SPED não era o
+      // documento autorizado.
+      expect(xml).toContain('<ICMSSN102>');
+      expect(xml).toContain('<CSOSN>102</CSOSN>');
+      expect(xml).not.toContain('<ICMS00>');
+    });
+
+    it('sem IPI informado, o grupo não aparece e o total segue zerado', async () => {
+      await NfeService.create('company-uuid-1', baseCreateDTO);
+      const xml = xmlGerado();
+      // Quem não é contribuinte do IPI não destaca o imposto.
+      expect(xml).not.toContain('<IPITrib>');
+      expect(xml).not.toContain('<IPINT>');
+      expect(xml).toContain('<vIPI>0.00</vIPI>');
+    });
+
+    /** Valores gravados na tabela nfe na última chamada de create(). */
+    function nfeInserida(): Record<string, unknown> {
+      const { __trx } = require('../../src/config/database');
+      return __trx.insert.mock.calls
+        .map((args: unknown[]) => args[0] as Record<string, unknown>)
+        .reverse()
+        .find((arg: Record<string, unknown>) => arg?.valor_total !== undefined) ?? {};
+    }
+
+    it('IPI tributado entra no item, no total e no valor da nota', async () => {
+      const { __trx } = require('../../src/config/database');
+      __trx.insert.mockClear();
+      await NfeService.create('company-uuid-1', {
+        ...baseCreateDTO,
+        itens: [{ ...baseCreateDTO.itens[0], cst_ipi: '50', aliquota_ipi: 10 }],
+      });
+      const xml = xmlGerado();
+      // 10 × 100 = 1000 de produtos; IPI 10% = 100
+      expect(xml).toContain('<IPITrib>');
+      expect(xml).toContain('<CST>50</CST>');
+      expect(xml).toContain('<pIPI>10.00</pIPI>');
+      expect(xml).toContain('<vIPI>100.00</vIPI>');
+      expect(xml).toContain('<cEnq>999</cEnq>');
+      // vNF = vProd + vFrete − vDesc + vIPI (NF-e 4.00): o IPI compõe o total.
+      // A asserção é sobre o que foi GRAVADO, não sobre o retorno de create() —
+      // o returning do mock devolve um registro fixo e não veria a mudança.
+      expect(nfeInserida().valor_total).toBeCloseTo(1100, 2);
+      expect(xml).toContain('<vNF>1100.00</vNF>');
+      // vPag tem de acompanhar o vNF, senão a SEFAZ rejeita.
+      expect(xml).toContain('<vPag>1100.00</vPag>');
+    });
+
+    it('IPI de CST não tributado usa IPINT, sem valor', async () => {
+      const { __trx } = require('../../src/config/database');
+      __trx.insert.mockClear();
+      await NfeService.create('company-uuid-1', {
+        ...baseCreateDTO,
+        itens: [{ ...baseCreateDTO.itens[0], cst_ipi: '53' }],
+      });
+      const xml = xmlGerado();
+      expect(xml).toContain('<IPINT>');
+      expect(xml).toContain('<CST>53</CST>');
+      expect(xml).not.toContain('<IPITrib>');
+      // Não tributado não soma no total da nota.
+      expect(nfeInserida().valor_total).toBeCloseTo(1000, 2);
+      expect(xml).toContain('<vIPI>0.00</vIPI>');
+    });
+
+    it('persiste alíquota e valor de IPI no item (colunas existiam sem uso)', async () => {
+      const { __trx } = require('../../src/config/database');
+      __trx.insert.mockClear();
+      await NfeService.create('company-uuid-1', {
+        ...baseCreateDTO,
+        itens: [{ ...baseCreateDTO.itens[0], cst_ipi: '50', aliquota_ipi: 10 }],
+      });
+      const itensInseridos = __trx.insert.mock.calls
+        .map((args: unknown[]) => args[0])
+        .find((arg: unknown) => Array.isArray(arg)) as Record<string, unknown>[] | undefined;
+      expect(itensInseridos?.[0]?.aliquota_ipi).toBe(10);
+      expect(itensInseridos?.[0]?.valor_ipi).toBeCloseTo(100, 2);
+    });
+
     it('usa o cUF e o município da empresa, não São Paulo fixo', async () => {
       const { db, __mockCompany } = require('../../src/config/database');
       db.first.mockResolvedValueOnce({
