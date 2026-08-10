@@ -21,6 +21,9 @@
  *   $env:TARGET_USER_EMAIL   = 'voce@empresa.com.br'   # usuário que verá as empresas
  *   node scripts/migrar-empresas-railway-para-supabase.mjs            # simulação
  *   node scripts/migrar-empresas-railway-para-supabase.mjs --aplicar  # grava
+ *
+ * Para pular empresas de teste, liste os CNPJs (só dígitos) em EXCLUIR_CNPJS:
+ *   $env:EXCLUIR_CNPJS = '11222333000181,11444777000161'
  */
 import pg from 'pg';
 
@@ -34,6 +37,16 @@ const TARGET = process.env.TARGET_DATABASE_URL || process.env.SUPABASE_DATABASE_
 const USER_EMAIL = process.env.TARGET_USER_EMAIL;
 
 const CNPJ_BOOTSTRAP = '00000000000000';
+
+// CNPJs a pular além da bootstrap. Aceita EXCLUIR_CNPJS='cnpj1,cnpj2' (com ou sem
+// máscara — só os dígitos são considerados).
+const EXCLUIR = [
+  CNPJ_BOOTSTRAP,
+  ...(process.env.EXCLUIR_CNPJS || '')
+    .split(',')
+    .map((s) => s.replace(/\D/g, ''))
+    .filter(Boolean),
+];
 
 function abortar(msg) {
   console.error(msg);
@@ -178,14 +191,19 @@ try {
   }
   console.log(`Chave de conflito para upsert: ${chaveConflito}`);
 
-  // Lê as empresas da origem (ignora a empresa bootstrap 00000000000000).
+  // Lê as empresas da origem, pulando a bootstrap e quaisquer CNPJs de EXCLUIR.
   // Cada expressão é apelidada com o nome da coluna de destino.
   const selecaoOrigem = plano.map((p) => `${p.expr} AS "${p.alvo}"`);
-  const filtro = temCnpj ? `WHERE cnpj IS DISTINCT FROM '${CNPJ_BOOTSTRAP}'` : '';
+  const filtro = temCnpj ? `WHERE cnpj IS NULL OR cnpj <> ALL($1::text[])` : '';
+  const params = temCnpj ? [EXCLUIR] : [];
   const { rows: empresas } = await source.query(
     `SELECT ${selecaoOrigem.join(', ')} FROM companies ${filtro}`,
+    params,
   );
-  console.log(`Empresas na origem (fora a bootstrap): ${empresas.length}`);
+  if (EXCLUIR.length > 1) {
+    console.log(`Pulando ${EXCLUIR.length} CNPJ(s) (bootstrap + EXCLUIR_CNPJS).`);
+  }
+  console.log(`Empresas a migrar: ${empresas.length}`);
   console.log('');
 
   // Resolve o usuário de destino para a associação (opcional, mas recomendado).
