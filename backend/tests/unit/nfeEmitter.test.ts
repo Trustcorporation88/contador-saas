@@ -172,3 +172,69 @@ describe('buildPayload — Simples Nacional', () => {
     expect(item.cofins_modalidade).toBe('07');
   });
 });
+
+describe('buildPayload — IPI', () => {
+
+  /** Payload com itens arbitrários, endereço de destinatário válido. */
+  function payloadComItens(itensCustom: Record<string, unknown>[]) {
+    return buildPayload(
+      { ...emitente, tax_regime: 'lucro_real' },
+      {
+        ...nfe,
+        dest_endereco: JSON.stringify({
+          endereco: { logradouro: 'Rua A', numero: '1', bairro: 'Centro', municipio: 'São Paulo', uf: 'SP', cep: '01310100', cod_municipio: '3550308' },
+          inscricao_estadual: '',
+          indicador_ie: 9,
+        }),
+      },
+      itensCustom as never,
+      'homologacao',
+      '/tmp/cert.pfx',
+      'senha',
+    );
+  }
+
+  it('sem IPI informado, manda CST vazio e alíquota zero (grupo não é montado)', () => {
+    const payload = payloadComItens(itens as unknown as Record<string, unknown>[]);
+    expect(payload.itens[0].ipi_cst).toBe('');
+    expect(payload.itens[0].ipi_aliquota).toBe(0);
+  });
+
+  it('leva CST, alíquota e cEnq do IPI para o emissor Python', () => {
+    const payload = payloadComItens([
+      { ...itens[0], cst_ipi: '50', aliquota_ipi: 10 },
+    ]);
+    expect(payload.itens[0].ipi_cst).toBe('50');
+    expect(payload.itens[0].ipi_aliquota).toBe(10);
+    // 999 = tributação normal; código específico só para cigarros e bebidas.
+    expect(payload.itens[0].ipi_cenq).toBe('999');
+  });
+
+  it('respeita cEnq específico quando informado', () => {
+    const payload = payloadComItens([
+      { ...itens[0], cst_ipi: '50', aliquota_ipi: 10, codigo_enquadramento_ipi: '123' },
+    ]);
+    expect(payload.itens[0].ipi_cenq).toBe('123');
+  });
+
+  it('IPI é enviado mesmo no Simples Nacional — depende de ser contribuinte do IPI, não do regime', () => {
+    const payload = buildPayload(
+      { ...emitente, tax_regime: 'simples_nacional' },
+      {
+        ...nfe,
+        dest_endereco: JSON.stringify({
+          endereco: { logradouro: 'Rua A', numero: '1', bairro: 'Centro', municipio: 'São Paulo', uf: 'SP', cep: '01310100', cod_municipio: '3550308' },
+          inscricao_estadual: '',
+          indicador_ie: 9,
+        }),
+      },
+      [{ ...itens[0], cst_ipi: '50', aliquota_ipi: 5 }] as never,
+      'homologacao',
+      '/tmp/cert.pfx',
+      'senha',
+    );
+    // ICMS/PIS/COFINS são zerados no Simples; o IPI não é zerado por regime.
+    expect(payload.itens[0].icms_aliquota).toBe(0);
+    expect(payload.itens[0].ipi_aliquota).toBe(5);
+  });
+});
