@@ -35,6 +35,18 @@ export interface NfeItemDTO {
   aliquota_pis?:   number;
   cst_cofins?:     string;
   aliquota_cofins?: number;
+  /**
+   * IPI — só para contribuinte do imposto (indústria e importador). Sem CST nem
+   * alíquota informados, o grupo não aparece na nota, que é o correto para quem
+   * não é contribuinte. As colunas aliquota_ipi/valor_ipi já existiam em
+   * nfe_itens desde o início, sem nada que as escrevesse ou lesse.
+   */
+  cst_ipi?:        string;    // 50=saída tributada; 01..05,51..55=não tributada
+  aliquota_ipi?:   number;    // em percentual, como as demais alíquotas
+  /** cEnq — 999 é tributação normal; código específico só para cigarros/bebidas. */
+  codigo_enquadramento_ipi?: string;
+  /** CSOSN do Simples Nacional (grupo ICMSSN102 no XML). */
+  csosn?:          string;
   // Emissão real (pynfe)
   icms_modalidade?: string;   // CST (2 díg) ou CSOSN (3 díg, Simples)
   icms_origem?:     number;   // 0=Nacional ...
