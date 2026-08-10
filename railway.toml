@@ -13,6 +13,11 @@ healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 
 # IMPORTANTE: monte um Volume persistente com Mount path = /app/data
-# (Settings > Volumes no serviço). Sem isso os XMLs capturados e o .pfx
-# em /app/data/fiscal-xmls e /app/data/fiscal-certs sao apagados a cada deploy.
+# (Settings > Volumes no serviço). Sem isso os XMLs capturados, o .pfx e os
+# backups do banco em /app/data/fiscal-xmls, /app/data/fiscal-certs e
+# /app/data/backups sao apagados a cada deploy.
 # Ver RAILWAY-DEPLOY.md > Passo 2 > Volume persistente.
+#
+# O backup diario (03:00) grava em /app/data/backups e so tem valor com o volume
+# montado. Depois do deploy, confira o preflight no log da subida ("Preflight de
+# backup OK") ou o campo pg_dump em GET /api/v1/backup.
