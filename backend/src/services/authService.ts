@@ -243,10 +243,16 @@ export class AuthService {
       throw new InvalidCredentialsError('Invalid email or password');
     }
 
+    // Bloqueio gravado no banco. A checagem em memória acima não sobrevive a um
+    // restart, e o Railway reinicia a cada deploy: quem estivesse bloqueado
+    // voltava a ter as 5 tentativas liberadas. Este teto persiste.
+    this.assertNaoBloqueado(user, email);
+
     // Comparar senha com suporte a schema legado (senha em texto puro)
     const isPasswordValid = await this.verifyPasswordForUser(user, password);
     if (!isPasswordValid) {
       this.recordLoginAttempt(email);
+      await this.registrarFalhaNoBanco(user);
       throw new InvalidCredentialsError('Invalid email or password');
     }
 
@@ -258,8 +264,9 @@ export class AuthService {
       throw new InvalidCredentialsError('Invalid email or password');
     }
 
-    // Resetar login attempts
+    // Resetar login attempts, em memória e no banco
     loginAttemptsStore.delete(email);
+    await this.limparFalhasNoBanco(user);
 
     // Se MFA habilitado, retornar token temporário
     if (user.mfaEnabled) {
@@ -955,6 +962,107 @@ export class AuthService {
     return codes;
   }
 
+  /** Tentativas falhas até bloquear, e por quanto tempo. */
+  private static readonly MAX_TENTATIVAS_LOGIN = 5;
+  private static readonly BLOQUEIO_MINUTOS = 15;
+
+  /**
+   * Recusa o login quando há bloqueio vigente gravado no banco.
+   *
+   * O rate limit em memória (loginAttemptsStore) protege contra rajadas dentro de
+   * um processo, mas morre no restart — e o Railway reinicia a cada deploy, então
+   * um atacante ganhava 5 tentativas novas a cada deploy. Esta checagem lê o
+   * locked_until da tabela, que sobrevive.
+   */
+  private assertNaoBloqueado(user: UserStore, email: string): void {
+    if (!user.lockedUntil) return;
+    if (user.lockedUntil.getTime() <= Date.now()) return;
+
+    const minutos = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+    logger.warn('Login recusado: conta bloqueada por tentativas falhas', {
+      email, lockedUntil: user.lockedUntil.toISOString(),
+    });
+    throw new RateLimitError(
+      `Conta temporariamente bloqueada por tentativas de login. Tente novamente em ${minutos} minuto(s).`,
+    );
+  }
+
+  /**
+   * Incrementa o contador de falhas no banco e bloqueia ao atingir o teto.
+   *
+   * Falha de gravação não impede o login de prosseguir: sem as colunas
+   * (ambiente sem a migração 025) a proteção fica degradada, e derrubar todo
+   * login por causa disso seria pior. Diferente do MFA, onde seguir em silêncio
+   * enganaria o usuário sobre estar protegido.
+   */
+  private async registrarFalhaNoBanco(user: UserStore): Promise<void> {
+    const tentativas = (user.loginAttempts ?? 0) + 1;
+    const bloquear = tentativas >= AuthService.MAX_TENTATIVAS_LOGIN;
+    const lockedUntil = bloquear
+      ? new Date(Date.now() + AuthService.BLOQUEIO_MINUTOS * 60 * 1000)
+      : user.lockedUntil ?? null;
+
+    user.loginAttempts = tentativas;
+    user.lockedUntil = lockedUntil ?? undefined;
+    usersStore.set(user.id, user);
+
+    if (bloquear) {
+      logger.warn('Conta bloqueada por tentativas de login falhas', {
+        userId: user.id, tentativas, lockedUntil: lockedUntil?.toISOString(),
+      });
+    }
+
+    await this.persistLockoutColumns(user.id, { loginAttempts: tentativas, lockedUntil });
+  }
+
+  /** Zera o contador após login bem-sucedido. */
+  private async limparFalhasNoBanco(user: UserStore): Promise<void> {
+    const precisaLimpar = (user.loginAttempts ?? 0) > 0 || Boolean(user.lockedUntil);
+
+    user.loginAttempts = 0;
+    user.lockedUntil = undefined;
+    user.lastLogin = new Date();
+    usersStore.set(user.id, user);
+
+    // Evita um UPDATE por login quando não havia nada a limpar; last_login
+    // sozinho não justifica escrita a cada autenticação.
+    if (!precisaLimpar) return;
+    await this.persistLockoutColumns(user.id, { loginAttempts: 0, lockedUntil: null });
+  }
+
+  /** Grava as colunas de lockout, tolerando schema sem elas. */
+  private async persistLockoutColumns(
+    userId: string,
+    campos: { loginAttempts?: number; lockedUntil?: Date | null },
+  ): Promise<void> {
+    try {
+      const db = await getDatabase();
+      const usersColumns = (await db('users').columnInfo()) as Record<string, unknown>;
+
+      const payload: Record<string, unknown> = {};
+      if (campos.loginAttempts !== undefined && usersColumns.login_attempts) {
+        payload.login_attempts = campos.loginAttempts;
+      }
+      if (campos.lockedUntil !== undefined && usersColumns.locked_until) {
+        payload.locked_until = campos.lockedUntil;
+      }
+      if (Object.keys(payload).length === 0) {
+        logger.warn(
+          'Colunas de lockout ausentes na tabela users — bloqueio por tentativas ' +
+          'não sobrevive a restart. Rode a migração 025_users_mfa_e_lockout.',
+        );
+        return;
+      }
+
+      await db('users').where('id', userId).update(payload);
+    } catch (error) {
+      // Nunca derruba o login por causa da contabilização de falhas.
+      logger.error('Falha ao persistir contador de tentativas de login', {
+        userId, error: (error as Error).message,
+      });
+    }
+  }
+
   /**
    * Verificar rate limiting para login
    */
@@ -963,8 +1071,10 @@ export class AuthService {
 
     if (attempt) {
       if (new Date() < attempt.resetTime) {
-        if (attempt.attempts >= 5) {
-          throw new RateLimitError('Too many login attempts. Try again in 15 minutes.');
+        if (attempt.attempts >= AuthService.MAX_TENTATIVAS_LOGIN) {
+          throw new RateLimitError(
+            `Too many login attempts. Try again in ${AuthService.BLOQUEIO_MINUTOS} minutes.`,
+          );
         }
       } else {
         loginAttemptsStore.delete(email);
@@ -983,7 +1093,8 @@ export class AuthService {
     } else {
       loginAttemptsStore.set(email, {
         attempts: 1,
-        resetTime: new Date(Date.now() + 15 * 60 * 1000), // 15 minutos
+        // Mesma janela do bloqueio persistido, para os dois não divergirem.
+        resetTime: new Date(Date.now() + AuthService.BLOQUEIO_MINUTOS * 60 * 1000),
       });
     }
   }
