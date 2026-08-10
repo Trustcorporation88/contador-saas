@@ -201,6 +201,8 @@ def _construir_nota(payload: dict):
     fretes_item = _ratear(valor_frete, brutos)
     descontos_item = _ratear(valor_desconto, brutos)
 
+    ipi_total = Decimal("0")
+
     for indice, item in enumerate(itens):
         qtd = quantidades[indice]
         vun = unitarios[indice]
@@ -243,6 +245,28 @@ def _construir_nota(payload: dict):
             cofins_bc = base
             cofins_valor = _dec(base * cofins_aliq / 100)
 
+        # IPI. Só o contribuinte do imposto (indústria, importador) destaca:
+        # sem CST nem alíquota o grupo não é montado e a nota sai como antes.
+        # Atenção ao nome dos campos no pynfe: ipi_codigo_enquadramento é o CST,
+        # e ipi_classe_enquadramento é o cEnq (999 = tributação normal).
+        ipi_cst = str(item.get("ipi_cst") or "").strip()
+        ipi_aliq = Decimal(str(item.get("ipi_aliquota", 0) or 0))
+        ipi_cenq = str(item.get("ipi_cenq") or "999").strip() or "999"
+        # CST de operação não tributada vai em IPINT, sem base nem valor.
+        ipi_nao_tributado = {"01", "02", "03", "04", "05", "51", "52", "53", "54", "55"}
+        if ipi_cst in ipi_nao_tributado:
+            ipi_bc = Decimal("0")
+            ipi_valor = Decimal("0")
+            ipi_aliq = Decimal("0")
+        elif ipi_cst or ipi_aliq > 0:
+            ipi_cst = ipi_cst or "50"
+            ipi_bc = base
+            ipi_valor = _dec(base * ipi_aliq / 100)
+        else:
+            ipi_bc = Decimal("0")
+            ipi_valor = Decimal("0")
+        ipi_total += ipi_valor
+
         # SEFAZ rejeita cEAN/cEANTrib vazios (cStat 883). Sem código de barras
         # o literal obrigatório é "SEM GTIN" (NT 2017.001 / NT 2021.003).
         ean = str(item.get("ean") or item.get("gtin") or "").strip() or "SEM GTIN"
@@ -283,9 +307,16 @@ def _construir_nota(payload: dict):
             cofins_valor_base_calculo=cofins_bc,
             cofins_aliquota_percentual=cofins_aliq,
             cofins_valor=cofins_valor,
+            ipi_codigo_enquadramento=ipi_cst,
+            ipi_classe_enquadramento=ipi_cenq,
+            ipi_valor_base_calculo=ipi_bc,
+            ipi_aliquota=ipi_aliq,
+            ipi_valor_ipi=ipi_valor,
         )
 
-    valor_pago = _dec(total_produtos + valor_frete - valor_desconto)
+    # vNF da NF-e 4.00 inclui o IPI, e o pynfe faz essa soma. Sem somar aqui, o
+    # vPag do grupo <pag> divergiria do vNF e a SEFAZ rejeitaria a nota.
+    valor_pago = _dec(total_produtos + valor_frete - valor_desconto + ipi_total)
 
     t_pag = formaPagamento_do_payload(payload)
     # tPag 90 (sem pagamento) exige vPag zerado, mas o pynfe trata 0 como

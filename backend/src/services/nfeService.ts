@@ -148,18 +148,104 @@ function dhEmi(date: Date, offsetMinutes = -180): string {
   return deslocado.toISOString().replace(/\.\d{3}Z$/, `${sinal}${hh}:${mm}`);
 }
 
+type ItemCalculado = NfeItemDTO & {
+  numero_item: number;
+  valor_total: number;
+  valor_icms: number;
+  valor_pis: number;
+  valor_cofins: number;
+  valor_ipi?: number;
+};
+
+/**
+ * Grupo de ICMS do item, conforme o regime.
+ *
+ * Simples Nacional usa CSOSN em <ICMSSN102>, não CST em <ICMS00>. O rascunho
+ * emitia ICMS00 com CST para todo mundo, então divergia do XML que o pynfe
+ * transmite (que já usava a modalidade 102 para o Simples) — e o XML arquivado
+ * para o SPED não era o autorizado.
+ */
+function grupoIcms(item: ItemCalculado, simplesNacional: boolean): string {
+  if (simplesNacional) {
+    // CSOSN 102: sem permissão de crédito e sem tributação pelo Simples.
+    return `          <ICMSSN102>
+            <orig>0</orig>
+            <CSOSN>${esc(item.csosn ?? '102')}</CSOSN>
+          </ICMSSN102>`;
+  }
+  return `          <ICMS00>
+            <orig>0</orig>
+            <CST>${esc(item.cst_icms ?? '00')}</CST>
+            <modBC>3</modBC>
+            <vBC>${fmt2(item.valor_total)}</vBC>
+            <pICMS>${fmt2(item.aliquota_icms ?? 0)}</pICMS>
+            <vICMS>${fmt2(item.valor_icms)}</vICMS>
+          </ICMS00>`;
+}
+
+/** CSTs de IPI que representam operação não tributada (grupo IPINT, sem valor). */
+const IPI_CST_NAO_TRIBUTADO = new Set([
+  '01', '02', '03', '04', '05', '51', '52', '53', '54', '55',
+]);
+
+/**
+ * Grupo de IPI do item. Ausente quando não há CST nem alíquota informados —
+ * quem não é contribuinte do IPI não destaca o imposto, e o grupo não deve
+ * aparecer na nota.
+ *
+ * A mesma condição e a mesma escolha entre IPITrib e IPINT que o pynfe aplica na
+ * emissão real, para o rascunho não mostrar um IPI que a nota autorizada não tem.
+ * cEnq 999 = tributação normal (só cigarros e bebidas usam código específico).
+ */
+function grupoIpi(item: ItemCalculado): string {
+  const cst = String(item.cst_ipi ?? '').trim();
+  const aliquota = Number(item.aliquota_ipi ?? 0);
+  const valor = Number(item.valor_ipi ?? 0);
+  const cEnq = esc(item.codigo_enquadramento_ipi ?? '999');
+
+  if (!cst && aliquota <= 0) return '';
+
+  if (IPI_CST_NAO_TRIBUTADO.has(cst)) {
+    return `        <IPI>
+          <cEnq>${cEnq}</cEnq>
+          <IPINT>
+            <CST>${esc(cst)}</CST>
+          </IPINT>
+        </IPI>`;
+  }
+
+  // Tributado exige base, alíquota e valor positivos — sem isso a SEFAZ rejeita.
+  if (aliquota <= 0 || valor <= 0) return '';
+
+  return `        <IPI>
+          <cEnq>${cEnq}</cEnq>
+          <IPITrib>
+            <CST>${esc(cst || '50')}</CST>
+            <vBC>${fmt2(item.valor_total)}</vBC>
+            <pIPI>${fmt2(aliquota)}</pIPI>
+            <vIPI>${fmt2(valor)}</vIPI>
+          </IPITrib>
+        </IPI>`;
+}
+
 function gerarXmlNfe(
   nfe:        NfeRecord,
   dest_email: string | undefined,
-  itens:      (NfeItemDTO & { numero_item: number; valor_total: number; valor_icms: number; valor_pis: number; valor_cofins: number })[],
+  itens:      ItemCalculado[],
   chave:      string,
   emit:       { uf?: string | null; codigo_municipio?: string | null },
+  simplesNacional = false,
+  crt = '3',
 ): string {
   const dtEmissao = dhEmi(new Date(nfe.data_emissao ?? Date.now()));
   const cUF = codigoUf(emit.uf) || chave.slice(0, 2);
   const cMunFG = String(emit.codigo_municipio ?? '').replace(/\D/g, '');
   const tpAmb = nfe.ambiente === 'producao' ? '1' : '2';
   const tPag = String(nfe.forma_pagamento || '01').padStart(2, '0');
+  // Somado dos itens e não lido de nfe.valor_ipi: o gerador recebe os itens já
+  // calculados, e assim o total do XML nunca diverge das linhas que ele mesmo
+  // acabou de escrever.
+  const totalIpi = itens.reduce((soma, item) => soma + Number(item.valor_ipi ?? 0), 0);
 
   const itensXml = itens.map(item => `
     <det nItem="${item.numero_item}">
@@ -178,15 +264,9 @@ function gerarXmlNfe(
       </prod>
       <imposto>
         <ICMS>
-          <ICMS00>
-            <orig>0</orig>
-            <CST>${esc(item.cst_icms ?? '00')}</CST>
-            <modBC>3</modBC>
-            <vBC>${fmt2(item.valor_total)}</vBC>
-            <pICMS>${fmt2(item.aliquota_icms ?? 0)}</pICMS>
-            <vICMS>${fmt2(item.valor_icms)}</vICMS>
-          </ICMS00>
+${grupoIcms(item, simplesNacional)}
         </ICMS>
+${grupoIpi(item)}
         <PIS>
           <PISAliq>
             <CST>${esc(item.cst_pis ?? '01')}</CST>
@@ -234,7 +314,7 @@ function gerarXmlNfe(
       <emit>
         <CNPJ>${esc(nfe.emit_cnpj)}</CNPJ>
         <xNome>${esc(nfe.emit_razao_social)}</xNome>
-        <CRT>1</CRT>
+        <CRT>${esc(crt)}</CRT>
       </emit>
       <dest>
         <${nfe.dest_cpf_cnpj.length === 14 ? 'CNPJ' : 'CPF'}>${esc(nfe.dest_cpf_cnpj)}</${nfe.dest_cpf_cnpj.length === 14 ? 'CNPJ' : 'CPF'}>
@@ -258,7 +338,7 @@ function gerarXmlNfe(
           <vSeg>0.00</vSeg>
           <vDesc>${fmt2(nfe.valor_desconto)}</vDesc>
           <vII>0.00</vII>
-          <vIPI>0.00</vIPI>
+          <vIPI>${fmt2(totalIpi)}</vIPI>
           <vIPIDevol>0.00</vIPIDevol>
           <vPIS>${fmt2(nfe.valor_pis)}</vPIS>
           <vCOFINS>${fmt2(nfe.valor_cofins)}</vCOFINS>
@@ -334,15 +414,21 @@ function calcularImpostosItem(
   valor_icms: number;
   valor_pis: number;
   valor_cofins: number;
+  valor_ipi: number;
 } {
   const valor_total = round2(item.quantidade * item.valor_unitario);
+  // IPI independe do regime: quem é contribuinte destaca, quem não é não informa
+  // alíquota e o grupo não aparece na nota. Fica de fora do curto-circuito do
+  // Simples justamente por isso.
+  const valor_ipi = round2(valor_total * (item.aliquota_ipi ?? 0) / 100);
+
   if (simplesNacional) {
-    return { valor_total, valor_icms: 0, valor_pis: 0, valor_cofins: 0 };
+    return { valor_total, valor_icms: 0, valor_pis: 0, valor_cofins: 0, valor_ipi };
   }
   const valor_icms  = round2(valor_total * (item.aliquota_icms   ?? 0) / 100);
   const valor_pis   = round2(valor_total * (item.aliquota_pis    ?? 0) / 100);
   const valor_cofins = round2(valor_total * (item.aliquota_cofins ?? 0) / 100);
-  return { valor_total, valor_icms, valor_pis, valor_cofins };
+  return { valor_total, valor_icms, valor_pis, valor_cofins, valor_ipi };
 }
 
 // ─── Serviço principal ────────────────────────────────────────────────────────
@@ -832,6 +918,7 @@ export class NfeService {
     const valor_icms     = round2(itensCalc.reduce((s, i) => s + i.valor_icms,  0));
     const valor_pis      = round2(itensCalc.reduce((s, i) => s + i.valor_pis,   0));
     const valor_cofins   = round2(itensCalc.reduce((s, i) => s + i.valor_cofins, 0));
+    const valor_ipi      = round2(itensCalc.reduce((s, i) => s + (i.valor_ipi ?? 0), 0));
     const valor_frete    = round2(dto.valor_frete    ?? 0);
     const valor_desconto = round2(dto.valor_desconto ?? 0);
     if (valor_frete < 0 || valor_desconto < 0) {
@@ -848,7 +935,10 @@ export class NfeService {
         { status: 400 },
       );
     }
-    const valor_total    = round2(valor_produtos + valor_frete - valor_desconto);
+    // vNF = vProd + vFrete − vDesc + vIPI (NF-e 4.00). O IPI compõe o total da
+    // nota; ICMS/PIS/COFINS não, porque já estão dentro do preço. Sem IPI
+    // informado, valor_ipi é zero e o total fica idêntico ao de antes.
+    const valor_total    = round2(valor_produtos + valor_frete - valor_desconto + valor_ipi);
 
     // Gerar chave de acesso. O cUF vem da UF da empresa: com '35' fixo, a chave
     // do rascunho saía com o código de São Paulo para empresa de qualquer estado.
@@ -916,7 +1006,7 @@ export class NfeService {
     const xml = gerarXmlNfe(nfeBase, dto.destinatario.email, itensCalc, chave, {
       uf: company.state,
       codigo_municipio: company.codigo_municipio,
-    });
+    }, simplesNacional, crtFromRegime(company.tax_regime));
 
     return await db.transaction(async trx => {
       let record: NfeRecord;
@@ -990,6 +1080,11 @@ export class NfeService {
           cst_cofins:      item.cst_cofins,
           aliquota_cofins: item.aliquota_cofins,
           valor_cofins:    item.valor_cofins,
+          // As colunas aliquota_ipi/valor_ipi existiam desde a criação da tabela
+          // sem nada que as gravasse. Sem persistir, o valor do IPI da nota
+          // autorizada não aparecia em relatório nem no SPED.
+          aliquota_ipi:    item.aliquota_ipi ?? 0,
+          valor_ipi:       item.valor_ipi ?? 0,
         })),
       );
 

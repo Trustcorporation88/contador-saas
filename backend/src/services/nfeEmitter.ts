@@ -165,6 +165,10 @@ interface NfeItemRow {
   aliquota_icms?: number | string;
   aliquota_pis?: number | string;
   aliquota_cofins?: number | string;
+  /** IPI — presente só para contribuinte do imposto (ver nfeDTO.NfeItemDTO). */
+  cst_ipi?: string;
+  aliquota_ipi?: number | string;
+  codigo_enquadramento_ipi?: string;
 }
 
 export function validarEmitente(company: CompanyRow): void {
@@ -312,6 +316,12 @@ export function buildPayload(
         pis_aliquota: pisAliq,
         cofins_modalidade: simples || cofinsAliq <= 0 ? '07' : '01',
         cofins_aliquota: cofinsAliq,
+        // IPI independe do regime: é o contribuinte do imposto (indústria,
+        // importador) que destaca. Sem CST nem alíquota, o Python não monta o
+        // grupo e a nota sai como antes. cEnq 999 = tributação normal.
+        ipi_cst: String(it.cst_ipi ?? '').trim(),
+        ipi_aliquota: Number(it.aliquota_ipi ?? 0),
+        ipi_cenq: String(it.codigo_enquadramento_ipi ?? '999').trim() || '999',
       };
     }),
   };
