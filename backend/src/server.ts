@@ -72,6 +72,38 @@ function startBackgroundJobs(): void {
   });
 
   console.log('[DAS] DAS Scheduler initialized with 4 cron jobs (including recurring transactions)');
+
+  // Classificação Tributária (cClassTrib) da Reforma Tributária.
+  //
+  // A tabela publicada pelo SVRS muda por ato normativo até 2032 — códigos
+  // entram, e outros têm a vigência encerrada sem sucessor. Sem sincronização
+  // periódica a tabela envelhece em silêncio e a validação da emissão passa a
+  // usar uma norma revogada, que é pior do que não validar: dá confiança.
+  //
+  // Diário às 4h: a publicação é esporádica, e o custo de checar é uma
+  // requisição. Falha não derruba nada — a tabela anterior é preservada e a
+  // tentativa fica registrada em fiscal_class_trib_sync.
+  cron.schedule('0 4 * * *', async () => {
+    console.log('[CRON] Sincronizando Classificação Tributária (cClassTrib) com o SVRS...');
+    try {
+      const { sincronizar } = await import('./services/classTribSyncService');
+      const r = await sincronizar();
+      if (r.status === 'ok') {
+        console.log(
+          `[CRON] cClassTrib: ${r.total_recebido} códigos ` +
+          `(${r.inseridos} novos, ${r.atualizados} alterados, ${r.ausentes} ausentes na origem)`,
+        );
+      } else {
+        // Não relança: indisponibilidade do portal do SVRS não pode derrubar o
+        // agendador. Fica no log e na tabela de sincronizações.
+        logger.warn('[CRON] cClassTrib: sincronização falhou', { erro: r.erro });
+      }
+    } catch (error) {
+      logger.error('cClassTrib Scheduler: sincronizacao failed', { error });
+    }
+  });
+
+  console.log('[cClassTrib] Sincronização com o SVRS agendada (diária, 04:00)');
 }
 
 async function startServer(): Promise<void> {

@@ -1022,6 +1022,125 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           console.log('✓ 026_fiscal_xml_captures_conteudo completed');
         },
       },
+      {
+        name: '027_fiscal_class_trib',
+        up: async (db) => {
+          // Tabela de Classificação Tributária (cClassTrib) da Reforma Tributária.
+          //
+          // O cClassTrib qualifica o CST dentro do grupo gIBSCBS: o CST diz QUAL é
+          // a situação (tributada, isenta, reduzida) e o cClassTrib diz POR QUE,
+          // amarrando na hipótese legal da LC 214/2025. É código obrigatório e
+          // validado pela SEFAZ.
+          //
+          // Por que tabela e não constante no código: a lista publicada pelo SVRS
+          // muda por ato normativo até 2032, e muda nos DOIS eixos. Na carga que
+          // originou esta migração havia 164 códigos, dos quais 3 (220001, 220002 e
+          // 220003, incorporação imobiliária) já tinham vigência encerrada em
+          // 2026-01-01 SEM sucessor no mesmo CST. Um enum no código continuaria
+          // oferecendo os três. Além disso só 97 dos 164 valem para NF-e — os
+          // demais são de NFS-e, CT-e, NF3e etc. —, então a lista correta depende
+          // do documento que está sendo emitido.
+          const temTabela = await db.schema.hasTable('fiscal_class_trib');
+          if (!temTabela) {
+            console.log('[MIGRATIONS] Creating fiscal_class_trib...');
+            await db.schema.createTable('fiscal_class_trib', (table) => {
+              // O código é a chave natural publicada pelo SVRS: 6 dígitos, com
+              // zeros à esquerda significativos ('000001'). Guardar como texto,
+              // nunca como inteiro.
+              table.string('cod_class_trib', 6).primary();
+
+              table.string('cst', 3).notNullable();
+              table.text('nome_cst');
+              table.text('nome').notNullable();
+              table.text('nome_reduzido');
+
+              // Vigência: é o que torna a validação dependente da DATA DE EMISSÃO
+              // da nota, e não da data de hoje. Uma nota de janeiro reemitida em
+              // agosto tem de ser validada contra a tabela de janeiro.
+              table.date('vigencia_inicio').notNullable();
+              table.date('vigencia_fim').nullable();
+
+              // ATENÇÃO À UNIDADE: o SVRS publica em PONTOS PERCENTUAIS —
+              // 60.00 significa 60%, não 0,6. Aplicar direto como fator produz
+              // redução de 6000%.
+              table.decimal('perc_red_ibs', 5, 2);
+              table.decimal('perc_red_cbs', 5, 2);
+
+              table.smallint('tipo_aliq');
+              table.boolean('ind_trib_regular');
+
+              // Documentos em que o código é aceito, normalizados ('NFE', 'NFCE',
+              // 'CTE', 'NFSE'...). Array em vez de 17 colunas booleanas porque o
+              // SVRS já acrescentou tipos de documento à tabela e deve acrescentar
+              // outros até 2032 — assim isso não exige nova migração.
+              table.specificType('documentos', 'text[]').notNullable().defaultTo('{}');
+
+              table.text('url_legislacao');
+              table.integer('nro_anexo');
+              table.date('publicado_em');
+
+              // Registro original inteiro. Campos que o SVRS criar passam a ficar
+              // disponíveis sem migração, e dá para auditar o que foi recebido.
+              table.jsonb('dados_brutos').notNullable();
+
+              // Código que sumiu da origem. NUNCA se apaga a linha: notas já
+              // emitidas referenciam o código, e apagá-lo tornaria impossível
+              // reconstituir a validação daquela emissão.
+              table.timestamp('ausente_na_origem_desde', { useTz: true }).nullable();
+
+              table.timestamp('sincronizado_em', { useTz: true }).notNullable().defaultTo(db.fn.now());
+            });
+
+            await db.schema.alterTable('fiscal_class_trib', (table) => {
+              table.index(['vigencia_inicio', 'vigencia_fim'], 'idx_class_trib_vigencia');
+              table.index(['cst'], 'idx_class_trib_cst');
+            });
+            await db.raw(
+              'CREATE INDEX IF NOT EXISTS idx_class_trib_documentos ON fiscal_class_trib USING GIN (documentos)',
+            );
+          }
+
+          // Histórico das sincronizações. Sem isto não há como distinguir "a
+          // tabela está correta e estável" de "o sync quebrou há três meses e
+          // ninguém viu" — os dois casos têm exatamente a mesma aparência ao
+          // consultar a tabela.
+          const temLog = await db.schema.hasTable('fiscal_class_trib_sync');
+          if (!temLog) {
+            console.log('[MIGRATIONS] Creating fiscal_class_trib_sync...');
+            await db.schema.createTable('fiscal_class_trib_sync', (table) => {
+              table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+              table.timestamp('iniciado_em', { useTz: true }).notNullable().defaultTo(db.fn.now());
+              table.timestamp('concluido_em', { useTz: true }).nullable();
+              table.string('status', 10).notNullable();
+              table.text('origem').notNullable();
+              table.integer('total_recebido');
+              table.integer('inseridos');
+              table.integer('atualizados');
+              table.integer('inalterados');
+              table.integer('ausentes');
+              table.text('erro');
+              table.index(['iniciado_em'], 'idx_class_trib_sync_data');
+            });
+            await db.raw(
+              'ALTER TABLE fiscal_class_trib_sync ADD CONSTRAINT chk_class_trib_sync_status ' +
+              "CHECK (status IN ('ok', 'erro'))",
+            );
+          }
+
+          // RLS ligada já na criação, pelo mesmo motivo da 024: o Supabase publica
+          // uma API REST sobre o schema public. Aqui não há dado de cliente, mas
+          // tabela sem RLS neste schema é exposição por omissão.
+          for (const tabela of ['fiscal_class_trib', 'fiscal_class_trib_sync']) {
+            try {
+              await db.raw(`ALTER TABLE ${tabela} ENABLE ROW LEVEL SECURITY`);
+            } catch (erro) {
+              console.warn(`[MIGRATIONS] Não foi possível habilitar RLS em ${tabela}:`, erro);
+            }
+          }
+
+          console.log('✓ 027_fiscal_class_trib completed');
+        },
+      },
     ];
 
     for (const migration of migrations) {
