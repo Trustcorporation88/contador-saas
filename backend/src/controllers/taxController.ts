@@ -6,7 +6,10 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { TaxCalculationService } from '../services/taxCalculationService';
-import { TaxRegime, TaxStatus, TaxType, CalculateTaxDTO } from '../models/dtos/taxDTO';
+import { TaxAdjustmentService } from '../services/taxAdjustmentService';
+import {
+  TaxRegime, TaxStatus, TaxType, CalculateTaxDTO, ApuracaoPeriodicidade,
+} from '../models/dtos/taxDTO';
 import { ReformaTributariaService } from '../services/reformaTributariaService';
 import { ReformaTaxType, RateNature, CalculateReformaDTO, ProjecaoReformaDTO } from '../models/dtos/reformaTributariaDTO';
 import fs from 'fs';
@@ -18,6 +21,44 @@ import CacheKeys from '../services/cache/cacheKeys';
 export class TaxController {
 
   /**
+   * Monta o DTO de cálculo a partir do body.
+   *
+   * Centralizado porque /calculate e /appraisal montavam o mesmo objeto em duas
+   * cópias — e é assim que um campo novo entra em um endpoint e não no outro.
+   */
+  private static montarCalculateDto(companyId: string, body: Record<string, unknown>): CalculateTaxDTO {
+    return {
+      company_id:   companyId,
+      tax_regime:   body.tax_regime as TaxRegime,
+      period_start: body.period_start as string,
+      period_end:   body.period_end as string,
+      rbt12:        body.rbt12 as number | undefined,
+      atividade:    body.atividade as CalculateTaxDTO['atividade'],
+      iss_rate:     body.iss_rate as number | undefined,
+      icms_rate:    body.icms_rate as number | undefined,
+      apuracao:     body.apuracao as ApuracaoPeriodicidade | undefined,
+      prejuizo_fiscal_acumulado: body.prejuizo_fiscal_acumulado as number | undefined,
+    };
+  }
+
+  /**
+   * Entradas que mudam o resultado e precisam entrar na chave de cache. Sem isso
+   * duas simulações do mesmo período e regime, com atividade ou alíquota
+   * diferentes, compartilhavam a chave e a segunda recebia o resultado da
+   * primeira.
+   */
+  private static varianteDeCache(dto: CalculateTaxDTO): string {
+    return [
+      dto.atividade ?? '-',
+      dto.rbt12 ?? '-',
+      dto.iss_rate ?? '-',
+      dto.icms_rate ?? '-',
+      dto.apuracao ?? '-',
+      dto.prejuizo_fiscal_acumulado ?? '-',
+    ].join('|');
+  }
+
+  /**
    * POST /companies/:companyId/taxes/calculate
    * Calcula impostos do período sem salvar
    * Body: CalculateTaxDTO
@@ -26,16 +67,7 @@ export class TaxController {
   static async calculate(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
     try {
       const companyId = req.params.companyId;
-      const dto: CalculateTaxDTO = {
-        company_id:   companyId,
-        tax_regime:   req.body.tax_regime as TaxRegime,
-        period_start: req.body.period_start,
-        period_end:   req.body.period_end,
-        rbt12:        req.body.rbt12,
-        atividade:    req.body.atividade,
-        iss_rate:     req.body.iss_rate,
-        icms_rate:    req.body.icms_rate,
-      };
+      const dto = TaxController.montarCalculateDto(companyId, req.body);
 
       if (!dto.tax_regime || !dto.period_start || !dto.period_end) {
         return res.status(400).json({ error: 'tax_regime, period_start e period_end são obrigatórios' });
@@ -50,6 +82,7 @@ export class TaxController {
         dto.period_start,
         dto.period_end,
         dto.tax_regime,
+        TaxController.varianteDeCache(dto),
       );
       const cached = await cacheService.get(cacheKey);
 
@@ -81,16 +114,7 @@ export class TaxController {
   static async appraisal(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
     try {
       const companyId = req.params.companyId;
-      const dto: CalculateTaxDTO = {
-        company_id:   companyId,
-        tax_regime:   req.body.tax_regime as TaxRegime,
-        period_start: req.body.period_start,
-        period_end:   req.body.period_end,
-        rbt12:        req.body.rbt12,
-        atividade:    req.body.atividade,
-        iss_rate:     req.body.iss_rate,
-        icms_rate:    req.body.icms_rate,
-      };
+      const dto = TaxController.montarCalculateDto(companyId, req.body);
 
       if (!dto.tax_regime || !dto.period_start || !dto.period_end) {
         return res.status(400).json({ error: 'tax_regime, period_start e period_end são obrigatórios' });
@@ -116,6 +140,71 @@ export class TaxController {
       return res.status(201).json({ calculation: result, saved, guide: { filename: guide.filename } });
     } catch (err) {
       logger.error('Tax appraisal error', { error: (err as Error).message });
+      return next(err);
+    }
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // LALUR — adições e exclusões
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * POST /companies/:companyId/taxes/adjustments
+   * Registra uma adição ou exclusão do LALUR.
+   * Body: { period_start, period_end, adjustment_type, amount, justification, account_id? }
+   */
+  static async createAdjustment(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+    try {
+      const companyId = req.params.companyId;
+      const ajuste = await TaxAdjustmentService.create(companyId, req.user?.id ?? null, {
+        period_start:    req.body.period_start,
+        period_end:      req.body.period_end,
+        adjustment_type: req.body.adjustment_type,
+        amount:          Number(req.body.amount),
+        justification:   req.body.justification,
+        account_id:      req.body.account_id,
+      });
+
+      // Um ajuste muda a base do IRPJ/CSLL: cálculo em cache do mesmo período
+      // ficaria desatualizado e ninguém perceberia.
+      await cacheService.invalidateTaxes(companyId);
+
+      return res.status(201).json({ data: ajuste });
+    } catch (err) {
+      logger.error('Tax adjustment create error', { error: (err as Error).message });
+      return next(err);
+    }
+  }
+
+  /**
+   * GET /companies/:companyId/taxes/adjustments
+   * Lista ajustes do LALUR. Query: period_start, period_end
+   */
+  static async listAdjustments(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+    try {
+      const companyId = req.params.companyId;
+      const rows = await TaxAdjustmentService.list(companyId, {
+        period_start: req.query.period_start as string | undefined,
+        period_end:   req.query.period_end as string | undefined,
+      });
+      return res.status(200).json({ data: rows, total: rows.length });
+    } catch (err) {
+      logger.error('Tax adjustment list error', { error: (err as Error).message });
+      return next(err);
+    }
+  }
+
+  /**
+   * DELETE /companies/:companyId/taxes/adjustments/:id
+   */
+  static async deleteAdjustment(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+    try {
+      const { companyId, id } = req.params;
+      await TaxAdjustmentService.remove(companyId, id);
+      await cacheService.invalidateTaxes(companyId);
+      return res.status(204).send();
+    } catch (err) {
+      logger.error('Tax adjustment delete error', { error: (err as Error).message });
       return next(err);
     }
   }

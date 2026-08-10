@@ -146,14 +146,23 @@ export class CacheKeys {
    * @param periodStart - Data inicial (YYYY-MM-DD)
    * @param periodEnd - Data final (YYYY-MM-DD)
    * @param regime - Regime tributário (SIMPLES, LUCRO_PRESUMIDO, etc)
+   * @param variant - Demais entradas que mudam o resultado (atividade, rbt12,
+   *   alíquotas, periodicidade de apuração, prejuízo fiscal informado).
+   *
+   * A variante é obrigatória na prática: sem ela, duas simulações do mesmo
+   * período e regime com atividade ou alíquota diferentes compartilhavam a mesma
+   * chave, e a segunda recebia o resultado da primeira. Num sistema de apuração
+   * isso devolve imposto de outro cenário sem nenhum sinal de que houve cache.
    */
   static taxCalculation(
     companyId: string,
     periodStart: string,
     periodEnd: string,
     regime: string,
+    variant = '',
   ): string {
-    return `${CacheNamespace.TAXES}:${companyId}:calculation:${sanitize(periodStart)}:${sanitize(periodEnd)}:${sanitize(regime)}`;
+    const base = `${CacheNamespace.TAXES}:${companyId}:calculation:${sanitize(periodStart)}:${sanitize(periodEnd)}:${sanitize(regime)}`;
+    return variant ? `${base}:${sanitize(variant)}` : base;
   }
 
   /**
