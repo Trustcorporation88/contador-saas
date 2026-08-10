@@ -50,6 +50,22 @@ function isRowActive(row: Record<string, unknown>): boolean {
   return true;
 }
 
+/**
+ * Códigos de recuperação vêm como JSON de hashes na coluna backup_codes. Sem
+ * hidratar, eles se perderiam no restart mesmo estando gravados no banco.
+ */
+function parseBackupCodes(valor: unknown): string[] | undefined {
+  if (!valor) return undefined;
+  if (Array.isArray(valor)) return valor.map(String);
+  try {
+    const parsed = JSON.parse(String(valor));
+    return Array.isArray(parsed) ? parsed.map(String) : undefined;
+  } catch {
+    logger.warn('backup_codes em formato inesperado — ignorando');
+    return undefined;
+  }
+}
+
 interface RefreshTokenStore {
   id: string;
   userId: string;
@@ -362,6 +378,57 @@ export class AuthService {
     return true;
   }
 
+  /**
+   * Grava campos de MFA na tabela users.
+   *
+   * O usersStore é um Map em memória. Antes desta correção, enableMFA e verifyMFA
+   * só escreviam nele: o usuário escaneava o QR code, o sistema confirmava a
+   * ativação, e no deploy seguinte (o Railway reinicia a cada deploy) o Map
+   * zerava, o usuário era re-hidratado do banco e o MFA voltava desligado — sem
+   * aviso, o login parava de pedir o segundo fator. Pior que não ter MFA, porque
+   * o usuário acredita estar protegido.
+   *
+   * Filtra pelas colunas existentes seguindo o mesmo padrão de
+   * updateUserPasswordColumns: o schema varia entre ambientes, e uma coluna
+   * ausente não deve derrubar a operação inteira.
+   */
+  private async persistMfaColumns(
+    userId: string,
+    campos: { mfaEnabled?: boolean; mfaSecret?: string | null; backupCodesHash?: string[] | null },
+  ): Promise<void> {
+    const db = await getDatabase();
+    const usersColumns = (await db('users').columnInfo()) as Record<string, unknown>;
+
+    const payload: Record<string, unknown> = {};
+    if (campos.mfaEnabled !== undefined && usersColumns.mfa_enabled) {
+      payload.mfa_enabled = campos.mfaEnabled;
+    }
+    if (campos.mfaSecret !== undefined && usersColumns.mfa_secret) {
+      payload.mfa_secret = campos.mfaSecret;
+    }
+    if (campos.backupCodesHash !== undefined && usersColumns.backup_codes) {
+      // Só os hashes, nunca os códigos em texto claro.
+      payload.backup_codes = campos.backupCodesHash
+        ? JSON.stringify(campos.backupCodesHash)
+        : null;
+    }
+
+    if (Object.keys(payload).length === 0) {
+      // Sem as colunas, o MFA seria "ativado" só em memória e morreria no
+      // próximo restart. Falhar aqui é melhor que dar a ativação por concluída.
+      throw Object.assign(
+        new Error(
+          'Colunas de MFA ausentes na tabela users — rode as migrações ' +
+          '(025_users_mfa_e_lockout) antes de habilitar MFA.',
+        ),
+        { status: 503 },
+      );
+    }
+
+    if (usersColumns.updated_at) payload.updated_at = new Date();
+    await db('users').where('id', userId).update(payload);
+  }
+
   private async updateUserPasswordColumns(userId: string, passwordHash: string): Promise<void> {
     const db = await getDatabase();
     const usersColumns = await db('users').columnInfo();
@@ -448,7 +515,10 @@ export class AuthService {
    * Retorna QR code, secret e backup codes
    */
   async enableMFA(userId: string): Promise<MFASetupResponse> {
-    const user = usersStore.get(userId);
+    // findUserById e não usersStore.get: o JWT é stateless e sobrevive ao
+    // restart, mas o Map não. Lendo só o Map, um usuário autenticado que
+    // chamasse este endpoint depois de um deploy recebia "User not found".
+    const user = await this.findUserById(userId);
     if (!user) {
       throw new InvalidCredentialsError('User not found');
     }
@@ -472,7 +542,16 @@ export class AuthService {
       backupCodes.map((code) => bcrypt.hash(code, envConfig.bcryptRounds)),
     );
 
-    // Armazenar secret e backup codes temporariamente
+    // Gravar no banco ANTES de devolver o QR code. Se a gravação falhar, o
+    // usuário não deve receber um secret que o servidor vai esquecer no próximo
+    // restart — ele guardaria o QR code no autenticador acreditando ter MFA.
+    // mfa_enabled continua false: só a verificação do código ativa.
+    await this.persistMfaColumns(userId, {
+      mfaSecret: secret.base32,
+      backupCodesHash,
+      mfaEnabled: false,
+    });
+
     user.mfaSecret = secret.base32;
     user.backupCodesHash = backupCodesHash;
 
@@ -493,7 +572,9 @@ export class AuthService {
       throw new InvalidTokenError('Invalid MFA code format');
     }
 
-    const user = usersStore.get(userId);
+    // Idem enableMFA: hidrata do banco. Sem isso, habilitar e confirmar o MFA
+    // em processos diferentes (ou com um deploy no meio) falhava.
+    const user = await this.findUserById(userId);
     if (!user) {
       throw new InvalidCredentialsError('User not found');
     }
@@ -514,10 +595,11 @@ export class AuthService {
       throw new InvalidTokenError('Invalid MFA code');
     }
 
-    // Ativar MFA
-    user.mfaEnabled = true;
+    // Ativar MFA no banco. O comentário anterior aqui dizia "armazenar secret
+    // permanentemente" e só fazia usersStore.set — um Map em memória.
+    await this.persistMfaColumns(userId, { mfaEnabled: true });
 
-    // Armazenar secret permanentemente
+    user.mfaEnabled = true;
     usersStore.set(userId, user);
 
     logger.info(`MFA ativado com sucesso para usuário: ${user.email}`);
@@ -784,6 +866,7 @@ export class AuthService {
         companyId: String(dbUser.company_id || ''),
         mfaEnabled: Boolean(dbUser.mfa_enabled),
         mfaSecret: dbUser.mfa_secret ? String(dbUser.mfa_secret) : undefined,
+        backupCodesHash: parseBackupCodes(dbUser.backup_codes),
         loginAttempts: Number(dbUser.login_attempts || 0),
         lastLogin: dbUser.last_login ? new Date(dbUser.last_login) : undefined,
         lockedUntil: dbUser.locked_until ? new Date(dbUser.locked_until) : undefined,
@@ -830,6 +913,7 @@ export class AuthService {
       companyId: String(dbUser.company_id || ''),
       mfaEnabled: Boolean(dbUser.mfa_enabled),
       mfaSecret: dbUser.mfa_secret ? String(dbUser.mfa_secret) : undefined,
+      backupCodesHash: parseBackupCodes(dbUser.backup_codes),
       loginAttempts: Number(dbUser.login_attempts || 0),
       lastLogin: dbUser.last_login ? new Date(dbUser.last_login) : undefined,
       lockedUntil: dbUser.locked_until ? new Date(dbUser.locked_until) : undefined,
