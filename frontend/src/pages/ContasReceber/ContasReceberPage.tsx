@@ -16,6 +16,7 @@ import {
   StatusContaReceber,
   CategoriaContaReceber,
 } from '../../services/contasReceberService';
+import { useAuthStore } from '../../store/authStore';
 
 type ModalState =
   | { open: false }
@@ -38,6 +39,7 @@ interface RecebimentoForm {
 
 export default function ContasReceberPage() {
   const qc = useQueryClient();
+  const currentCompanyId = useAuthStore((s) => s.currentCompanyId);
   const [modalState, setModalState] = useState<ModalState>({ open: false });
   const [recebimentoState, setRecebimentoState] = useState<RecebimentoModalState>({ open: false });
   const [apiError, setApiError] = useState('');
@@ -57,13 +59,17 @@ export default function ContasReceberPage() {
     sort_order: 'asc' as const,
   }), [clienteNome, status, categoria, somenteAtrasadas]);
 
+  // currentCompanyId na chave: /contas-receber não leva o companyId na URL (o
+  // backend a escopa pelo header X-Company-Id), então sem ele na chave o cache
+  // serve as duplicatas da empresa anterior depois da troca — e a baixa seria
+  // registrada na empresa errada.
   const { data: listResponse, isLoading } = useQuery({
-    queryKey: ['contas-receber', params],
+    queryKey: ['contas-receber', currentCompanyId, params],
     queryFn: () => ContasReceberService.list(params),
   });
 
   const { data: stats } = useQuery({
-    queryKey: ['contas-receber-stats'],
+    queryKey: ['contas-receber-stats', currentCompanyId],
     queryFn: () => ContasReceberService.getEstatisticas(),
   });
 
