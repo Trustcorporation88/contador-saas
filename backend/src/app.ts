@@ -107,7 +107,12 @@ app.use(
     credentials: envConfig.corsCredentials,
     optionsSuccessStatus: 200,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    // X-Company-Id é o header que applyCompanyContext (middleware/companyContext.ts)
+    // usa para trocar a empresa ativa sem gerar novo token. Sem ele na allowlist,
+    // o browser bloqueia no preflight toda requisição do frontend que troque de
+    // empresa — e as rotas de contas a pagar/receber e documentos ficam presas na
+    // empresa gravada no JWT no login.
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Company-Id'],
     maxAge: 86400, // Cache preflight 24h
   }),
 );
