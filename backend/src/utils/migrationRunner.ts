@@ -954,6 +954,44 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           console.log('✓ 024_tax_adjustments_lalur completed');
         },
       },
+      {
+        name: '025_users_mfa_e_lockout',
+        up: async (db) => {
+          const hasUsers = await db.schema.hasTable('users');
+          if (!hasUsers) return;
+
+          // As colunas de MFA e de lockout NUNCA existiram no banco: a migração
+          // que as criava (src/migrations/add_auth_tables.ts) não está neste
+          // runner e por isso nunca rodou. O authService lê dbUser.mfa_enabled e
+          // dbUser.mfa_secret na hidratação, então sem as colunas o MFA volta
+          // desligado a cada restart — o usuário escaneia o QR code, o sistema
+          // confirma a ativação, e no deploy seguinte o login para de pedir o
+          // segundo fator sem avisar ninguém.
+          //
+          // Não reaproveitei add_auth_tables porque o up() dela foi escrito
+          // contra um schema antigo (cria `name` e `active`; o atual tem
+          // `full_name` e `is_active`).
+          const colunas: Array<[string, (t: import('knex').Knex.AlterTableBuilder) => void]> = [
+            ['mfa_enabled',    (t) => t.boolean('mfa_enabled').notNullable().defaultTo(false)],
+            ['mfa_secret',     (t) => t.string('mfa_secret', 128).nullable()],
+            // JSON com os hashes dos códigos de recuperação (nunca em texto claro).
+            ['backup_codes',   (t) => t.text('backup_codes').nullable()],
+            ['last_login',     (t) => t.timestamp('last_login').nullable()],
+            ['login_attempts', (t) => t.integer('login_attempts').notNullable().defaultTo(0)],
+            ['locked_until',   (t) => t.timestamp('locked_until').nullable()],
+          ];
+
+          for (const [nome, definicao] of colunas) {
+            const existe = await db.schema.hasColumn('users', nome);
+            if (!existe) {
+              console.log(`[MIGRATIONS] Adding users.${nome}...`);
+              await db.schema.alterTable('users', definicao);
+            }
+          }
+
+          console.log('✓ 025_users_mfa_e_lockout completed');
+        },
+      },
     ];
 
     for (const migration of migrations) {
