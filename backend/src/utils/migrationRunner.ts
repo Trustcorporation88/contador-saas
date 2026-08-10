@@ -896,6 +896,64 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           console.log('✓ 023_nfe_transmitindo_em completed');
         },
       },
+      {
+        name: '024_tax_adjustments_lalur',
+        up: async (db) => {
+          // Adições e exclusões do LALUR. O TaxAdjustmentDTO existia em
+          // models/dtos/taxDTO.ts desde o início, mas a tabela nunca foi criada
+          // aqui (só no SQL solto da raiz, que não é executado) e nenhum código a
+          // lia. Resultado: o IRPJ do Lucro Real era calculado sobre o lucro
+          // CONTÁBIL, que não é a base legal.
+          const hasTable = await db.schema.hasTable('tax_adjustments');
+          if (!hasTable) {
+            console.log('[MIGRATIONS] Creating tax_adjustments table...');
+            await db.schema.createTable('tax_adjustments', (table) => {
+              table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+              // company_id com FK e NOT NULL: sem isso a tabela nasce fora do
+              // isolamento por empresa, como aconteceu com bank_transactions.
+              table.uuid('company_id').notNullable()
+                .references('id').inTable('companies').onDelete('CASCADE');
+              table.date('period_start').notNullable();
+              table.date('period_end').notNullable();
+              table.string('adjustment_type', 16).notNullable();
+              table.decimal('amount', 15, 2).notNullable();
+              table.text('justification').notNullable();
+              table.uuid('account_id').nullable();
+              table.uuid('created_by').nullable();
+              table.timestamps(true, true);
+
+              table.index(['company_id', 'period_start', 'period_end'], 'idx_tax_adj_company_periodo');
+            });
+
+            // Valor sempre positivo — o sinal vem do tipo. Um valor negativo
+            // inverteria silenciosamente adição em exclusão.
+            await db.raw(`
+              ALTER TABLE tax_adjustments
+              ADD CONSTRAINT chk_tax_adj_amount_positivo CHECK (amount > 0)
+            `);
+            await db.raw(`
+              ALTER TABLE tax_adjustments
+              ADD CONSTRAINT chk_tax_adj_type CHECK (adjustment_type IN ('ADDITION','EXCLUSION'))
+            `);
+          }
+
+          // RLS ligada já na criação. As tabelas deste projeto nascem via Knex,
+          // sem RLS, e o Supabase publica uma API REST sobre o schema public com
+          // a chave anon (pública por definição) — tabela nova fica legível por
+          // qualquer um até alguém rodar o script de blindagem à mão. Ligar aqui
+          // fecha na origem; o backend é dono da tabela e segue lendo e gravando.
+          try {
+            await db.raw('ALTER TABLE tax_adjustments ENABLE ROW LEVEL SECURITY');
+          } catch (e) {
+            console.warn(
+              '[MIGRATIONS] Não foi possível habilitar RLS em tax_adjustments:',
+              (e as Error).message,
+            );
+          }
+
+          console.log('✓ 024_tax_adjustments_lalur completed');
+        },
+      },
     ];
 
     for (const migration of migrations) {
