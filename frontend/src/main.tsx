@@ -1,7 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
+import { queryClient } from './config/queryClient';
 import './index.css';
 
 // Após deploy novo, o browser pode ter JS antigo que aponta para chunks removidos.
@@ -12,15 +13,6 @@ window.addEventListener('vite:preloadError', (event) => {
     sessionStorage.setItem(reloadKey, '1');
     window.location.reload();
   }
-});
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60 * 5, // 5 min
-      retry: 1,
-    },
-  },
 });
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
