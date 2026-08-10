@@ -46,9 +46,24 @@ export const api = axios.create({
 });
 
 api.interceptors.request.use((config: any) => {
-  const token = useAuthStore.getState().accessToken;
-  if (token && config.headers) {
-    config.headers.Authorization = `Bearer ${token}`;
+  const { accessToken, currentCompanyId } = useAuthStore.getState();
+  if (accessToken && config.headers) {
+    config.headers.Authorization = `Bearer ${accessToken}`;
+  }
+  /**
+   * Empresa ativa. Rotas como /contas-pagar, /contas-receber e /documentos não
+   * levam o companyId na URL: o backend as escopa por req.user.companyId, que
+   * vem do JWT gerado no LOGIN. O middleware applyCompanyContext existe
+   * justamente para permitir a troca sem novo token, lendo este header — e o
+   * header nunca era enviado.
+   *
+   * Consequência de não enviar: trocar de empresa no seletor mudava só o rótulo
+   * na tela. Esses três módulos continuavam servindo a empresa do login, para
+   * sempre, e o contador podia registrar pagamento na empresa errada acreditando
+   * ter trocado. Não era cache velho; era a troca não existir.
+   */
+  if (currentCompanyId && config.headers) {
+    config.headers['X-Company-Id'] = currentCompanyId;
   }
   config._retryCount = config._retryCount || 0;
   return config;

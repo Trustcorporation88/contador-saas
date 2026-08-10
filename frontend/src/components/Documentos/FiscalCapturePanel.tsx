@@ -94,9 +94,14 @@ export default function FiscalCapturePanel() {
     }
   }, [company, cnpj]);
 
+  // listCaptures lê a empresa do store para montar a URL, então o dado vem certo
+  // — mas sem currentCompanyId na chave o cache exibe as capturas da empresa
+  // anterior por até 5 minutos (staleTime) depois da troca. As duas queries
+  // acima já seguem esse padrão; esta ficou de fora.
   const { data: captures } = useQuery({
-    queryKey: ['fiscal-capture-list'],
+    queryKey: ['fiscal-capture-list', currentCompanyId],
     queryFn: () => FiscalCaptureService.listCaptures(1, 8),
+    enabled: !!currentCompanyId,
   });
 
   const invalidate = async () => {

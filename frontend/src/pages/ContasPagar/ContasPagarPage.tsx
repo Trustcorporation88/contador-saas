@@ -16,6 +16,7 @@ import {
   RegistrarPagamentoPayload,
   StatusContaPagar,
 } from '../../services/contasPagarService';
+import { useAuthStore } from '../../store/authStore';
 
 type ModalState =
   | { open: false }
@@ -38,6 +39,7 @@ interface PagamentoForm {
 
 export default function ContasPagarPage() {
   const qc = useQueryClient();
+  const currentCompanyId = useAuthStore((s) => s.currentCompanyId);
   const [modalState, setModalState] = useState<ModalState>({ open: false });
   const [pagamentoState, setPagamentoState] = useState<PagamentoModalState>({ open: false });
   const [apiError, setApiError] = useState('');
@@ -57,13 +59,17 @@ export default function ContasPagarPage() {
     sort_order: 'asc' as const,
   }), [fornecedorNome, status, categoria, somenteAtrasadas]);
 
+  // currentCompanyId na chave: /contas-pagar não leva o companyId na URL (o
+  // backend a escopa pelo header X-Company-Id), então sem ele na chave o cache
+  // serve os títulos da empresa anterior depois da troca — e o pagamento seria
+  // registrado na empresa errada.
   const { data: listResponse, isLoading } = useQuery({
-    queryKey: ['contas-pagar', params],
+    queryKey: ['contas-pagar', currentCompanyId, params],
     queryFn: () => ContasPagarService.list(params),
   });
 
   const { data: stats } = useQuery({
-    queryKey: ['contas-pagar-stats'],
+    queryKey: ['contas-pagar-stats', currentCompanyId],
     queryFn: () => ContasPagarService.getEstatisticas(),
   });
 
