@@ -56,7 +56,9 @@ if (!hasLiveDb) {
 /** Token no mesmo formato que o authService emite. */
 function token(userId: string, role: string, extras: Record<string, unknown> = {}): string {
   return jwt.sign(
-    { userId, id: userId, email: `${role}@teste.local`, role, ...extras },
+    // `sub` é o que o middleware lê para req.user.id. Sem ele o token
+    // autentica mas a identidade chega vazia nos controllers.
+    { sub: userId, userId, id: userId, email: `${role}@teste.local`, role, ...extras },
     process.env.JWT_SECRET as string,
     { expiresIn: '1h', algorithm: 'HS256' },
   );
