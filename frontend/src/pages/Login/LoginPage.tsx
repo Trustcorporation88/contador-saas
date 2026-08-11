@@ -18,11 +18,20 @@ const loginSchema = z.object({
 });
 type LoginForm = z.infer<typeof loginSchema>;
 
+/**
+ * Aceita o código de 6 dígitos do autenticador OU um código de recuperação de
+ * 8 caracteres. Exigir 6 dígitos aqui tornava a recuperação impossível de
+ * digitar justamente para quem perdeu o celular — que é a única situação em
+ * que ela serve.
+ */
 const mfaSchema = z.object({
   totpToken: z
     .string()
-    .length(6, 'Exatamente 6 dígitos')
-    .regex(/^\d{6}$/, 'Apenas dígitos numéricos'),
+    .transform((v) => v.replace(/[\s-]/g, '').toUpperCase())
+    .refine(
+      (v) => /^\d{6}$/.test(v) || /^[0-9A-F]{8}$/.test(v),
+      'Informe os 6 dígitos do app ou um código de recuperação de 8 caracteres',
+    ),
 });
 type MfaForm = z.infer<typeof mfaSchema>;
 
@@ -344,22 +353,34 @@ export default function LoginPage() {
                   control={mfaForm.control}
                   render={({ field, fieldState }) => (
                     <Input
-                      label="Código TOTP"
+                      label="Código do autenticador"
                       type="text"
-                      inputMode="numeric"
+                      // Sem inputMode="numeric": o código de recuperação tem
+                      // letras, e o teclado numérico do celular impediria
+                      // digitá-lo justamente quando ele é a única saída.
                       autoComplete="one-time-code"
-                      placeholder="000000"
-                      maxLength={6}
-                      className="text-center text-xl tracking-[0.5em] font-mono"
+                      placeholder="000000 ou código de recuperação"
+                      maxLength={8}
+                      className="text-center text-xl tracking-[0.35em] font-mono uppercase"
                       error={fieldState.error?.message}
                       value={field.value}
                       name={field.name}
                       ref={field.ref}
                       autoFocus
                       onChange={(e) => {
-                        const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                        // Aceita dígitos e A-F. O filtro anterior era /\D/g e
+                        // apagava as letras do código de recuperação enquanto
+                        // o usuário digitava.
+                        const val = e.target.value
+                          .replace(/[^0-9a-fA-F]/g, '')
+                          .toUpperCase()
+                          .slice(0, 8);
                         field.onChange(val);
-                        if (val.length === 6) mfaForm.handleSubmit(onMfaSubmit)();
+                        // Envia sozinho só no TOTP de 6 dígitos. Um código de
+                        // recuperação passa por seis caracteres no caminho, e
+                        // submeter ali gastaria a tentativa antes de o usuário
+                        // terminar de digitar.
+                        if (/^\d{6}$/.test(val)) mfaForm.handleSubmit(onMfaSubmit)();
                       }}
                     />
                   )}
