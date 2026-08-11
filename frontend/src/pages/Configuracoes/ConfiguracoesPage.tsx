@@ -10,13 +10,14 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Building2, User, ShieldCheck, Info,
+  Building2, User, Users, ShieldCheck, Info,
   CheckCircle, AlertTriangle, Eye, EyeOff,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuthStore } from '../../store/authStore';
 import { CompanyService } from '../../services/companyService';
 import api from '../../config/api';
+import UsuariosTab from './UsuariosTab';
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -42,7 +43,7 @@ const passwordSchema = z.object({
 
 type CompanyForm   = z.infer<typeof companySchema>;
 type PasswordForm  = z.infer<typeof passwordSchema>;
-type Tab = 'empresa' | 'perfil' | 'seguranca' | 'sobre';
+type Tab = 'empresa' | 'perfil' | 'seguranca' | 'usuarios' | 'sobre';
 
 // ─── Toast helper ─────────────────────────────────────────────────────────────
 
@@ -481,10 +482,17 @@ export default function ConfiguracoesPage() {
   const [tab, setTab] = useState<Tab>('empresa');
   const { msg, show } = useToast();
 
+  // A aba só é oferecida a admin. Esconder não é a proteção — o backend recusa
+  // as rotas com 403 de qualquer forma —, é só não oferecer o que seria negado.
+  const ehAdmin = useAuthStore.getState().user?.role === 'admin';
+
   const tabs: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
     { key: 'empresa',   label: 'Empresa',   icon: <Building2 className="h-4 w-4" /> },
     { key: 'perfil',    label: 'Meu Perfil', icon: <User className="h-4 w-4" /> },
     { key: 'seguranca', label: 'Segurança',  icon: <ShieldCheck className="h-4 w-4" /> },
+    ...(ehAdmin
+      ? [{ key: 'usuarios' as Tab, label: 'Usuários', icon: <Users className="h-4 w-4" /> }]
+      : []),
     { key: 'sobre',     label: 'Sobre',      icon: <Info className="h-4 w-4" /> },
   ];
 
@@ -528,6 +536,7 @@ export default function ConfiguracoesPage() {
           )}
           {tab === 'perfil'    && <PerfilTab toast={show} />}
           {tab === 'seguranca' && <SegurancaTab toast={show} />}
+          {tab === 'usuarios'  && <UsuariosTab toast={show} />}
           {tab === 'sobre'     && <SobreTab />}
         </div>
       </div>
