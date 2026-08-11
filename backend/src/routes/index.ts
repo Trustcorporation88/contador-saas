@@ -10,6 +10,7 @@ import contasReceberRoutes from './contasReceber';
 import contasPagarRoutes from './contasPagar';
 import healthRoutes from './health';
 import setupRoutes from './setup';
+import usersRoutes from './users';
 
 
 /**
@@ -25,6 +26,8 @@ router.use('/setup', setupRoutes);
 router.use('/auth', authRoutes);
 // Nota: journals, reports e taxes sÃ£o acessÃ­veis apenas via /companies/:companyId/...
 router.use('/companies', companiesRoutes);
+// Gestão de usuários — todas as rotas exigem papel admin (ver routes/users.ts).
+router.use('/users', usersRoutes);
 router.use('/audit', auditRoutes);
 router.use('/cnpj', cnpjRoutes);
 router.use('/admin/backups', backupRoutes);
