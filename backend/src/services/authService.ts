@@ -6,6 +6,7 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import speakeasy from 'speakeasy';
+import QRCode from 'qrcode';
 import crypto from 'crypto';
 import { envConfig } from '../config/env';
 import { getDatabase } from '../config/database';
@@ -564,8 +565,31 @@ export class AuthService {
 
     logger.info(`MFA habilitação iniciada para usuário: ${user.email}`);
 
+    // O campo se chama qrCode e vinha com a URI otpauth:// crua. A tela faz
+    // <img src={qrCode}>, e navegador nenhum renderiza otpauth:// como imagem:
+    // aparecia um ícone quebrado. Aqui ele passa a ser o PNG em data URL, que é
+    // o que o nome promete.
+    //
+    // A geração é local (biblioteca qrcode), sem serviço externo: mandar a URI
+    // para uma API de terceiros entregaria o segredo TOTP do usuário junto.
+    let qrCodeImagem = '';
+    try {
+      if (secret.otpauth_url) {
+        qrCodeImagem = await QRCode.toDataURL(secret.otpauth_url, { margin: 1, width: 240 });
+      }
+    } catch (erro) {
+      // Sem a imagem ainda dá para ativar digitando a chave manual, que vai na
+      // mesma resposta. Falhar tudo aqui seria pior que entregar o caminho B.
+      logger.warn('Não foi possível gerar a imagem do QR Code de MFA', {
+        erro: (erro as Error).message,
+      });
+    }
+
     return {
-      qrCode: secret.otpauth_url || '',
+      qrCode: qrCodeImagem,
+      // A URI crua continua disponível para quem preferir montar o QR do lado
+      // do cliente ou abrir direto no app autenticador.
+      otpauthUrl: secret.otpauth_url || '',
       secret: secret.base32,
       backupCodes: backupCodes,
     };
