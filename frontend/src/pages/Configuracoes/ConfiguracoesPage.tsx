@@ -276,16 +276,35 @@ function SegurancaTab({ toast }: { toast: (t: string, ok?: boolean) => void }) {
   const [secret, setSecret]   = useState<string | null>(null);
   const [totpCode, setTotpCode] = useState('');
   const [phase, setPhase]     = useState<'idle' | 'setup' | 'done'>('idle');
+  // Códigos de recuperação. A API sempre os devolveu; esta tela descartava a
+  // lista, então o usuário nunca os via — e perder o celular significava perder
+  // a conta, sem saída pela interface.
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [codigosGuardados, setCodigosGuardados] = useState(false);
 
   const enableMut = useMutation({
     mutationFn: () => api.post('/auth/enable-mfa'),
     onSuccess: (res) => {
-      setQrCode((res.data as { qrCode?: string }).qrCode ?? null);
-      setSecret((res.data as { secret?: string }).secret ?? null);
+      const dados = res.data as { qrCode?: string; secret?: string; backupCodes?: string[] };
+      setQrCode(dados.qrCode ?? null);
+      setSecret(dados.secret ?? null);
+      setBackupCodes(dados.backupCodes ?? []);
       setPhase('setup');
     },
     onError: () => toast('Erro ao gerar QR Code MFA', false),
   });
+
+  const copiarCodigos = async () => {
+    try {
+      await navigator.clipboard.writeText(backupCodes.join('\n'));
+      setCodigosGuardados(true);
+      toast('Códigos copiados. Guarde fora deste computador.');
+    } catch {
+      // Sem permissão de área de transferência os códigos seguem na tela para
+      // cópia manual — não vale travar a ativação por causa disso.
+      toast('Não foi possível copiar. Anote os códigos da tela.', false);
+    }
+  };
 
   const verifyMut = useMutation({
     mutationFn: () => api.post('/auth/verify-mfa', { token: totpCode }),
@@ -337,6 +356,48 @@ function SegurancaTab({ toast }: { toast: (t: string, ok?: boolean) => void }) {
                 </code>
               </div>
             )}
+            {/* Códigos de recuperação: aparecem UMA vez, antes de o MFA estar
+                ativo. Depois disto o servidor só guarda o hash — não há tela,
+                suporte nem consulta que os recupere. Quem perder o celular sem
+                tê-los anotado fica sem acesso à própria conta. */}
+            {backupCodes.length > 0 && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
+                <div className="flex gap-2">
+                  <AlertTriangle className="h-5 w-5 flex-none text-amber-600" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-amber-900">
+                      Guarde estes códigos de recuperação agora
+                    </p>
+                    <p className="mt-1 text-xs text-amber-800">
+                      São a sua entrada se você perder o celular. Aparecem só
+                      desta vez — depois não há como recuperá-los. Cada um vale
+                      uma única vez.
+                    </p>
+
+                    <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 rounded border border-amber-200 bg-white p-3 font-mono text-sm tracking-widest text-gray-800">
+                      {backupCodes.map((codigo) => (
+                        <span key={codigo}>{codigo}</span>
+                      ))}
+                    </div>
+
+                    <div className="mt-3 flex items-center gap-3">
+                      <button onClick={copiarCodigos} className="btn btn-secondary text-xs">
+                        Copiar os {backupCodes.length} códigos
+                      </button>
+                      <label className="flex items-center gap-2 text-xs font-medium text-amber-900">
+                        <input
+                          type="checkbox"
+                          checked={codigosGuardados}
+                          onChange={(e) => setCodigosGuardados(e.target.checked)}
+                        />
+                        Guardei em local seguro
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="input-label">Código TOTP (6 dígitos)</label>
               <div className="flex gap-3">
@@ -349,12 +410,24 @@ function SegurancaTab({ toast }: { toast: (t: string, ok?: boolean) => void }) {
                 />
                 <button
                   onClick={() => verifyMut.mutate()}
-                  disabled={totpCode.length !== 6 || verifyMut.isPending}
+                  // Trava a ativação até os códigos serem guardados. É o único
+                  // instante em que eles existem em texto claro; deixar seguir
+                  // sem isso entrega um MFA sem rota de recuperação.
+                  disabled={
+                    totpCode.length !== 6
+                    || verifyMut.isPending
+                    || (backupCodes.length > 0 && !codigosGuardados)
+                  }
                   className="btn btn-primary"
                 >
                   Verificar
                 </button>
               </div>
+              {backupCodes.length > 0 && !codigosGuardados && (
+                <p className="mt-1.5 text-xs text-amber-700">
+                  Confirme que guardou os códigos de recuperação para continuar.
+                </p>
+              )}
             </div>
           </div>
         )}
