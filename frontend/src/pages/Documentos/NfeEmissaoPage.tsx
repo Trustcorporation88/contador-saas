@@ -22,6 +22,7 @@ import {
   type NfeItemRecord,
   type NfeRecord,
 } from '../../services/nfeService';
+import { textoLivre } from '../../utils/textoLimpo';
 
 interface ItemForm extends NfeItemPayload {
   _key: string;
@@ -47,13 +48,13 @@ const brl = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 /** Evita gravar o texto literal "undefined"/"null" vindo de APIs mal mapeadas. */
-function cleanAddr(value?: string | null): string {
-  if (value == null) return '';
-  const trimmed = String(value).trim();
-  if (!trimmed) return '';
-  if (/^(undefined|null|n\/a|nao informado|não informado)$/i.test(trimmed)) return '';
-  return trimmed;
-}
+/**
+ * Mantido como nome local por já ser usado em vários pontos desta página.
+ * A regra vive em utils/textoLimpo, compartilhada com o cadastro de empresas e
+ * espelhada no backend: antes, cada tela tinha a sua, e a do cadastro só pegava
+ * a palavra "undefined" SOZINHA — deixava passar "undefined SETE DE SETEMBRO".
+ */
+const cleanAddr = textoLivre;
 
 export default function NfeEmissaoPage() {
   const companyId = useAuthStore((s) => s.currentCompanyId) || '';
