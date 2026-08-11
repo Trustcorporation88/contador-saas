@@ -134,6 +134,7 @@ export async function enableMFA(req: Request, res: Response): Promise<void> {
     res.status(HTTP_STATUS.OK).json({
       data: {
         qrCode: response.qrCode,
+        otpauthUrl: response.otpauthUrl,
         secret: response.secret,
         backupCodes: response.backupCodes,
       },
@@ -159,9 +160,15 @@ export async function verifyMFA(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const { code } = req.body as MFAVerifyRequest;
+    // Aceita `code` e `token`: a tela de Segurança sempre enviou `token`, e
+    // este controller só lia `code` — a verificação respondia 400 "MFA code is
+    // required" sem nunca chegar ao serviço. Na prática o MFA não era ativável
+    // pela interface. Manter os dois nomes evita quebrar qualquer cliente que
+    // já use um deles.
+    const corpo = req.body as MFAVerifyRequest & { token?: string };
+    const informado = corpo.code ?? corpo.token;
 
-    if (!code) {
+    if (!informado) {
       res.status(HTTP_STATUS.BAD_REQUEST).json({
         error: 'Bad Request',
         code: INVALID_REQUEST_CODE,
@@ -170,17 +177,27 @@ export async function verifyMFA(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Validar formato (6 dígitos)
-    if (!/^\d{6}$/.test(code)) {
+    // Normaliza como o serviço faz: o código de recuperação é copiado de um
+    // papel e chega com espaço, hífen ou minúscula.
+    const normalizado = String(informado).replace(/[\s-]/g, '').toUpperCase();
+
+    // 6 dígitos = TOTP do autenticador. 8 hexadecimais = código de recuperação.
+    // O guard anterior exigia /^\d{6}$/ e barrava os de recuperação AQUI, antes
+    // do serviço — que passou a aceitá-los. Validar só no serviço deixaria esta
+    // porta fechada e a correção inalcançável por HTTP.
+    const ehTotp   = /^\d{6}$/.test(normalizado);
+    const ehBackup = /^[0-9A-F]{8}$/.test(normalizado);
+
+    if (!ehTotp && !ehBackup) {
       res.status(HTTP_STATUS.BAD_REQUEST).json({
         error: 'Bad Request',
         code: INVALID_REQUEST_CODE,
-        message: 'MFA code must be 6 digits',
+        message: 'Informe o código de 6 dígitos do autenticador ou um código de recuperação de 8 caracteres.',
       });
       return;
     }
 
-    const response = await authService.verifyMFA(req.user.id, code);
+    const response = await authService.verifyMFA(req.user.id, normalizado);
 
     logger.info(`MFA verificado com sucesso para usuário: ${req.user.email}`);
 
