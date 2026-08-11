@@ -387,17 +387,18 @@ export default function UsuariosTab({ toast }: { toast: Toast }) {
                       {rotuloPapel(u.papel)}
                     </span>
                   </td>
+                  {/* Só contagem, sem clique. Antes o número ERA o botão de
+                      atribuir, e ninguém achava: número verde ao lado de um
+                      ícone parece rótulo, não controle. A ação foi para a
+                      coluna Ações, que é onde se procura ação. */}
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => setVerEmpresasDe(u)}
-                      className="flex items-center gap-1.5 text-primary-600 hover:underline"
-                    >
-                      <Building2 className="h-3.5 w-3.5" />
+                    <span className="flex items-center gap-1.5 text-gray-700">
+                      <Building2 className="h-3.5 w-3.5 text-gray-400" />
                       {u.empresas}
                       {u.papel === 'admin' && (
                         <span className="text-xs text-gray-400">(todas)</span>
                       )}
-                    </button>
+                    </span>
                   </td>
                   <td className="px-4 py-3">
                     {u.mfa_ativo
@@ -406,6 +407,19 @@ export default function UsuariosTab({ toast }: { toast: Toast }) {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
+                      {/* Ação principal desta tela: é por aqui que se concede
+                          acesso. Botão com rótulo, não ícone solto nem número
+                          disfarçado de link. */}
+                      <button
+                        onClick={() => setVerEmpresasDe(u)}
+                        title={u.papel === 'admin'
+                          ? 'Ver empresas (administrador enxerga todas)'
+                          : 'Atribuir ou revogar empresas'}
+                        className="flex items-center gap-1.5 rounded border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700"
+                      >
+                        <Building2 className="h-3.5 w-3.5" />
+                        Empresas
+                      </button>
                       <button
                         onClick={() => setTrocarSenhaDe(u)}
                         title="Redefinir senha"
