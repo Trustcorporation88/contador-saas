@@ -16,16 +16,25 @@ import {
   CompanyDTOValidator,
 } from '../models/dtos/companyDTO';
 import { TenantService } from './tenantService';
+import { semPlaceholder, textoLivre as limparTextoLivre } from '../utils/textoLimpo';
 
 function onlyDigits(value: string): string {
   return String(value || '').replace(/\D/g, '');
 }
 
+/**
+ * Corta para o tamanho da coluna, descartando antes o valor que não diz nada
+ * ("undefined", "null", "n/a"...). Ver src/utils/textoLimpo.
+ */
 function clip(value: string | undefined | null, max: number): string | null {
-  if (value === undefined || value === null) return null;
-  const trimmed = String(value).trim();
-  if (!trimmed) return null;
-  return trimmed.slice(0, max);
+  const limpo = semPlaceholder(value);
+  return limpo === null ? null : limpo.slice(0, max);
+}
+
+/** Texto livre já limpo e cortado. Não usar em e-mail (ver textoLimpo). */
+function textoLivre(value: string | undefined | null, max: number): string | null {
+  const limpo = limparTextoLivre(value);
+  return limpo === null ? null : limpo.slice(0, max);
 }
 
 function normalizeFiscalYearMonth(
@@ -124,17 +133,17 @@ export class CompanyService {
         id: companyId,
         cnpj: onlyDigits(normalized.cnpj).slice(0, 14),
         legal_name: String(normalized.name || '').trim().slice(0, 255),
-        address: clip(normalized.address, 255),
+        address: textoLivre(normalized.address, 255),
         phone: clip(onlyDigits(normalized.phone || '') || normalized.phone, 20),
         email: clip(normalized.email, 255),
         tax_regime: String(normalized.tax_regime).slice(0, 50),
         fiscal_year_start: fiscalMonth ?? 1,
         inscricao_estadual: clip(normalized.inscricao_estadual, 30),
-        city: clip(normalized.city, 100),
+        city: textoLivre(normalized.city, 100),
         state: clip(normalized.state, 2)?.toUpperCase() || null,
         postal_code: clip(onlyDigits(normalized.postal_code || '') || normalized.postal_code, 10),
-        endereco_numero: clip(normalized.endereco_numero, 20),
-        endereco_bairro: clip(normalized.endereco_bairro, 120),
+        endereco_numero: textoLivre(normalized.endereco_numero, 20),
+        endereco_bairro: textoLivre(normalized.endereco_bairro, 120),
         codigo_municipio: clip(onlyDigits(normalized.codigo_municipio || ''), 7),
         crt: clip(normalized.crt, 1),
         is_active: true,
@@ -351,7 +360,7 @@ export class CompanyService {
       updateData.legal_name = String(data.name).trim().slice(0, 255);
     }
     if (data.address !== undefined) {
-      updateData.address = clip(data.address, 255);
+      updateData.address = textoLivre(data.address, 255);
     }
     if (data.phone !== undefined) {
       updateData.phone = clip(onlyDigits(data.phone || '') || data.phone, 20);
@@ -370,7 +379,7 @@ export class CompanyService {
       updateData.inscricao_estadual = clip(data.inscricao_estadual, 30);
     }
     if (data.city !== undefined) {
-      updateData.city = clip(data.city, 100);
+      updateData.city = textoLivre(data.city, 100);
     }
     if (data.state !== undefined) {
       updateData.state = clip(data.state, 2)?.toUpperCase() || null;
@@ -379,10 +388,10 @@ export class CompanyService {
       updateData.postal_code = clip(onlyDigits(data.postal_code || '') || data.postal_code, 10);
     }
     if (data.endereco_numero !== undefined) {
-      updateData.endereco_numero = clip(data.endereco_numero, 20);
+      updateData.endereco_numero = textoLivre(data.endereco_numero, 20);
     }
     if (data.endereco_bairro !== undefined) {
-      updateData.endereco_bairro = clip(data.endereco_bairro, 120);
+      updateData.endereco_bairro = textoLivre(data.endereco_bairro, 120);
     }
     if (data.codigo_municipio !== undefined) {
       updateData.codigo_municipio = clip(onlyDigits(data.codigo_municipio || ''), 7);
