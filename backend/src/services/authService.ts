@@ -572,10 +572,27 @@ export class AuthService {
   }
 
   /**
-   * Verificar código TOTP e ativar MFA
+   * Verificar código TOTP — ou um código de recuperação — e ativar MFA.
+   *
+   * O código de recuperação é a única saída de quem perdeu o celular. Antes
+   * desta correção ele não existia na prática: enableMFA gerava dez, gravava os
+   * hashes e devolvia a lista, mas NENHUM caminho do sistema os aceitava. O
+   * guard abaixo exigia exatamente 6 caracteres, e os códigos têm 8 — então
+   * eram recusados já na primeira linha, antes de qualquer comparação.
+   *
+   * Resultado: perder o aparelho trancava o usuário fora da conta, e a única
+   * saída seria mexer no banco. Num sistema com um único administrador, isso é
+   * perder o sistema.
    */
   async verifyMFA(userId: string, code: string): Promise<MFAVerifyResponse> {
-    if (!code || code.length !== 6) {
+    // Normaliza antes de medir: o usuário copia o código de um papel e traz
+    // espaço, hífen ou minúscula. Recusar por formatação seria recusar o código
+    // certo no momento em que ele é a última alternativa.
+    const informado = String(code ?? '').replace(/[\s-]/g, '').toUpperCase();
+    const pareceTotp   = /^\d{6}$/.test(informado);
+    const pareceBackup = /^[0-9A-F]{8}$/.test(informado);
+
+    if (!pareceTotp && !pareceBackup) {
       throw new InvalidTokenError('Invalid MFA code format');
     }
 
@@ -590,21 +607,36 @@ export class AuthService {
       throw new Error('MFA setup not found. Please enable MFA first.');
     }
 
-    // Verificar código TOTP
-    const isValid = speakeasy.totp.verify({
+    const isValid = pareceTotp && speakeasy.totp.verify({
       secret: user.mfaSecret,
       encoding: 'base32',
-      token: code,
+      token: informado,
       window: 2, // Permite 30s antes/depois do tempo atual
     });
 
+    let usouCodigoDeRecuperacao = false;
+
     if (!isValid) {
-      throw new InvalidTokenError('Invalid MFA code');
+      // Só chega aqui quem errou o TOTP ou digitou algo com cara de código de
+      // recuperação. Tentar a lista nos dois casos é o que permite usar o
+      // código de recuperação sem uma segunda tela pedindo "que tipo é este".
+      const indice = await this.consumirCodigoDeRecuperacao(user, informado);
+      if (indice === null) {
+        throw new InvalidTokenError('Invalid MFA code');
+      }
+      usouCodigoDeRecuperacao = true;
     }
 
     // Ativar MFA no banco. O comentário anterior aqui dizia "armazenar secret
     // permanentemente" e só fazia usersStore.set — um Map em memória.
     await this.persistMfaColumns(userId, { mfaEnabled: true });
+
+    if (usouCodigoDeRecuperacao) {
+      logger.warn('Acesso liberado por código de recuperação de MFA', {
+        userId,
+        restantes: user.backupCodesHash?.length ?? 0,
+      });
+    }
 
     user.mfaEnabled = true;
     usersStore.set(userId, user);
@@ -960,6 +992,46 @@ export class AuthService {
       codes.push(code);
     }
     return codes;
+  }
+
+  /**
+   * Confere o código contra a lista de recuperação e o CONSOME.
+   *
+   * Devolve o índice usado, ou null se nenhum bateu.
+   *
+   * Uso único não é detalhe: o código de recuperação é escrito num papel, tirado
+   * de foto, colado num gerenciador. Se continuasse valendo depois de usado,
+   * cada um deles viraria uma senha permanente que dispensa o segundo fator —
+   * exatamente o que o MFA existe para impedir. Gasta-se ao usar.
+   *
+   * A remoção é gravada ANTES de liberar o acesso. Se a gravação falhar, o
+   * acesso é negado: liberar sem consumir deixaria o código valendo de novo, e
+   * o usuário não teria como saber.
+   */
+  private async consumirCodigoDeRecuperacao(
+    user: { id: string; backupCodesHash?: string[] },
+    codigo: string,
+  ): Promise<number | null> {
+    const hashes = user.backupCodesHash;
+    if (!hashes || hashes.length === 0) return null;
+
+    let indice = -1;
+    for (let i = 0; i < hashes.length; i++) {
+      // Comparação sequencial, sem short-circuit por índice: bcrypt.compare já
+      // é resistente a timing, e a lista tem no máximo dez itens.
+      // eslint-disable-next-line no-await-in-loop
+      if (await bcrypt.compare(codigo, hashes[i])) {
+        indice = i;
+        break;
+      }
+    }
+    if (indice === -1) return null;
+
+    const restantes = hashes.filter((_, i) => i !== indice);
+    await this.persistMfaColumns(user.id, { backupCodesHash: restantes });
+    user.backupCodesHash = restantes;
+
+    return indice;
   }
 
   /** Tentativas falhas até bloquear, e por quanto tempo. */
