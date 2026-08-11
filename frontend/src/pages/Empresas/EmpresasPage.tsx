@@ -21,6 +21,7 @@ import { CompanyService, type APICompany, type TaxRegime } from '../../services/
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { textoLivre, semPlaceholder } from '../../utils/textoLimpo';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -155,24 +156,32 @@ function CompanyForm({
         const result = await CompanyService.lookupCNPJ(clean);
         
         // Preenche campos automaticamente
-        if (result.razao_social) {
-          setValue('name', result.razao_social);
-        }
-        if (result.contato?.email) {
-          setValue('email', result.contato.email);
-        }
-        if (result.contato?.telefone) {
-          setValue('phone', result.contato.telefone);
-        }
+        const razaoSocial = textoLivre(result.razao_social);
+        if (razaoSocial) setValue('name', razaoSocial);
+        // E-mail e telefone com semPlaceholder, não textoLivre: remover token do
+        // meio corromperia "undefined@dominio.com". Aqui basta descartar o
+        // valor quando ele INTEIRO não diz nada.
+        const email = semPlaceholder(result.contato?.email);
+        if (email) setValue('email', email);
+        const telefone = semPlaceholder(result.contato?.telefone);
+        if (telefone) setValue('phone', telefone);
         if (result.endereco) {
-          const log = String(result.endereco.logradouro || '').trim();
-          if (log && !/^(undefined|null)$/i.test(log)) setValue('address', log);
-          if (result.endereco.numero) setValue('endereco_numero', result.endereco.numero);
-          else setValue('endereco_numero', 'S/N');
-          if (result.endereco.bairro) setValue('endereco_bairro', result.endereco.bairro);
-          if (result.endereco.municipio) setValue('city', result.endereco.municipio);
-          if (result.endereco.uf) setValue('state', result.endereco.uf);
-          if (result.endereco.cep) setValue('postal_code', result.endereco.cep);
+          // textoLivre em vez de comparar com /^(undefined|null)$/: aquele teste
+          // só pegava a palavra SOZINHA, e o caso real é ela grudada no
+          // conteúdo — "undefined SETE DE SETEMBRO" passava direto e ia para o
+          // banco. Duas empresas em produção têm isso gravado no endereço.
+          const log = textoLivre(result.endereco.logradouro);
+          if (log) setValue('address', log);
+          const numero = textoLivre(result.endereco.numero);
+          setValue('endereco_numero', numero || 'S/N');
+          const bairro = textoLivre(result.endereco.bairro);
+          if (bairro) setValue('endereco_bairro', bairro);
+          const municipio = textoLivre(result.endereco.municipio);
+          if (municipio) setValue('city', municipio);
+          const uf = semPlaceholder(result.endereco.uf);
+          if (uf) setValue('state', uf);
+          const cep = semPlaceholder(result.endereco.cep);
+          if (cep) setValue('postal_code', cep);
           const ibge = String(result.endereco.codigo_municipio_ibge || '').replace(/\D/g, '');
           if (ibge.length === 7) setValue('codigo_municipio', ibge);
         }
