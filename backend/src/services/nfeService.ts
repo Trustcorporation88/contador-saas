@@ -15,6 +15,11 @@
  *    protocolos aleatórios sem contato com a SEFAZ. Existe apenas para
  *    desenvolvimento local sem certificado digital — NUNCA deve ser usado
  *    em produção.
+ *
+ * REFORMA TRIBUTÁRIA: esta nota NÃO destaca IBS, CBS nem Imposto Seletivo.
+ * O grupo <gIBSCBS> não é emitido. A justificativa, o que já existe pronto
+ * (tabela cClassTrib) e as armadilhas de cálculo estão no comentário dentro
+ * do bloco <imposto> em gerarXmlNfe — leia antes de mexer nisso.
  */
 
 import { randomUUID } from 'crypto';
@@ -246,6 +251,46 @@ function gerarXmlNfe(
   // calculados, e assim o total do XML nunca diverge das linhas que ele mesmo
   // acabou de escrever.
   const totalIpi = itens.reduce((soma, item) => soma + Number(item.valor_ipi ?? 0), 0);
+
+  // ─── REFORMA TRIBUTÁRIA: por que não há <gIBSCBS> no <imposto> abaixo ───────
+  //
+  // Situação em 10/08/2026. Leia antes de implementar o destaque de IBS/CBS.
+  //
+  // POR QUE A NOTA SAI SEM O GRUPO
+  // A obrigação legal de informar IBS/CBS existe desde 01/2026 (EC 132/2023 e
+  // LC 214/2025). A REJEIÇÃO pela SEFAZ, porém, foi SUSPENSA em 01/08/2026 pelo
+  // Ato Técnico Conjunto RFB/CGIBS nº 1/2026 — estava marcada para 03/08/2026.
+  // A nota sem o grupo continua sendo autorizada normalmente. A exposição é
+  // autuação, não parada de faturamento. Confirme se a suspensão segue valendo
+  // antes de decidir a prioridade.
+  //
+  // O BLOQUEIO TÉCNICO NÃO ESTÁ AQUI
+  // A emissão real não usa esta função: usa a pynfe (nfeEmitter.ts →
+  // automacao-xml/emitir_nfe.py), e a pynfe 0.6.5 não suporta IBS/CBS. Montar o
+  // grupo só aqui seria pior do que não montar: este XML é o RASCUNHO exibido na
+  // tela, e o usuário passaria a conferir um documento diferente do transmitido
+  // — exatamente o defeito que o grupo de ICMS por regime corrigiu (grupoIcms).
+  // Implementar de verdade = fork da pynfe ou serializador próprio.
+  //
+  // DUAS ARMADILHAS DE CÁLCULO
+  // 1. IBS, CBS e IS são "POR FORA": NÃO entram no <vNF>. É o oposto do IPI,
+  //    que compõe o total (ver totalIpi acima). Somar IBS/CBS ao vNF infla a
+  //    nota e o valor a receber.
+  // 2. As reduções vêm em PONTOS PERCENTUAIS na tabela do SVRS (60 = 60%, não
+  //    0,6). Ver perc_red_ibs / perc_red_cbs.
+  //
+  // O QUE JÁ EXISTE PRONTO
+  // - fiscal_class_trib (migração 027): tabela cClassTrib sincronizada com o
+  //   SVRS por cron diário, viva em produção.
+  // - classTribService.validar({ codigo, data, documento: 'NFE' }) responde se o
+  //   código vale NA DATA DE EMISSÃO e para NF-e. Use isto: dos 164 códigos
+  //   publicados só 97 valem para NF-e, e 3 já foram revogados. NUNCA fixe a
+  //   lista em constante — ela muda por ato normativo até 2032.
+  // - reformaTributariaService calcula IBS/CBS, mas só atende ao simulador.
+  //
+  // E valide contra o XSD OFICIAL, não contra blog técnico: a hierarquia das
+  // tags do gIBSCBS mudou 11 vezes em 17 meses de revisões da NT.
+  // ───────────────────────────────────────────────────────────────────────────
 
   const itensXml = itens.map(item => `
     <det nItem="${item.numero_item}">
