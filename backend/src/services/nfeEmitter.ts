@@ -7,6 +7,26 @@
  *
  * SEGURANÇA: ambiente padrão = "homologacao". Produção só quando
  * NFE_AMBIENTE=producao explicitamente.
+ *
+ * REFORMA TRIBUTÁRIA — o bloqueio para destacar IBS/CBS está AQUI.
+ *
+ * Situação em 10/08/2026: a pynfe 0.6.5 não suporta IBS/CBS. Não há versão
+ * publicada com o grupo <gIBSCBS>, e o payload montado abaixo não tem como
+ * carregá-lo — a biblioteca ignoraria os campos.
+ *
+ * Por isso nenhuma nota transmitida por este sistema destaca IBS, CBS ou
+ * Imposto Seletivo, independentemente do que o rascunho da tela mostre.
+ * Mudar isso exige fork da pynfe ou serializador próprio, mantido
+ * acompanhando as revisões da NT — foram 11 em 17 meses.
+ *
+ * Antes de priorizar: a REJEIÇÃO pela SEFAZ foi SUSPENSA em 01/08/2026 (Ato
+ * Técnico Conjunto RFB/CGIBS nº 1/2026), então a nota sem o grupo continua
+ * sendo autorizada. A obrigação legal existe desde 01/2026 — a exposição é
+ * autuação, não parada de faturamento. Confirme se a suspensão segue valendo.
+ *
+ * O contexto completo (armadilhas de cálculo e o que já existe pronto, como a
+ * tabela cClassTrib) está no comentário do bloco <imposto> em
+ * nfeService.gerarXmlNfe.
  */
 
 import { spawn } from 'child_process';
