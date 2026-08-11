@@ -285,8 +285,27 @@ function SegurancaTab({ toast }: { toast: (t: string, ok?: boolean) => void }) {
   const enableMut = useMutation({
     mutationFn: () => api.post('/auth/enable-mfa'),
     onSuccess: (res) => {
-      const dados = res.data as { qrCode?: string; secret?: string; backupCodes?: string[] };
-      setQrCode(dados.qrCode ?? null);
+      // O endpoint responde { data: { qrCode, secret, backupCodes } } e o
+      // interceptor do axios NÃO desembrulha. Ler res.data.qrCode devolvia
+      // undefined: a tela avançava para a etapa do QR sem QR nenhum e ficava em
+      // branco, sem botão e sem volta. Era o que acontecia desde sempre — o MFA
+      // nunca chegou a ser ativável por aqui.
+      const corpo = res.data as {
+        data?: { qrCode?: string; secret?: string; backupCodes?: string[] };
+        qrCode?: string; secret?: string; backupCodes?: string[];
+      };
+      // Aceita as duas formas: o projeto tem endpoints que embrulham em `data`
+      // e outros que respondem direto.
+      const dados = corpo.data ?? corpo;
+
+      if (!dados.qrCode) {
+        // Sem QR não há o que mostrar. Avançar de etapa aqui é o que produzia a
+        // tela morta; melhor continuar em 'idle', com o botão à mão.
+        toast('O servidor não devolveu o QR Code. Tente de novo.', false);
+        return;
+      }
+
+      setQrCode(dados.qrCode);
       setSecret(dados.secret ?? null);
       setBackupCodes(dados.backupCodes ?? []);
       setPhase('setup');
@@ -307,7 +326,9 @@ function SegurancaTab({ toast }: { toast: (t: string, ok?: boolean) => void }) {
   };
 
   const verifyMut = useMutation({
-    mutationFn: () => api.post('/auth/verify-mfa', { token: totpCode }),
+    // Envia `code`: é o nome que o controller lê. Antes ia só `token`, e a
+    // resposta era 400 'MFA code is required' — a ativação nunca concluía.
+    mutationFn: () => api.post('/auth/verify-mfa', { code: totpCode }),
     onSuccess: () => { toast('MFA ativado com sucesso!'); setPhase('done'); },
     onError: () => toast('Código inválido. Tente novamente.', false),
   });
