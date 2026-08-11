@@ -42,7 +42,10 @@ export interface RefreshTokenResponse {
 
 // MFA Setup
 export interface MFASetupResponse {
-  qrCode: string; // base64 encoded
+  /** PNG em data URL, pronto para <img src>. Gerado no servidor. */
+  qrCode: string;
+  /** URI otpauth:// crua, para quem preferir montar o QR no cliente. */
+  otpauthUrl: string;
   secret: string;
   backupCodes: string[]; // 10 backup codes
 }
