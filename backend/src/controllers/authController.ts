@@ -51,14 +51,23 @@ export async function login(req: Request, res: Response): Promise<void> {
 
     const response = await authService.login(email, password);
 
-    // Se MFA habilitado, retornar token temporário
+    // MFA habilitado: primeira etapa concluída, falta o segundo fator.
+    //
+    // Responde 200, e não 401. O 401 dizia "credencial inválida" para uma senha
+    // CORRETA, e o axios do frontend lança em 401 — a promessa rejeitava antes
+    // de qualquer leitura do corpo, então a tela do código nunca aparecia e o
+    // usuário via "MFA verification required" como erro vermelho, sem campo
+    // para digitar nada. Quem ativasse o MFA ficava trancado fora da conta.
+    //
+    // Os nomes também mudaram para os que o cliente já esperava:
+    // requiresMfa + tempToken.
     if (!response.refreshToken) {
-      res.status(HTTP_STATUS.UNAUTHORIZED).json({
-        error: 'MFA Required',
-        code: 'MFA_REQUIRED',
-        message: 'MFA verification required',
+      res.status(HTTP_STATUS.OK).json({
         data: {
-          accessToken: response.accessToken, // Token temporário válido por 5 minutos
+          requiresMfa: true,
+          tempToken: response.accessToken, // válido por poucos minutos
+          // accessToken mantido por compatibilidade com clientes antigos.
+          accessToken: response.accessToken,
           user: response.user,
         },
       });
@@ -165,8 +174,11 @@ export async function verifyMFA(req: Request, res: Response): Promise<void> {
     // required" sem nunca chegar ao serviço. Na prática o MFA não era ativável
     // pela interface. Manter os dois nomes evita quebrar qualquer cliente que
     // já use um deles.
-    const corpo = req.body as MFAVerifyRequest & { token?: string };
-    const informado = corpo.code ?? corpo.token;
+    const corpo = req.body as MFAVerifyRequest & { token?: string; totpToken?: string };
+    // `totpToken` é o nome que a tela de login usa na segunda etapa. Três nomes
+    // para o mesmo campo é feio, mas quebrar o login de quem já está no ar é
+    // pior — e o desencontro de nome já custou o MFA inteiro uma vez.
+    const informado = corpo.code ?? corpo.token ?? corpo.totpToken;
 
     if (!informado) {
       res.status(HTTP_STATUS.BAD_REQUEST).json({

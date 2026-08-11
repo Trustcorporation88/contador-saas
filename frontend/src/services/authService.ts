@@ -57,9 +57,14 @@ export const AuthService = {
    * Recebe tempToken (emitido no login) + código de 6 dígitos do autenticador.
    */
   async verifyMfa(payload: MfaVerifyPayload): Promise<AuthSuccessResponse> {
+    // O tempToken vai no CABEÇALHO, não no corpo: a rota passa por
+    // authenticateToken, que monta req.user a partir do Authorization. Mandando
+    // só no corpo, o controller respondia 401 "MFA setup required" — o usuário
+    // ainda não tem sessão, então o interceptor não anexa nada sozinho.
     const response = await api.post<ApiEnvelope<AuthSuccessResponse>>(
       '/auth/verify-mfa',
-      payload
+      { code: payload.totpToken },
+      { headers: { Authorization: `Bearer ${payload.tempToken}` } },
     );
     const body = response.data as ApiEnvelope<AuthSuccessResponse>;
     return ('data' in body ? body.data : body) as AuthSuccessResponse;
