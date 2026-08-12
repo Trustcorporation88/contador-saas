@@ -181,9 +181,58 @@ export class NfeService {
   }
 
   static async downloadXml(companyId: string, id: string): Promise<Blob> {
-    const { data } = await api.get(`${this.base(companyId)}/${id}/xml`, {
-      responseType: 'blob',
-    });
-    return data as Blob;
+    try {
+      const { data } = await api.get(`${this.base(companyId)}/${id}/xml`, {
+        responseType: 'blob',
+      });
+      return data as Blob;
+    } catch (e) {
+      throw await mensagemDeErroDeDownload(e);
+    }
   }
+
+  /**
+   * DANFE em PDF.
+   *
+   * Vai pelo cliente HTTP (e não por um <a href>) porque a rota exige o token
+   * no cabeçalho: um link direto abriria uma aba sem Authorization e receberia
+   * 401. O responseType blob é obrigatório — sem ele o axios trata o PDF como
+   * texto e o arquivo chega corrompido.
+   */
+  static async downloadDanfe(companyId: string, id: string): Promise<Blob> {
+    try {
+      const { data } = await api.get(`${this.base(companyId)}/${id}/danfe`, {
+        responseType: 'blob',
+      });
+      return data as Blob;
+    } catch (e) {
+      throw await mensagemDeErroDeDownload(e);
+    }
+  }
+}
+
+/**
+ * Recupera a mensagem de erro de um download.
+ *
+ * Com responseType 'blob' o axios entrega o corpo do erro como Blob, então o
+ * interceptor não consegue ler `{ error: "..." }` e a tela mostrava
+ * "Request failed with status code 409" no lugar do motivo — que aqui é
+ * justamente o que o usuário precisa ler ("esta NF-e ainda é rascunho", "a nota
+ * foi denegada"). Ler o Blob é assíncrono, por isso fica fora do interceptor.
+ */
+async function mensagemDeErroDeDownload(e: unknown): Promise<Error> {
+  const erro = e as Error & { response?: { data?: unknown } };
+  const corpo = erro.response?.data;
+  if (corpo instanceof Blob) {
+    try {
+      const texto = await corpo.text();
+      const json = JSON.parse(texto) as { error?: string; message?: string };
+      const msg = json.error || json.message;
+      if (msg) return new Error(msg);
+    } catch {
+      // Corpo não era JSON legível: fica a mensagem original, que é melhor que
+      // engolir o erro.
+    }
+  }
+  return erro;
 }

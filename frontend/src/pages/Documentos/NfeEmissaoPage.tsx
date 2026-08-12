@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   RefreshCw,
   Pencil,
+  Printer,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { Button } from '../../components/ui/Button';
@@ -281,6 +282,33 @@ export default function NfeEmissaoPage() {
       a.download = `nfe-${nfe.numero}.xml`;
       a.click();
       URL.revokeObjectURL(url);
+    } catch (e) {
+      setErro((e as Error).message);
+    }
+  };
+
+  /**
+   * Abre o DANFE em outra aba, para conferir e imprimir.
+   *
+   * Não usa <a href> porque a rota exige token no cabeçalho. E não revoga a URL
+   * na hora: o object URL precisa continuar válido enquanto a aba estiver
+   * aberta — revogar imediatamente, como faz o download de XML (onde o arquivo
+   * já foi salvo), deixaria a aba em branco.
+   */
+  const handleDanfe = async (nfe: NfeRecord) => {
+    try {
+      const blob = await NfeService.downloadDanfe(companyId, nfe.id);
+      const url = URL.createObjectURL(blob);
+      const aba = window.open(url, '_blank');
+      if (!aba) {
+        // Bloqueador de pop-up: cai para download, que não depende de aba nova.
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `danfe-${nfe.numero}.pdf`;
+        a.click();
+      }
+      // 60s é folga suficiente para o navegador ler o blob e renderizar.
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (e) {
       setErro((e as Error).message);
     }
@@ -918,6 +946,24 @@ export default function NfeEmissaoPage() {
                         >
                           <Download className="h-4 w-4" />
                         </button>
+                        {/*
+                          DANFE só aparece para nota autorizada ou cancelada:
+                          são as únicas que têm XML autorizado. Mostrar o botão
+                          em rascunho convidaria a um clique que só devolve erro.
+                          A cancelada mantém o botão porque o DANFE dela sai com
+                          a marca d'água de cancelamento e serve de comprovante.
+                        */}
+                        {(nfe.status === 'AUTORIZADA' || nfe.status === 'CANCELADA') && (
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                            title="Abrir DANFE em PDF para imprimir"
+                            onClick={() => handleDanfe(nfe)}
+                          >
+                            <Printer className="h-3.5 w-3.5" />
+                            DANFE
+                          </button>
+                        )}
                         {(nfe.status === 'PENDENTE' || nfe.status === 'RASCUNHO') && (
                           <button
                             type="button"

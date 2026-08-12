@@ -83,8 +83,17 @@ function getAutomationDir(): string {
   return path.join(process.cwd(), '..', 'automacao-xml');
 }
 
+/**
+ * Qual binário do Python usar.
+ *
+ * O padrão fora de produção era `python`, e em sistema moderno esse executável
+ * simplesmente não existe — só `python3`. O resultado era `spawn python ENOENT`
+ * ao rodar qualquer coisa que chame o Python fora do container, inclusive os
+ * testes. Produção não muda: o Dockerfile define PYTHON_BIN=python3, e essa
+ * variável continua tendo precedência sobre tudo.
+ */
 function getPythonBin(): string {
-  return process.env.PYTHON_BIN || (process.env.NODE_ENV === 'production' ? 'python3' : 'python');
+  return process.env.PYTHON_BIN || 'python3';
 }
 
 /**
@@ -791,4 +800,8 @@ export async function verificarNumeracaoSefaz(opts: {
   }
 }
 
-export { getAmbiente };
+// getAutomationDir e getPythonBin passam a ser exportados porque o danfeService
+// invoca outro script da mesma pasta (gerar_danfe.py). Duplicar a busca do
+// diretório seria pior: a lista de candidatos existe porque o caminho difere
+// entre container, desenvolvimento e testes, e duas cópias divergiriam.
+export { getAmbiente, getAutomationDir, getPythonBin };

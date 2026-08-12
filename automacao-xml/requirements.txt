@@ -1,4 +1,17 @@
-pynfe>=0.4.4
+# Emissão fiscal. As duas primeiras estão FIXADAS de propósito.
+#
+# pynfe estava como >=0.4.4, o que faz cada rebuild resolver para a última
+# versão publicada — hoje a 0.6.5. Ou seja: a versão que assina e transmite a
+# NF-e podia mudar sozinha, sem ninguém pedir e sem teste, entre dois deploys.
+# 0.6.5 é justamente a que a imagem em produção já usa, então fixar aqui não
+# muda o comportamento atual: só impede que ele mude por conta própria.
+pynfe==0.6.5
+
+# DANFE em PDF. Python puro sobre fpdf2 — sem chromium e sem wkhtmltopdf, que
+# não existem na imagem Alpine e custariam centenas de MB. Fixada pelo mesmo
+# motivo do pynfe: é ela que desenha um documento fiscal.
+brazilfiscalreport==1.0.1
+
 lxml>=4.9.0
 requests>=2.31.0
 requests-pkcs12>=1.25
