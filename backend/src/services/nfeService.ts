@@ -1125,11 +1125,18 @@ export class NfeService {
           cst_cofins:      item.cst_cofins,
           aliquota_cofins: item.aliquota_cofins,
           valor_cofins:    item.valor_cofins,
-          // As colunas aliquota_ipi/valor_ipi existiam desde a criação da tabela
-          // sem nada que as gravasse. Sem persistir, o valor do IPI da nota
-          // autorizada não aparecia em relatório nem no SPED.
-          aliquota_ipi:    item.aliquota_ipi ?? 0,
-          valor_ipi:       item.valor_ipi ?? 0,
+          // IPI. As colunas NÃO existiam quando este trecho foi escrito — havia
+          // aqui um comentário afirmando que existiam desde a criação da tabela,
+          // e era falso: o INSERT estourava com "column aliquota_ipi does not
+          // exist" e a emissão inteira respondia 500. A migração 028 as criou.
+          //
+          // cst_ipi e o enquadramento também são gravados: sem eles, reler a
+          // nota do banco devolveria itens sem CST de IPI, e um XML regerado
+          // sairia sem o grupo do imposto — divergente do que foi autorizado.
+          cst_ipi:                  item.cst_ipi ?? null,
+          aliquota_ipi:             item.aliquota_ipi ?? 0,
+          valor_ipi:                item.valor_ipi ?? 0,
+          codigo_enquadramento_ipi: item.codigo_enquadramento_ipi ?? null,
         })),
       );
 
