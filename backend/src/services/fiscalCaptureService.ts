@@ -39,6 +39,15 @@ export interface FiscalSyncStatus {
 }
 
 export interface FiscalCaptureRecord {
+  /**
+   * Esta nota já recebeu Ciência da Operação?
+   *
+   * Derivado do metadata, e não o metadata inteiro: a tela precisa de um
+   * sim/não para decidir se mostra o botão, e despejar o objeto todo exporia
+   * campos que ninguém pediu.
+   */
+  manifestado?: boolean;
+  manifestado_em?: string | null;
   id: string;
   company_id: string;
   doc_type: string;
@@ -196,6 +205,27 @@ function erroPorDocType(
   });
 
   return doTipo.length > 0 ? doTipo.join(' | ') : null;
+}
+
+/**
+ * Le o estado da manifestacao gravado no metadata da captura.
+ *
+ * O metadata chega como texto ou como objeto, dependendo do driver e de quem
+ * gravou (o Python grava JSON em coluna text; o Node grava string). Tratar os
+ * dois evita que a tela mostre "nao manifestado" para nota manifestada — erro
+ * que levaria o usuario a enviar o evento de novo e receber duplicidade.
+ */
+export function lerManifestacao(bruto: unknown): { manifestado: boolean; em: string | null } {
+  if (!bruto) return { manifestado: false, em: null };
+  try {
+    const meta = typeof bruto === 'string' ? JSON.parse(bruto) : bruto;
+    const m = (meta as { manifestacao?: { registrado_em?: string } })?.manifestacao;
+    if (!m) return { manifestado: false, em: null };
+    return { manifestado: true, em: m.registrado_em ?? null };
+  } catch {
+    // Metadata ilegivel nao e motivo para esconder a nota da tela.
+    return { manifestado: false, em: null };
+  }
 }
 
 function docTypesComFalha(
@@ -411,6 +441,10 @@ export class FiscalCaptureService {
 
     return {
       data: rows.map((row) => ({
+        ...(() => {
+          const m = lerManifestacao(row.metadata);
+          return { manifestado: m.manifestado, manifestado_em: m.em };
+        })(),
         id: row.id,
         company_id: row.company_id,
         doc_type: row.doc_type,
