@@ -335,7 +335,37 @@ def registrar_captura(
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s
                 )
-                ON CONFLICT (company_id, chave) DO NOTHING
+                -- O resumo (resNFe) e o XML completo (procNFe) da MESMA nota
+                -- tem a MESMA chave. Com DO NOTHING, o completo que chega depois
+                -- da manifestacao era descartado em silencio: a linha continuava
+                -- resumo para sempre, e a manifestacao — que existe justamente
+                -- para liberar o completo — nao servia para nada.
+                --
+                -- Agora o completo SOBREPOE o resumo. So nessa direcao: o WHERE
+                -- impede que um resumo chegando depois rebaixe um completo ja
+                -- guardado, o que perderia itens, NCM e impostos.
+                --
+                -- O metadata e MESCLADO (antigo || novo) para nao perder o bloco
+                -- `manifestacao`, que so existe no antigo e registra quando a
+                -- ciencia foi dada.
+                ON CONFLICT (company_id, chave) DO UPDATE SET
+                    doc_type    = EXCLUDED.doc_type,
+                    direcao     = COALESCE(EXCLUDED.direcao, fiscal_xml_captures.direcao),
+                    xml_path    = EXCLUDED.xml_path,
+                    xml_hash    = EXCLUDED.xml_hash,
+                    emitente_cnpj     = COALESCE(EXCLUDED.emitente_cnpj, fiscal_xml_captures.emitente_cnpj),
+                    destinatario_cnpj = COALESCE(EXCLUDED.destinatario_cnpj, fiscal_xml_captures.destinatario_cnpj),
+                    valor_total = COALESCE(EXCLUDED.valor_total, fiscal_xml_captures.valor_total),
+                    data_emissao = COALESCE(EXCLUDED.data_emissao, fiscal_xml_captures.data_emissao),
+                    modelo      = COALESCE(EXCLUDED.modelo, fiscal_xml_captures.modelo),
+                    numero      = COALESCE(EXCLUDED.numero, fiscal_xml_captures.numero),
+                    serie       = COALESCE(EXCLUDED.serie, fiscal_xml_captures.serie),
+                    metadata    = COALESCE(fiscal_xml_captures.metadata, '{}'::jsonb)
+                                  || COALESCE(EXCLUDED.metadata, '{}'::jsonb),
+                    xml_content = EXCLUDED.xml_content,
+                    captured_at = EXCLUDED.captured_at
+                WHERE fiscal_xml_captures.doc_type = 'nfe_resumo'
+                  AND EXCLUDED.doc_type <> 'nfe_resumo'
                 RETURNING id
                 """,
                 (
@@ -359,6 +389,31 @@ def registrar_captura(
                 ),
             )
             return cur.fetchone() is not None
+
+        # Mesma regra do Postgres: o XML completo sobrepoe o resumo da mesma
+        # chave, e nunca o contrario. Aqui em dois passos, porque o SQLite deste
+        # projeto guarda menos colunas e nao tem o operador de mesclagem de JSON.
+        existente = conn.execute(
+            "SELECT doc_type FROM captures WHERE company_id=? AND chave=?",
+            (company_id, meta.chave),
+        ).fetchone()
+        if existente:
+            era_resumo = str(existente["doc_type"]) == "nfe_resumo"
+            agora_completo = meta.tipo_doc != "nfe_resumo"
+            if era_resumo and agora_completo:
+                conn.execute(
+                    """
+                    UPDATE captures
+                       SET doc_type=?, direcao=?, xml_path=?, xml_hash=?, metadata=?, captured_at=?
+                     WHERE company_id=? AND chave=?
+                    """,
+                    (
+                        meta.tipo_doc, meta.direcao, xml_path, xml_hash,
+                        json.dumps(payload), now.isoformat(), company_id, meta.chave,
+                    ),
+                )
+                return True
+            return False
 
         try:
             conn.execute(
