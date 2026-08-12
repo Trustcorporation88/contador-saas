@@ -261,13 +261,43 @@ export default function NfeEmissaoPage() {
   const updateItem = (key: string, patch: Partial<ItemForm>) =>
     setItens((prev) => prev.map((i) => (i._key === key ? { ...i, ...patch } : i)));
 
+  /**
+   * Horas desde a autorização, ou null quando não há data registrada.
+   * Serve para AVISAR sobre o prazo de 24h — não para impedir.
+   */
+  const horasDesdeAutorizacao = (nfe: NfeRecord): number | null => {
+    const bruto = nfe.data_autorizacao;
+    if (!bruto) return null;
+    const ms = Date.now() - new Date(bruto).getTime();
+    return Number.isFinite(ms) ? ms / 3_600_000 : null;
+  };
+
   const handleCancelar = (nfe: NfeRecord) => {
+    const horas = horasDesdeAutorizacao(nfe);
+
+    // Aviso, e NÃO bloqueio, de propósito: passado o prazo de 24h a SEFAZ ainda
+    // pode aceitar como cancelamento extemporâneo (cStat 155). Barrar aqui
+    // impediria um cancelamento que a SEFAZ autorizaria — pior que deixar tentar
+    // e receber a resposta dela. Quem decide o que é aceitável é a SEFAZ.
+    const alerta =
+      horas !== null && horas > 24
+        ? `ATENÇÃO: esta nota foi autorizada há ${Math.floor(horas)} horas, `
+          + 'acima do prazo normal de 24h. A SEFAZ pode recusar, ou aceitar como '
+          + 'cancelamento extemporâneo. Vale tentar.\n\n'
+        : '';
+
     const justificativa = window.prompt(
-      'Justificativa do cancelamento (mínimo 15 caracteres):',
+      `${alerta}Cancelar a NF-e nº ${nfe.numero}, série ${nfe.serie}?\n\n`
+      + 'O cancelamento é enviado à SEFAZ e não se desfaz. O número não volta a '
+      + 'ficar disponível.\n\n'
+      + 'Justificativa (mínimo 15 caracteres, exigência da SEFAZ):',
     );
     if (!justificativa) return;
     if (justificativa.trim().length < 15) {
-      setErro('A justificativa de cancelamento deve ter no mínimo 15 caracteres.');
+      setErro(
+        'A justificativa de cancelamento deve ter no mínimo 15 caracteres — é a SEFAZ que exige, '
+        + `e você digitou ${justificativa.trim().length}.`,
+      );
       return;
     }
     cancelMutation.mutate({ id: nfe.id, justificativa: justificativa.trim() });
@@ -988,14 +1018,23 @@ export default function NfeEmissaoPage() {
                             Tentar novamente
                           </button>
                         )}
+                        {/*
+                          Botão com a palavra "Cancelar", e não só o ícone.
+                          Era um ⃠ cinza sem rótulo, e o dono do sistema não
+                          achou a função — perguntou onde cancelava tendo a nota
+                          na tela. Mesmo problema que o botão "Empresas" já teve.
+                          Ação destrutiva e com prazo de 24h não pode depender de
+                          o usuário passar o mouse em cima para descobrir.
+                        */}
                         {nfe.status === 'AUTORIZADA' && (
                           <button
                             type="button"
-                            className="text-gray-500 hover:text-red-600"
-                            title="Cancelar NF-e"
+                            className="inline-flex items-center gap-1 rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                            title="Cancelar NF-e junto à SEFAZ (prazo de 24h após a autorização)"
                             onClick={() => handleCancelar(nfe)}
                           >
-                            <Ban className="h-4 w-4" />
+                            <Ban className="h-3.5 w-3.5" />
+                            Cancelar
                           </button>
                         )}
                       </div>

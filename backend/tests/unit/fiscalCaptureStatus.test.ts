@@ -27,6 +27,12 @@ jest.mock('../../src/config/database', () => {
   Object.assign(query, {
     where: jest.fn(chain),
     andWhere: jest.fn(chain),
+    // whereIn/whereNotNull entraram junto com a checagem de bloqueio por
+    // consumo indevido (cStat 656). Sem eles no mock, a suíte quebrava com
+    // "db(...).where(...).whereIn is not a function" — limitação do mock, não
+    // do produto. Devolvem lista vazia: nenhum bloqueio ativo.
+    whereIn: jest.fn(chain),
+    whereNotNull: jest.fn().mockResolvedValue([]),
     whereRaw: jest.fn(chain),
     andWhereRaw: jest.fn(chain),
     orderBy: jest.fn(chain),
@@ -112,6 +118,14 @@ function docTypesMarcadosComErro(): string[] {
     .sort();
 }
 
+/** Mensagem de erro gravada para um doc type. */
+function erroGravado(docType: string): string {
+  const linha = estado.syncUpserts.find(
+    (row) => row.doc_type === docType && row.last_status === 'error',
+  );
+  return String(linha?.last_error ?? '');
+}
+
 describe('runSync — status por doc type em falha parcial', () => {
   it('marca erro só na NF-e quando a NFS-e concluiu', async () => {
     const resultado = {
@@ -135,6 +149,30 @@ describe('runSync — status por doc type em falha parcial', () => {
     };
     await runSyncCom(`CAPTURE_RESULT:${JSON.stringify(resultado)}`, false);
     expect(docTypesMarcadosComErro()).toEqual(['nfse']);
+  });
+
+  it('CADA LINHA RECEBE SÓ O SEU ERRO, e não a mensagem combinada', async () => {
+    // O defeito real, visto no banco de produção em 12/08/2026: as duas linhas
+    // de fiscal_xml_sync guardavam a mesma string juntada com " | ". A linha da
+    // NFS-e exibia "cStat 656", que é erro de NF-e, e a da NF-e exibia o 404 do
+    // Portal Nacional. Quem fosse diagnosticar perseguiria o problema errado.
+    const resultado = {
+      ok: false,
+      nfe_capturados: 0,
+      nfse_capturados: 0,
+      errors: [
+        'NF-e: SEFAZ DistDFe rejeitou (cStat 656): Consumo Indevido',
+        'NFS-e: 404 Client Error: Not Found for url: https://adn.nfse.gov.br/...',
+      ],
+      warnings: [],
+    };
+    await runSyncCom(`CAPTURE_RESULT:${JSON.stringify(resultado)}`, false);
+
+    expect(erroGravado('nfe')).toContain('656');
+    expect(erroGravado('nfe')).not.toContain('404');
+
+    expect(erroGravado('nfse')).toContain('404');
+    expect(erroGravado('nfse')).not.toContain('656');
   });
 
   it('marca os dois quando os dois falharam', async () => {

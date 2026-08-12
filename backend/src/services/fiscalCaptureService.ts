@@ -29,6 +29,13 @@ export interface FiscalSyncStatus {
   last_sync_at: string | null;
   last_status: string | null;
   last_error: string | null;
+  /**
+   * Até quando a SEFAZ mantém esta consulta bloqueada por consumo indevido
+   * (cStat 656), ou null. Vai para a tela porque "erro" sem "e só posso tentar
+   * de novo às 16h07" empurra o usuário a clicar de novo — que é justamente o
+   * que renova o bloqueio.
+   */
+  bloqueado_ate: string | null;
 }
 
 export interface FiscalCaptureRecord {
@@ -165,6 +172,32 @@ function buildCaptureFields(
  * funcionou — a tela mostrava NFS-e em erro depois de uma captura bem-sucedida.
  * O scheduler prefixa cada erro com "NF-e:" ou "NFS-e:", então dá para saber.
  */
+/**
+ * Extrai da lista de erros apenas os do tipo pedido.
+ *
+ * O Python devolve `errors` como lista de strings prefixadas ("NF-e: ...",
+ * "NFS-e: ..."). O prefixo existia e não era usado na hora de gravar: a mensagem
+ * combinada ia para as duas linhas de fiscal_xml_sync, e cada uma passava a
+ * exibir o erro da outra.
+ */
+function erroPorDocType(
+  docType: 'nfe' | 'nfse',
+  parsed: CaptureResultSummary | null,
+): string | null {
+  const erros = parsed?.errors;
+  if (!Array.isArray(erros) || erros.length === 0) return null;
+
+  const prefixo = docType === 'nfe' ? 'nf-e:' : 'nfs-e:';
+  const doTipo = erros.filter((erro) => {
+    const texto = String(erro).trim().toLowerCase();
+    // 'nfs-e:' também começa com 'nf'... mas não com 'nf-e:', então o
+    // startsWith basta e não confunde os dois.
+    return texto.startsWith(prefixo);
+  });
+
+  return doTipo.length > 0 ? doTipo.join(' | ') : null;
+}
+
 function docTypesComFalha(
   tipo: 'nfe' | 'nfse' | 'all',
   parsed: CaptureResultSummary | null,
@@ -352,6 +385,9 @@ export class FiscalCaptureService {
         last_sync_at: row.last_sync_at ? new Date(row.last_sync_at).toISOString() : null,
         last_status: row.last_status,
         last_error: row.last_error,
+        bloqueado_ate: row.bloqueado_ate
+          ? new Date(row.bloqueado_ate).toISOString()
+          : null,
       })),
       captures_total: Number(count || 0),
       python_available: await this.isPythonAvailable(),
@@ -435,6 +471,56 @@ export class FiscalCaptureService {
     return resposta;
   }
 
+  /**
+   * Há bloqueio da SEFAZ em curso? Devolve a mensagem pronta, ou null.
+   *
+   * A coluna `bloqueado_ate` é escrita pelo Python quando a DistDFe responde
+   * cStat 656 (consumo indevido). A checagem também vive aqui, e não só lá,
+   * porque recusar antes de subir o processo Python é mais rápido e produz uma
+   * mensagem melhor — e porque o caminho do agendamento futuro não deve depender
+   * de o script lembrar de verificar.
+   */
+  static async consultarBloqueio(
+    companyId: string,
+    tipo: 'nfe' | 'nfse' | 'all',
+  ): Promise<string | null> {
+    const db = await getDatabase();
+    const docTypes = tipo === 'all' ? ['nfe', 'nfse'] : [tipo];
+
+    const linhas = await db('fiscal_xml_sync')
+      .where({ company_id: companyId })
+      .whereIn('doc_type', docTypes)
+      .whereNotNull('bloqueado_ate');
+
+    const agora = Date.now();
+    const bloqueadas = linhas
+      .map((linha: { doc_type: string; bloqueado_ate: string | Date }) => ({
+        docType: linha.doc_type,
+        ate: new Date(linha.bloqueado_ate),
+      }))
+      .filter((item) => item.ate.getTime() > agora);
+
+    if (bloqueadas.length === 0) return null;
+
+    // Com 'all', se só um dos dois está bloqueado o outro poderia rodar. Não
+    // vale a complexidade agora: o scheduler.py roda os dois num processo só, e
+    // dividir isso pede refatoração maior do que o problema justifica.
+    const maisLonge = bloqueadas.reduce((a, b) => (a.ate > b.ate ? a : b));
+    const minutos = Math.max(1, Math.ceil((maisLonge.ate.getTime() - agora) / 60000));
+    const hora = maisLonge.ate.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'America/Sao_Paulo',
+    });
+    const quais = bloqueadas.map((b) => b.docType.toUpperCase()).join(' e ');
+
+    return (
+      `A SEFAZ bloqueou a consulta de ${quais} por consumo indevido (cStat 656). `
+      + `Aguarde ${minutos} min — liberada às ${hora}. `
+      + 'Tentar antes disso renova o bloqueio por outra hora.'
+    );
+  }
+
   static async runSync(companyId: string, tipo: 'nfe' | 'nfse' | 'all' = 'all'): Promise<{
     success: boolean;
     message: string;
@@ -461,6 +547,19 @@ export class FiscalCaptureService {
           `CNPJ do certificado (${certCnpj}) difere do CNPJ da empresa (${companyCnpj}). ` +
           'Substitua o certificado A1 com o CNPJ correto da empresa selecionada.',
       };
+    }
+
+    // Castigo da SEFAZ em curso? Recusa aqui, antes de gastar processo e antes
+    // de tocar na rede.
+    //
+    // A DistDFe responde cStat 656 "Consumo Indevido" e manda esperar uma hora.
+    // Como consulta rejeitada não avança o NSU, a tentativa seguinte repete
+    // exatamente o pedido que causou o bloqueio — e cada clique renova a
+    // punição. Em 12/08/2026 o cursor desta empresa ficou preso em 0 por esse
+    // ciclo, e nada na tela explicava o motivo.
+    const bloqueio = await FiscalCaptureService.consultarBloqueio(companyId, tipo);
+    if (bloqueio) {
+      return { success: false, message: bloqueio };
     }
 
     const password = decryptSecret(cert.password_encrypted);
@@ -541,6 +640,13 @@ export class FiscalCaptureService {
       const errText = combined.message || result.stderr || 'Falha na captura';
       const docTypes = docTypesComFalha(tipo, parsed);
       for (const docType of docTypes) {
+        // A mensagem gravada é a DAQUELE tipo, não a combinação dos dois.
+        //
+        // Antes, `errText` (que junta os erros com " | ") ia igual para as duas
+        // linhas: a linha do NFS-e exibia "SEFAZ DistDFe rejeitou (cStat 656)",
+        // que é erro de NF-e, e a do NF-e exibia o 404 do Portal Nacional. Quem
+        // fosse diagnosticar perseguiria o problema errado.
+        const erroDoTipo = erroPorDocType(docType, parsed) || errText;
         await db('fiscal_xml_sync')
           .insert({
             company_id: companyId,
@@ -548,13 +654,13 @@ export class FiscalCaptureService {
             cursor_value: '0',
             last_sync_at: new Date(),
             last_status: 'error',
-            last_error: errText,
+            last_error: erroDoTipo,
           })
           .onConflict(['company_id', 'doc_type'])
           .merge({
             last_sync_at: new Date(),
             last_status: 'error',
-            last_error: errText,
+            last_error: erroDoTipo,
           });
       }
     }

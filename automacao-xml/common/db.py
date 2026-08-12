@@ -109,6 +109,17 @@ def ensure_schema() -> None:
                 ADD COLUMN IF NOT EXISTS xml_content TEXT
                 """
             )
+            # Janela de castigo da SEFAZ. A DistDFe responde cStat 656
+            # "Consumo Indevido" quando a mesma consulta se repete, e manda
+            # esperar uma hora. Sem registrar ate quando, cada clique batia de
+            # novo e renovava a punicao: em 12/08/2026 o cursor ficou preso em 0
+            # justamente por isso, porque consulta rejeitada nao avanca NSU.
+            cur.execute(
+                """
+                ALTER TABLE fiscal_xml_sync
+                ADD COLUMN IF NOT EXISTS bloqueado_ate TIMESTAMPTZ
+                """
+            )
     else:
         with db_connection() as conn:
             conn.execute(
@@ -124,6 +135,14 @@ def ensure_schema() -> None:
                 )
                 """
             )
+            # SQLite nao aceita IF NOT EXISTS em ADD COLUMN: consulta o PRAGMA.
+            colunas = {
+                linha[1]
+                for linha in conn.execute("PRAGMA table_info(sync)").fetchall()
+            }
+            if "bloqueado_ate" not in colunas:
+                conn.execute("ALTER TABLE sync ADD COLUMN bloqueado_ate TEXT")
+
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS captures (
@@ -162,13 +181,57 @@ def get_cursor(company_id: str, doc_type: str) -> str:
         return str(row["cursor_value"]) if row else "0"
 
 
+def bloqueio_ativo(company_id: str, doc_type: str) -> datetime | None:
+    """Ate quando esta consulta esta em castigo, ou None se esta liberada.
+
+    Existe por causa do cStat 656 da DistDFe ("Consumo Indevido"): a SEFAZ manda
+    esperar uma hora, e sem esta checagem cada clique batia de novo e renovava a
+    punicao. Como consulta rejeitada nao avanca o NSU, o cursor ficava preso em 0
+    e o proximo pedido repetia exatamente o que causou o bloqueio.
+    """
+    ensure_schema()
+    agora = datetime.now(timezone.utc)
+    with db_connection() as conn:
+        if get_database_url():
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT bloqueado_ate FROM fiscal_xml_sync WHERE company_id=%s AND doc_type=%s",
+                (company_id, doc_type),
+            )
+            row = cur.fetchone()
+            ate = row[0] if row else None
+        else:
+            cur = conn.execute(
+                "SELECT bloqueado_ate FROM sync WHERE company_id=? AND doc_type=?",
+                (company_id, doc_type),
+            )
+            row = cur.fetchone()
+            bruto = row["bloqueado_ate"] if row else None
+            ate = datetime.fromisoformat(bruto) if bruto else None
+
+    if not ate:
+        return None
+    # Data sem fuso (vinda do SQLite) e tratada como UTC.
+    if ate.tzinfo is None:
+        ate = ate.replace(tzinfo=timezone.utc)
+    return ate if ate > agora else None
+
+
 def save_cursor(
     company_id: str,
     doc_type: str,
     cursor_value: str,
     status: str = "ok",
     error: str | None = None,
+    bloqueado_ate: datetime | None = None,
 ) -> None:
+    """Grava o cursor.
+
+    `bloqueado_ate` só é escrito quando vem preenchido: passar None NÃO limpa um
+    bloqueio existente por acidente — usar `limpar_bloqueio` para isso. Escrever
+    None a cada gravação apagaria o castigo na tentativa seguinte, que é
+    exatamente o efeito que se quer evitar.
+    """
     ensure_schema()
     now = datetime.now(timezone.utc)
     with db_connection() as conn:
@@ -176,24 +239,54 @@ def save_cursor(
             cur = conn.cursor()
             cur.execute(
                 """
-                INSERT INTO fiscal_xml_sync (company_id, doc_type, cursor_value, last_sync_at, last_status, last_error)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO fiscal_xml_sync
+                    (company_id, doc_type, cursor_value, last_sync_at, last_status, last_error, bloqueado_ate)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (company_id, doc_type) DO UPDATE SET
                     cursor_value = EXCLUDED.cursor_value,
                     last_sync_at = EXCLUDED.last_sync_at,
                     last_status = EXCLUDED.last_status,
-                    last_error = EXCLUDED.last_error
+                    last_error = EXCLUDED.last_error,
+                    bloqueado_ate = COALESCE(EXCLUDED.bloqueado_ate, fiscal_xml_sync.bloqueado_ate)
                 """,
-                (company_id, doc_type, cursor_value, now, status, error),
+                (company_id, doc_type, cursor_value, now, status, error, bloqueado_ate),
             )
             return
 
+        anterior = None
+        cur = conn.execute(
+            "SELECT bloqueado_ate FROM sync WHERE company_id=? AND doc_type=?",
+            (company_id, doc_type),
+        )
+        row = cur.fetchone()
+        if row:
+            anterior = row["bloqueado_ate"]
+        valor_bloqueio = bloqueado_ate.isoformat() if bloqueado_ate else anterior
+
         conn.execute(
             """
-            INSERT OR REPLACE INTO sync (company_id, doc_type, cursor_value, last_sync_at, last_status, last_error)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO sync
+                (company_id, doc_type, cursor_value, last_sync_at, last_status, last_error, bloqueado_ate)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (company_id, doc_type, cursor_value, now.isoformat(), status, error),
+            (company_id, doc_type, cursor_value, now.isoformat(), status, error, valor_bloqueio),
+        )
+
+
+def limpar_bloqueio(company_id: str, doc_type: str) -> None:
+    """Libera a consulta. Chamado quando ela volta a funcionar."""
+    ensure_schema()
+    with db_connection() as conn:
+        if get_database_url():
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE fiscal_xml_sync SET bloqueado_ate = NULL WHERE company_id=%s AND doc_type=%s",
+                (company_id, doc_type),
+            )
+            return
+        conn.execute(
+            "UPDATE sync SET bloqueado_ate = NULL WHERE company_id=? AND doc_type=?",
+            (company_id, doc_type),
         )
 
 
