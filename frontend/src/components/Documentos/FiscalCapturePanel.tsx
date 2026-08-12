@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CloudDownload, FileCheck, FileUp, KeyRound, RefreshCw, ShieldAlert, X } from 'lucide-react';
+import { CloudDownload, Download, FileCheck, FileUp, KeyRound, RefreshCw, ShieldAlert, X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Button } from '../ui/Button';
 import { useAuthStore } from '../../store/authStore';
@@ -34,6 +34,10 @@ export default function FiscalCapturePanel() {
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [syncTipo, setSyncTipo] = useState<FiscalDocType>('all');
+  // Competência do ZIP. Padrão no mês corrente, que é o caso de uso comum.
+  const agora = new Date();
+  const [zipAno, setZipAno] = useState(agora.getFullYear());
+  const [zipMes, setZipMes] = useState(agora.getMonth() + 1);
   const [formError, setFormError] = useState('');
   const [syncInfo, setSyncInfo] = useState('');
   const [showCertForm, setShowCertForm] = useState(false);
@@ -141,6 +145,70 @@ export default function FiscalCapturePanel() {
     onSuccess: async (data) => {
       setFormError('');
       setSyncInfo(data.message || 'Captura concluída.');
+      await invalidate();
+    },
+    onError: (error: Error) => {
+      setSyncInfo('');
+      setFormError(error.message);
+    },
+  });
+
+  /**
+   * Ciência de UMA nota.
+   *
+   * O lote não serve para todo caso: nota que o contador não reconhece não deve
+   * receber ciência às cegas — o evento é registrado na SEFAZ e não se desfaz.
+   * Aqui ele escolhe linha por linha. Sugestão do Fabricio, 12/08/2026.
+   */
+  /**
+   * Entrega um Blob ao navegador como download.
+   *
+   * A rota exige token no cabeçalho, então não dá para usar <a href> — teria de
+   * abrir sem Authorization e receberia 401. Revoga a URL depois de clicar,
+   * porque aqui o arquivo já foi salvo (diferente do PDF, que precisa da URL
+   * viva enquanto a aba estiver aberta).
+   */
+  const entregarArquivo = (blob: Blob, nome: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nome;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const baixarXmlMutation = useMutation({
+    mutationFn: async (item: { id: string; chave: string }) => {
+      const blob = await FiscalCaptureService.baixarXml(item.id);
+      entregarArquivo(blob, `${item.chave || item.id}.xml`);
+    },
+    onError: (error: Error) => setFormError(error.message),
+  });
+
+  const baixarZipMutation = useMutation({
+    mutationFn: async () => {
+      const blob = await FiscalCaptureService.baixarZip(zipAno, zipMes);
+      entregarArquivo(blob, `xmls-${zipAno}-${String(zipMes).padStart(2, '0')}.zip`);
+    },
+    onSuccess: () => {
+      setFormError('');
+      setSyncInfo('ZIP dos XMLs baixado.');
+    },
+    onError: (error: Error) => {
+      setSyncInfo('');
+      setFormError(error.message);
+    },
+  });
+
+  const manifestarUmaMutation = useMutation({
+    mutationFn: (chave: string) => FiscalCaptureService.manifestar(chave),
+    onSuccess: async (data) => {
+      setFormError('');
+      setSyncInfo(
+        data.ja_manifestado
+          ? 'Esta nota já estava manifestada na SEFAZ (duplicidade) — nada a fazer.'
+          : 'Ciência da Operação registrada. Clique em "Capturar XML agora" para baixar o XML completo.',
+      );
       await invalidate();
     },
     onError: (error: Error) => {
@@ -458,10 +526,51 @@ export default function FiscalCapturePanel() {
               );
               if (confirmado) manifestarMutation.mutate();
             }}
-            title="Ciência da Operação (evento 210210) — libera o XML completo das notas de entrada"
+            title="Ciência da Operação (210210) em TODAS as notas de entrada ainda não manifestadas — para escolher uma, use o botão da linha"
           >
-            Dar ciência (liberar XML)
+            Dar ciência em todas
           </Button>
+          {/*
+            ZIP da competência. O que um escritório usa no fechamento não é
+            arquivo por arquivo: é a pasta do mês. O filtro é pela data de
+            EMISSÃO da nota, não pela data de captura — nota de julho capturada
+            em agosto pertence a julho.
+          */}
+          <div className="flex items-end gap-2">
+            <div>
+              <label className="input-label">XMLs do mês</label>
+              <div className="flex gap-1">
+                <select
+                  className="input-field w-20"
+                  value={zipMes}
+                  onChange={(e) => setZipMes(Number(e.target.value))}
+                >
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                    <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
+                  ))}
+                </select>
+                <select
+                  className="input-field w-24"
+                  value={zipAno}
+                  onChange={(e) => setZipAno(Number(e.target.value))}
+                >
+                  {Array.from({ length: 6 }, (_, i) => agora.getFullYear() - i).map((a) => (
+                    <option key={a} value={a}>{a}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              icon={<Download className="h-4 w-4" />}
+              loading={baixarZipMutation.isPending}
+              onClick={() => baixarZipMutation.mutate()}
+              title="Baixa num ZIP todos os XMLs com data de emissão na competência escolhida"
+            >
+              Baixar ZIP
+            </Button>
+          </div>
           <Button
             type="button"
             variant="secondary"
@@ -492,6 +601,8 @@ export default function FiscalCapturePanel() {
                 <th className="px-4 py-3">Emitente</th>
                 <th className="px-4 py-3">Valor</th>
                 <th className="px-4 py-3">Capturado em</th>
+                <th className="px-4 py-3">Ciência</th>
+                <th className="px-4 py-3">XML</th>
               </tr>
             </thead>
             <tbody>
@@ -507,6 +618,54 @@ export default function FiscalCapturePanel() {
                       : '—'}
                   </td>
                   <td className="px-4 py-3">{new Date(item.captured_at).toLocaleString('pt-BR')}</td>
+                  <td className="px-4 py-3">
+                    {/*
+                      Três estados, e cada um diz uma coisa diferente:
+                      já manifestada, pendente (mostra o botão), ou não se aplica
+                      — o XML completo já está aqui, ou é documento de saída, e
+                      nesses casos não há o que manifestar.
+                    */}
+                    {item.manifestado ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700">
+                        <FileCheck className="h-3.5 w-3.5" />
+                        Ciência dada
+                      </span>
+                    ) : item.doc_type === 'nfe_resumo' ? (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+                        disabled={manifestarUmaMutation.isPending}
+                        title="Ciência da Operação (210210) só desta nota — libera o XML completo dela"
+                        onClick={() => {
+                          const confirmado = window.confirm(
+                            `Dar Ciência da Operação na nota ${item.numero || item.chave.slice(0, 12)}`
+                            + `${item.emitente_cnpj ? ` de ${formatCnpj(item.emitente_cnpj)}` : ''}?\n\n`
+                            + 'A Ciência declara apenas que a empresa tomou conhecimento da nota, e é '
+                            + 'o que libera o download do XML completo. NÃO confirma a operação.\n\n'
+                            + 'O evento é registrado na SEFAZ e não se desfaz.',
+                          );
+                          if (confirmado) manifestarUmaMutation.mutate(item.chave);
+                        }}
+                      >
+                        <FileCheck className="h-3.5 w-3.5" />
+                        Dar ciência
+                      </button>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                      disabled={baixarXmlMutation.isPending}
+                      title="Baixar o XML deste documento"
+                      onClick={() => baixarXmlMutation.mutate({ id: item.id, chave: item.chave })}
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      XML
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
