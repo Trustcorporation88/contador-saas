@@ -94,4 +94,51 @@ describeAoVivo('Consulta de CNPJ — endereço completo', () => {
     expect(r.endereco.logradouro).toBeTruthy();
     expect(r.fonte).not.toContain('CNPJá');
   }, 90000);
+
+  it('o serviço próprio responde 200 com HTML em rota inexistente — a armadilha', async () => {
+    // É a causa raiz. cnpj.trustcorp.com.br é um SPA com catch-all: QUALQUER
+    // caminho devolve a página com status 200. O código aceitava 200 como
+    // sucesso, então a primeira URL tentada "funcionava", o parse não achava
+    // campo nenhum e tudo caía na fonte seguinte — sem nada indicar que a
+    // fonte principal jamais foi usada.
+    const r = await axios.get(
+      'https://cnpj.trustcorp.com.br/api/v1/cnpj/00000000000191',
+      { timeout: 15000, validateStatus: () => true },
+    );
+
+    expect(r.status).toBe(200);
+    expect(String(r.headers['content-type'])).toContain('text/html');
+  }, 60000);
+
+  it('a API real do serviço próprio existe e pede chave de acesso', async () => {
+    // Endpoint descoberto no bundle do site:
+    //   /api/cnpja/office?cnpj=...&simples=true&registrations=ALL
+    // Sem DOC_LOOKUP_ACCESS_KEY responde 401 em JSON — resposta honesta, ao
+    // contrário do 200 com HTML das rotas que não existem.
+    const r = await axios.get(
+      `https://cnpj.trustcorp.com.br/api/cnpja/office?cnpj=${CNPJ_SEM_LOGRADOURO_NA_RECEITA}&simples=true&registrations=ALL`,
+      { timeout: 15000, validateStatus: () => true },
+    );
+
+    expect([200, 401]).toContain(r.status);
+    expect(String(r.headers['content-type'])).toContain('json');
+  }, 60000);
+
+  it('SEM a chave configurada, a consulta ainda devolve endereço completo', async () => {
+    // Chave ausente é problema de configuração nossa. Derrubar a consulta por
+    // causa disso deixaria o cadastro de empresas sem funcionar por uma
+    // variável de ambiente — por isso 401 na fonte principal cai para a
+    // próxima em vez de virar erro.
+    jest.resetModules();
+    const anterior = process.env.DOC_LOOKUP_ACCESS_KEY;
+    delete process.env.DOC_LOOKUP_ACCESS_KEY;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { CnpjService } = require('../../src/services/cnpjService');
+      const r = await CnpjService.lookup(CNPJ_SEM_LOGRADOURO_NA_RECEITA);
+      expect(r.endereco.logradouro).toBeTruthy();
+    } finally {
+      if (anterior) process.env.DOC_LOOKUP_ACCESS_KEY = anterior;
+    }
+  }, 90000);
 });
