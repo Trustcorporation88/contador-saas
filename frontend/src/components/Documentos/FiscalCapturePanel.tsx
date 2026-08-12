@@ -149,6 +149,30 @@ export default function FiscalCapturePanel() {
     },
   });
 
+  /**
+   * Ciência de UMA nota.
+   *
+   * O lote não serve para todo caso: nota que o contador não reconhece não deve
+   * receber ciência às cegas — o evento é registrado na SEFAZ e não se desfaz.
+   * Aqui ele escolhe linha por linha. Sugestão do Fabricio, 12/08/2026.
+   */
+  const manifestarUmaMutation = useMutation({
+    mutationFn: (chave: string) => FiscalCaptureService.manifestar(chave),
+    onSuccess: async (data) => {
+      setFormError('');
+      setSyncInfo(
+        data.ja_manifestado
+          ? 'Esta nota já estava manifestada na SEFAZ (duplicidade) — nada a fazer.'
+          : 'Ciência da Operação registrada. Clique em "Capturar XML agora" para baixar o XML completo.',
+      );
+      await invalidate();
+    },
+    onError: (error: Error) => {
+      setSyncInfo('');
+      setFormError(error.message);
+    },
+  });
+
   const manifestarMutation = useMutation({
     mutationFn: () => FiscalCaptureService.manifestarResumos(20),
     onSuccess: async (data) => {
@@ -458,9 +482,9 @@ export default function FiscalCapturePanel() {
               );
               if (confirmado) manifestarMutation.mutate();
             }}
-            title="Ciência da Operação (evento 210210) — libera o XML completo das notas de entrada"
+            title="Ciência da Operação (210210) em TODAS as notas de entrada ainda não manifestadas — para escolher uma, use o botão da linha"
           >
-            Dar ciência (liberar XML)
+            Dar ciência em todas
           </Button>
           <Button
             type="button"
@@ -492,6 +516,7 @@ export default function FiscalCapturePanel() {
                 <th className="px-4 py-3">Emitente</th>
                 <th className="px-4 py-3">Valor</th>
                 <th className="px-4 py-3">Capturado em</th>
+                <th className="px-4 py-3">Ciência</th>
               </tr>
             </thead>
             <tbody>
@@ -507,6 +532,42 @@ export default function FiscalCapturePanel() {
                       : '—'}
                   </td>
                   <td className="px-4 py-3">{new Date(item.captured_at).toLocaleString('pt-BR')}</td>
+                  <td className="px-4 py-3">
+                    {/*
+                      Três estados, e cada um diz uma coisa diferente:
+                      já manifestada, pendente (mostra o botão), ou não se aplica
+                      — o XML completo já está aqui, ou é documento de saída, e
+                      nesses casos não há o que manifestar.
+                    */}
+                    {item.manifestado ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700">
+                        <FileCheck className="h-3.5 w-3.5" />
+                        Ciência dada
+                      </span>
+                    ) : item.doc_type === 'nfe_resumo' ? (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+                        disabled={manifestarUmaMutation.isPending}
+                        title="Ciência da Operação (210210) só desta nota — libera o XML completo dela"
+                        onClick={() => {
+                          const confirmado = window.confirm(
+                            `Dar Ciência da Operação na nota ${item.numero || item.chave.slice(0, 12)}`
+                            + `${item.emitente_cnpj ? ` de ${formatCnpj(item.emitente_cnpj)}` : ''}?\n\n`
+                            + 'A Ciência declara apenas que a empresa tomou conhecimento da nota, e é '
+                            + 'o que libera o download do XML completo. NÃO confirma a operação.\n\n'
+                            + 'O evento é registrado na SEFAZ e não se desfaz.',
+                          );
+                          if (confirmado) manifestarUmaMutation.mutate(item.chave);
+                        }}
+                      >
+                        <FileCheck className="h-3.5 w-3.5" />
+                        Dar ciência
+                      </button>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

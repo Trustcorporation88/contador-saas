@@ -61,6 +61,7 @@ jest.mock('../../src/utils/certEncryption', () => ({
 }));
 
 import { ManifestacaoService } from '../../src/services/manifestacaoService';
+import { lerManifestacao } from '../../src/services/fiscalCaptureService';
 
 const EMPRESA = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const CHAVE_VALIDA = '3'.repeat(44);
@@ -140,5 +141,46 @@ describe('Manifestação em lote', () => {
     expect(resultado.total).toBe(0);
     expect(resultado.manifestados).toBe(0);
     expect(resultado.falhas).toBe(0);
+  });
+});
+
+describe('Estado da manifestação na listagem', () => {
+  /**
+   * A tela decide pelo campo `manifestado` se mostra o botão "Dar ciência" ou o
+   * selo "Ciência dada". Errar isso tem consequência: nota manifestada exibida
+   * como pendente faz o usuário reenviar o evento e receber duplicidade — e
+   * manifestação não se desfaz.
+   *
+   * O metadata chega como TEXTO ou como OBJETO conforme quem gravou (o Python
+   * grava JSON numa coluna text; o Node grava string). Os dois precisam ser
+   * lidos.
+   *
+   * Usa a função REAL do serviço. A primeira versão deste teste reimplementava a
+   * leitura aqui dentro — o que prova a minha cópia, não o código que roda.
+   */
+  const casos: Array<{ nome: string; metadata: unknown; esperado: boolean }> = [
+    { nome: 'metadata nulo', metadata: null, esperado: false },
+    { nome: 'metadata vazio', metadata: {}, esperado: false },
+    { nome: 'objeto com manifestacao', metadata: { manifestacao: { cStat: '135' } }, esperado: true },
+    {
+      nome: 'texto com manifestacao',
+      metadata: JSON.stringify({ manifestacao: { cStat: '135' } }),
+      esperado: true,
+    },
+    { nome: 'texto sem manifestacao', metadata: JSON.stringify({ outra: 1 }), esperado: false },
+    { nome: 'texto corrompido não derruba a listagem', metadata: '{isso nao e json', esperado: false },
+  ];
+
+  it.each(casos)('$nome', ({ metadata, esperado }) => {
+    expect(lerManifestacao(metadata).manifestado).toBe(esperado);
+  });
+
+  it('guarda a data do registro quando ela existe', () => {
+    // A data vem do dhRegEvento da SEFAZ. Serve para o contador saber QUANDO deu
+    // ciência, que é o que conta em caso de questionamento.
+    const em = '2026-08-12T20:15:00-03:00';
+    const lido = lerManifestacao({ manifestacao: { cStat: '135', registrado_em: em } });
+    expect(lido.manifestado).toBe(true);
+    expect(lido.em).toBe(em);
   });
 });
