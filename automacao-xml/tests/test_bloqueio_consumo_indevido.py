@@ -310,3 +310,63 @@ class TestManifestacao:
         import manifestar_nfe
         assert "573" in manifestar_nfe.CSTAT_JA_MANIFESTADO
         assert "135" in manifestar_nfe.CSTAT_OK
+
+
+class TestResumoViraCompleto:
+    """O XML completo tem a MESMA chave do resumo. Quem vence importa.
+
+    Era `ON CONFLICT DO NOTHING`: o completo que chega depois da manifestação era
+    descartado em silêncio, a linha ficava resumo para sempre, e a manifestação —
+    que existe só para liberar o completo — não servia para nada. O usuário
+    clicaria em tudo, na ordem certa, e a tela não mudaria.
+    """
+
+    def _meta(self, tipo, chave="3" * 44, valor="100.00"):
+        # data_emissao é objeto `date`, não string: o parser chama .isoformat()
+        # nela. Passei string na primeira versão e o teste acusou com
+        # AttributeError — erro do teste, não do código.
+        from datetime import date
+        from common.xml_parser import MetadadosXml
+        return MetadadosXml(
+            tipo_doc=tipo,
+            chave=chave,
+            direcao="entrada",
+            emitente_cnpj="11222333000181",
+            destinatario_cnpj="60526634000104",
+            valor_total=valor,
+            data_emissao=date(2026, 8, 1),
+            modelo="55",
+            numero="123",
+            serie="1",
+        )
+
+    def test_RESUMO_VIRA_COMPLETO(self, banco_local):
+        chave = "5" * 44
+        assert banco_local.registrar_captura(
+            EMPRESA, self._meta("nfe_resumo", chave), "/x/r.xml", "hash-resumo", b"<resNFe/>"
+        ) is True
+
+        # O completo chega depois da manifestação, com a mesma chave.
+        assert banco_local.registrar_captura(
+            EMPRESA, self._meta("nfe", chave), "/x/c.xml", "hash-completo", b"<nfeProc/>"
+        ) is True, "o XML completo tem de sobrepor o resumo, e contar como novidade"
+
+    def test_COMPLETO_NAO_E_REBAIXADO_POR_RESUMO(self, banco_local):
+        # A direção contrária perderia itens, NCM e impostos — e a SEFAZ pode
+        # reenviar o resumo numa consulta posterior.
+        chave = "6" * 44
+        banco_local.registrar_captura(
+            EMPRESA, self._meta("nfe", chave), "/x/c.xml", "hash-completo", b"<nfeProc/>"
+        )
+        assert banco_local.registrar_captura(
+            EMPRESA, self._meta("nfe_resumo", chave), "/x/r.xml", "hash-resumo", b"<resNFe/>"
+        ) is False, "resumo chegando depois não pode sobrescrever o completo"
+
+    def test_o_mesmo_documento_duas_vezes_nao_conta_de_novo(self, banco_local):
+        chave = "7" * 44
+        assert banco_local.registrar_captura(
+            EMPRESA, self._meta("nfe", chave), "/x/c.xml", "h", b"<nfeProc/>"
+        ) is True
+        assert banco_local.registrar_captura(
+            EMPRESA, self._meta("nfe", chave), "/x/c.xml", "h", b"<nfeProc/>"
+        ) is False
