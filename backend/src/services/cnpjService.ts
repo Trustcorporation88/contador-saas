@@ -20,6 +20,9 @@ const BRASIL_API = 'https://brasilapi.com.br/api/cnpj/v1';
 // outra. O CNPJá mantém base própria e tem o dado nesses casos.
 const CNPJA_OPEN = 'https://open.cnpja.com/office';
 const TRUSTCORP_BASE_URL = (process.env.DOC_LOOKUP_BASE_URL || 'https://cnpj.trustcorp.com.br').replace(/\/+$/, '');
+// A API do serviço próprio exige o header x-access-key; sem ele responde 401.
+// Fica em variável de ambiente: chave de acesso não entra em código.
+const TRUSTCORP_ACCESS_KEY = process.env.DOC_LOOKUP_ACCESS_KEY || '';
 const TRUSTCORP_TIMEOUT_MS = Number(process.env.DOC_LOOKUP_TIMEOUT_MS || 10000);
 
 export interface CnpjLookupResult {
@@ -326,18 +329,119 @@ function mapTrustcorpCpfResponse(raw: unknown, documento: string, cached: boolea
   };
 }
 
+/**
+ * Endereços da API do serviço próprio.
+ *
+ * O primeiro é o que o site dele realmente chama — descoberto lendo o bundle:
+ *   fetch(`/api/cnpja/office?cnpj=${t}&simples=true&registrations=ALL`)
+ *
+ * A lista antiga tentava /api/v1/cnpj/{doc} e variantes. Nenhuma existe: o
+ * servidor é um SPA com catch-all e devolve o HTML da página com status 200
+ * para QUALQUER caminho. Como o código aceitava 200 como sucesso, a primeira
+ * tentativa "funcionava", o parse não achava campo nenhum e tudo caía na
+ * BrasilAPI — o serviço do Flávio nunca foi usado de fato.
+ */
+
+/** Resposta no formato CNPJá — usada pelo serviço próprio e pelo CNPJá aberto. */
+interface RespostaCnpja {
+  taxId?: string; alias?: string; founded?: string;
+  company?: {
+    name?: string; equity?: number; size?: { text?: string };
+    nature?: { text?: string }; simples?: { optant?: boolean }; simei?: { optant?: boolean };
+    members?: Array<{ person?: { name?: string }; role?: { text?: string } }>;
+  };
+  status?: { text?: string };
+  address?: {
+    street?: string; number?: string; details?: string; district?: string;
+    city?: string; state?: string; zip?: string; municipality?: number;
+  };
+  phones?: Array<{ area?: string; number?: string }>;
+  emails?: Array<{ address?: string }>;
+  mainActivity?: { id?: number; text?: string };
+  sideActivities?: Array<{ id?: number; text?: string }>;
+}
+
+/** Reconhece o formato CNPJá sem depender do nome da fonte. */
+function pareceCnpja(data: unknown): data is RespostaCnpja {
+  const d = data as RespostaCnpja | null;
+  return Boolean(d && typeof d === 'object' && (d.taxId || d.company || d.address));
+}
+
+/**
+ * Converte a resposta do CNPJá no formato interno.
+ *
+ * O CNPJá tem base própria e traz o logradouro em registros que a base aberta
+ * da Receita deixa em branco — foi o caso que originou esta função (CASA DA
+ * CERVEJA: BrasilAPI sem rua, CNPJá com "Rua Herminio Amorim").
+ */
+function mapCnpjaResponse(
+  data: RespostaCnpja,
+  documento: string,
+  fonte: string,
+  cached: boolean,
+): CnpjLookupResult {
+  const endereco = data.address ?? {};
+  const empresa = data.company ?? {};
+  const telefone = data.phones?.[0];
+
+  return {
+    cnpj: sanitizeDigits(pickString(data.taxId, documento)),
+    razao_social: pickString(empresa.name),
+    nome_fantasia: pickString(data.alias),
+    situacao: pickString(data.status?.text),
+    // "Ativa" é o texto que o CNPJá usa para situação cadastral regular.
+    ativa: pickString(data.status?.text).toLowerCase() === 'ativa',
+    endereco: {
+      logradouro: pickString(endereco.street),
+      numero: pickString(endereco.number),
+      complemento: pickString(endereco.details),
+      bairro: pickString(endereco.district),
+      municipio: pickString(endereco.city),
+      uf: pickString(endereco.state),
+      cep: sanitizeDigits(pickString(endereco.zip)),
+      // O CNPJá devolve o código IBGE em `municipality`.
+      codigo_municipio_ibge: endereco.municipality
+        ? String(endereco.municipality) : undefined,
+    },
+    contato: {
+      telefone: telefone?.number
+        ? sanitizeDigits(`${telefone.area ?? ''}${telefone.number}`) : '',
+      email: pickString(data.emails?.[0]?.address),
+    },
+    porte: pickString(empresa.size?.text),
+    natureza_juridica: pickString(empresa.nature?.text),
+    cnae_principal: {
+      codigo: pickNumber(data.mainActivity?.id),
+      descricao: pickString(data.mainActivity?.text),
+    },
+    cnaes_secundarios: (data.sideActivities ?? []).map((a) => ({
+      codigo: pickNumber(a.id),
+      descricao: pickString(a.text),
+    })),
+    socios: (empresa.members ?? []).map((m) => ({
+      nome: pickString(m.person?.name),
+      qualificacao: pickString(m.role?.text),
+    })),
+    capital_social: pickNumber(empresa.equity),
+    simples_nacional: Boolean(empresa.simples?.optant),
+    mei: Boolean(empresa.simei?.optant),
+    fonte,
+    cached,
+  };
+}
+
 function trustcorpCandidates(tipo: 'cnpj' | 'cpf', documento: string): string[] {
   const base = TRUSTCORP_BASE_URL;
+  if (tipo === 'cnpj') {
+    return [
+      `${base}/api/cnpja/office?cnpj=${documento}&simples=true&registrations=ALL`,
+      `${base}/api/v1/cnpj/${documento}`,
+      `${base}/api/cnpj/${documento}`,
+    ];
+  }
   return [
-    `${base}/api/v1/${tipo}/${documento}`,
-    `${base}/api/${tipo}/${documento}`,
-    `${base}/${tipo}/${documento}`,
-    `${base}/api/v1/consulta?tipo=${tipo}&documento=${documento}`,
-    `${base}/api/consulta?tipo=${tipo}&documento=${documento}`,
-    `${base}/consulta?tipo=${tipo}&documento=${documento}`,
-    `${base}/api/v1/busca/${documento}`,
-    `${base}/api/busca/${documento}`,
-    `${base}/busca/${documento}`,
+    `${base}/api/v1/cpf/${documento}`,
+    `${base}/api/cpf/${documento}`,
   ];
 }
 
@@ -348,16 +452,48 @@ async function fetchFromTrustcorp(tipo: 'cnpj' | 'cpf', documento: string): Prom
   for (const url of urls) {
     try {
       logger.info('TrustCorp lookup attempt', { tipo, documento, url });
-      const { data } = await axios.get(url, {
+      const { data, headers } = await axios.get(url, {
         timeout: TRUSTCORP_TIMEOUT_MS,
-        headers: { Accept: 'application/json' },
+        headers: {
+          Accept: 'application/json',
+          ...(TRUSTCORP_ACCESS_KEY ? { 'x-access-key': TRUSTCORP_ACCESS_KEY } : {}),
+        },
       });
+
+      // Um SPA com catch-all responde 200 e HTML para qualquer rota. Sem esta
+      // checagem, a página inteira era tratada como resposta válida: o parse
+      // devolvia todos os campos vazios e a consulta caía na fonte seguinte
+      // sem nada indicar que a primeira tinha falhado.
+      const tipoConteudo = String(headers?.['content-type'] ?? '');
+      const ehJson = tipoConteudo.includes('json')
+        && data !== null && typeof data === 'object' && !Array.isArray(data);
+      if (!ehJson) {
+        logger.warn('TrustCorp respondeu algo que não é JSON — ignorando', {
+          url, contentType: tipoConteudo,
+        });
+        continue;
+      }
+
       return data;
     } catch (err) {
       const axiosErr = err as AxiosError;
       lastError = axiosErr;
       const status = axiosErr.response?.status;
       if (status === 404) continue;
+
+      // 401/403 = chave de acesso ausente ou inválida. É problema de
+      // CONFIGURAÇÃO nossa, não da consulta do usuário: derrubar tudo aqui
+      // deixaria o cadastro de empresas sem funcionar por causa de uma
+      // variável de ambiente. Registra alto e segue para a próxima fonte.
+      if (status === 401 || status === 403) {
+        logger.error(
+          'TrustCorp recusou a chave de acesso — defina DOC_LOOKUP_ACCESS_KEY. '
+          + 'Seguindo para a fonte pública, que pode vir com endereço incompleto.',
+          { url, status },
+        );
+        continue;
+      }
+
       if (status && status < 500 && status !== 429) {
         throw Object.assign(new Error(`Consulta ${tipo.toUpperCase()} recusada pelo provedor.`), { status });
       }
@@ -460,7 +596,12 @@ export class CnpjService {
 
     try {
       const raw = await fetchFromTrustcorp('cnpj', clean);
-      const trustcorpResult = mapTrustcorpCnpjResponse(raw, clean, false);
+      // O endpoint do serviço próprio é um proxy do CNPJá e devolve o formato
+      // deles; as rotas antigas devolviam outro. Escolhe pelo FORMATO recebido,
+      // não pela URL que respondeu.
+      const trustcorpResult = pareceCnpja(raw)
+        ? mapCnpjaResponse(raw, clean, 'TrustCorp', false)
+        : mapTrustcorpCnpjResponse(raw, clean, false);
       const needsFallback =
         !trustcorpResult.razao_social ||
         !trustcorpResult.endereco.logradouro ||
