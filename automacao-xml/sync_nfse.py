@@ -26,6 +26,12 @@ class SyncResult:
     aviso: str | None = None
 
 
+def _nsu_int(valor: str | int) -> int:
+    """NSU como inteiro. '000000000000000' e '0' são o mesmo número."""
+    digits = "".join(c for c in str(valor) if c.isdigit())
+    return int(digits) if digits else 0
+
+
 def formatar_nsu(valor: str | int) -> str:
     digits = "".join(c for c in str(valor) if c.isdigit())
     return digits.zfill(NSU_WIDTH)[-NSU_WIDTH:]
@@ -46,33 +52,93 @@ def consultar_distribuicao_dfe(empresa: EmpresaConfig, ultimo_nsu: str) -> dict[
     Manual ADN NFS-e v1.2 — até 50 documentos por chamada.
     """
     base = nfse_adn_base()
-    nsu_param = formatar_nsu(ultimo_nsu or "0")
-    url = f"{base}/DFe/{nsu_param}"
-
     session = _session_pfx(empresa.pfx, empresa.senha)
-    last_error: Exception | None = None
-    for tentativa in range(3):
-        try:
-            response = session.get(url, timeout=180)
+
+    # Duas formas do NSU no path, tentadas nesta ordem.
+    #
+    # O código só usava a forma preenchida com zeros à esquerda (15 dígitos) e
+    # tratava 404 como erro fatal. Em 12/08/2026 o resultado em produção foi:
+    #
+    #   404 Client Error: Not Found for url:
+    #   https://adn.nfse.gov.br/contribuintes/DFe/000000000000000
+    #
+    # A documentação do ADN descreve o NSU como número no path, e implementações
+    # de referência passam inteiro sem preenchimento. Não achei confirmação de
+    # que a rota de contribuintes aceite a forma com zeros — então em vez de
+    # escolher no escuro, tenta a preenchida (comportamento atual, para não
+    # quebrar quem já funciona) e, se der 404, tenta a inteira. Qual delas
+    # respondeu vai para o aviso: na próxima execução já sabemos qual é a certa.
+    formas = [formatar_nsu(ultimo_nsu or "0"), str(_nsu_int(ultimo_nsu or "0"))]
+    formas = list(dict.fromkeys(formas))  # sem repetir quando são iguais
+
+    ultimo_404: dict[str, Any] | None = None
+
+    for indice, nsu_param in enumerate(formas):
+        url = f"{base}/DFe/{nsu_param}"
+        for tentativa in range(3):
+            try:
+                response = session.get(url, timeout=180)
+            except requests.RequestException as exc:
+                if tentativa < 2:
+                    continue
+                raise
+
             if response.status_code in (502, 503, 504) and tentativa < 2:
                 continue
+
+            # 404 NÃO é fatal aqui, e é o ponto central desta correção.
+            #
+            # No ADN, 404 tanto significa "não há documento a partir deste NSU"
+            # (resposta de negócio, com JSON no corpo) quanto "rota inexistente"
+            # (corpo vazio ou HTML). O código antigo levantava exceção nos dois
+            # casos e DESCARTAVA o corpo — que é exatamente o que distingue um do
+            # outro. Ficamos sem saber qual dos dois aconteceu.
+            if response.status_code == 404:
+                corpo = (response.text or "").strip()
+                dados = None
+                if corpo:
+                    try:
+                        dados = response.json()
+                    except ValueError:
+                        dados = None
+
+                if isinstance(dados, dict) and "StatusProcessamento" in dados:
+                    # Resposta de negócio: nada novo a distribuir.
+                    return dados
+
+                ultimo_404 = {
+                    "url": url,
+                    "corpo": corpo[:300] or "(vazio)",
+                    "forma_nsu": nsu_param,
+                }
+                # Tenta a próxima forma do NSU, se houver.
+                break
+
             response.raise_for_status()
+
             if not response.text.strip():
                 return {"StatusProcessamento": "NENHUM_DOCUMENTO_LOCALIZADO", "LoteDFe": []}
-            return response.json()
-        except requests.HTTPError as exc:
-            last_error = exc
-            if exc.response is not None and exc.response.status_code in (502, 503, 504) and tentativa < 2:
-                continue
-            raise
-        except requests.RequestException as exc:
-            last_error = exc
-            if tentativa < 2:
-                continue
-            raise
 
-    if last_error:
-        raise last_error
+            dados = response.json()
+            if indice > 0:
+                # A forma preenchida falhou e esta funcionou: registra, porque
+                # resolve a dúvida de qual é o formato correto.
+                dados = dict(dados)
+                dados["_aviso_formato_nsu"] = (
+                    f"NSU aceito na forma inteira ({nsu_param}); "
+                    f"a forma com zeros ({formas[0]}) devolveu 404."
+                )
+            return dados
+
+    if ultimo_404:
+        raise RuntimeError(
+            "ADN NFS-e respondeu 404 para todas as formas de NSU testadas "
+            f"({', '.join(formas)}). Última URL: {ultimo_404['url']} — "
+            f"corpo: {ultimo_404['corpo']}. "
+            "Corpo vazio ou HTML indica rota/credencial, não ausência de documentos: "
+            "confirme se o município compartilha NFS-e com o Ambiente Nacional."
+        )
+
     return {"StatusProcessamento": "NENHUM_DOCUMENTO_LOCALIZADO", "LoteDFe": []}
 
 

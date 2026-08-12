@@ -5,10 +5,17 @@ import base64
 import gzip
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from common.certificates import alerta_expiracao
 from common.config import EmpresaConfig, homologacao
-from common.db import get_cursor, registrar_captura, save_cursor
+from common.db import (
+    bloqueio_ativo,
+    get_cursor,
+    limpar_bloqueio,
+    registrar_captura,
+    save_cursor,
+)
 from common.storage import hash_xml, salvar_xml
 from common.xml_parser import parse_nfe
 
@@ -52,6 +59,23 @@ def sync_empresa_nfe(empresa: EmpresaConfig, company_id: str | None = None) -> S
         homologacao=homologacao(),
     )
 
+    # Castigo da SEFAZ em curso? Recusa aqui, sem tocar na rede.
+    #
+    # A DistDFe responde cStat 656 "Consumo Indevido" e manda esperar uma hora.
+    # Consulta rejeitada nao avanca o NSU, entao o pedido seguinte repete
+    # exatamente o que causou o bloqueio — e cada tentativa renova a punicao. Em
+    # 12/08/2026 o cursor desta empresa ficou preso em 0 por esse ciclo.
+    bloqueado = bloqueio_ativo(company_id, "nfe")
+    if bloqueado:
+        falta = bloqueado - datetime.now(timezone.utc)
+        minutos = max(1, int(falta.total_seconds() // 60))
+        raise RuntimeError(
+            "SEFAZ bloqueou a consulta por consumo indevido (cStat 656). "
+            f"Aguarde {minutos} min — liberada as "
+            f"{bloqueado.astimezone().strftime('%H:%M')}. "
+            "Tentar antes disso renova o bloqueio."
+        )
+
     nsu = get_cursor(company_id, "nfe")
     capturados = 0
 
@@ -71,7 +95,18 @@ def sync_empresa_nfe(empresa: EmpresaConfig, company_id: str | None = None) -> S
             # não pode ser tratado como "lista vazia OK" — isso escondia a falha.
             if c_stat and c_stat not in ("137", "138"):
                 msg = f"SEFAZ DistDFe rejeitou (cStat {c_stat}): {x_motivo or 'sem motivo'}"
-                save_cursor(company_id, "nfe", nsu, status="error", error=msg)
+                # 656 = consumo indevido: a propria mensagem da SEFAZ manda
+                # esperar uma hora. Cinco minutos de folga porque o relogio do
+                # servidor e o dela nao sao o mesmo, e reentrar no limite
+                # renovaria o castigo.
+                ate = (
+                    datetime.now(timezone.utc) + timedelta(hours=1, minutes=5)
+                    if c_stat == "656"
+                    else None
+                )
+                save_cursor(
+                    company_id, "nfe", nsu, status="error", error=msg, bloqueado_ate=ate
+                )
                 raise RuntimeError(msg)
 
             docs = root.findall(".//ns:docZip", NS)
@@ -128,5 +163,7 @@ def sync_empresa_nfe(empresa: EmpresaConfig, company_id: str | None = None) -> S
         save_cursor(company_id, "nfe", nsu, status="error", error=str(exc))
         raise
 
+    # Funcionou: nao ha castigo pendente.
+    limpar_bloqueio(company_id, "nfe")
     save_cursor(company_id, "nfe", nsu, status="ok")
     return SyncResult(capturados=capturados, ultimo_nsu=nsu, alerta_certificado=alerta)
