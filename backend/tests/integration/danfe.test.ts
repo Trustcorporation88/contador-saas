@@ -218,6 +218,43 @@ describe('DANFE — geração', () => {
     expect(resultado.cancelada).toBe(false);
   }, 60000);
 
+  itSeRenderiza('A FORMA QUE A SEFAZ DEVOLVE DE VERDADE: protNFe com prefixo', async () => {
+    // A primeira nota real (12/08/2026, SEFAZ-SP) voltou com namespace MISTURADO:
+    // <NFe> no namespace padrão, sem prefixo, e <ns0:protNFe> com prefixo e
+    // filhos prefixados. O fixture tinha tudo sem prefixo, então esta combinação
+    // — a que acontece em produção — nunca era exercida.
+    //
+    // Funciona porque a busca é por URI de namespace, não por prefixo. Mas
+    // "funciona porque deveria" não é prova: este teste é a prova.
+    // O prefixo entra SÓ dentro do bloco protNFe. Na primeira versão eu apliquei
+    // o regex ao documento inteiro e prefixei também o <tpAmb> de dentro do
+    // <ide>, onde ns0 não está declarado — o XML virou inválido e o gerador
+    // recusou com "Namespace prefix ns0 on tpAmb is not defined". O teste
+    // acusou; o erro era do teste, não do código.
+    const TAGS_DO_PROTOCOLO = 'protNFe|infProt|tpAmb|verAplic|chNFe|dhRecbto|nProt|digVal|cStat|xMotivo';
+    const bloco = XML_AUTORIZADO.match(RE_PROT_NFE)?.[0] as string;
+    expect(bloco).toBeTruthy();
+
+    const blocoComPrefixo = bloco
+      .replace(new RegExp(`<(\\/?)(${TAGS_DO_PROTOCOLO})(\\s|>)`, 'g'), '<$1ns0:$2$3')
+      .replace('<ns0:protNFe', '<ns0:protNFe xmlns:ns0="http://www.portalfiscal.inf.br/nfe"');
+
+    const comPrefixo = XML_AUTORIZADO.replace(bloco, blocoComPrefixo);
+
+    // Sem isto, um fixture futuro sem protNFe faria o teste passar à toa.
+    expect(comPrefixo).toContain('<ns0:protNFe');
+    expect(comPrefixo).toContain('<ns0:cStat>');
+
+    linhaNfe = {
+      id: NOTA, numero: 2, serie: 1, status: 'AUTORIZADA',
+      chave_acesso: '35260811222333000181550010000000011313105101',
+      xml_proc: comPrefixo,
+    };
+
+    const resultado = await DanfeService.gerar(NOTA, EMPRESA);
+    expect(resultado.pdf.subarray(0, 4).toString()).toBe('%PDF');
+  }, 60000);
+
   itSeRenderiza('o nome do arquivo carrega a chave de acesso', async () => {
     // A chave é como o documento é identificado depois — pelo cliente, pelo
     // fisco e pela própria contabilidade. Nome com o id interno não serve.
