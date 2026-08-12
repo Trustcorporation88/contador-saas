@@ -14,6 +14,11 @@ const cnpjCache = new NodeCache({ stdTTL: 86400, checkperiod: 3600 });
 const cpfCache = new NodeCache({ stdTTL: 86400, checkperiod: 3600 });
 
 const BRASIL_API = 'https://brasilapi.com.br/api/cnpj/v1';
+// Terceira fonte, usada só quando o logradouro vem vazio das anteriores. A
+// BrasilAPI e a minhareceita leem o MESMO dump aberto da Receita, então quando
+// aquele registro está sem rua as duas ficam sem — não adianta trocar uma pela
+// outra. O CNPJá mantém base própria e tem o dado nesses casos.
+const CNPJA_OPEN = 'https://open.cnpja.com/office';
 const TRUSTCORP_BASE_URL = (process.env.DOC_LOOKUP_BASE_URL || 'https://cnpj.trustcorp.com.br').replace(/\/+$/, '');
 const TRUSTCORP_TIMEOUT_MS = Number(process.env.DOC_LOOKUP_TIMEOUT_MS || 10000);
 
@@ -383,6 +388,63 @@ function validateCpfDigits(cpf: string): boolean {
   return check === Number(clean[10]);
 }
 
+
+/**
+ * Completa logradouro e número quando as fontes anteriores vieram sem eles.
+ *
+ * Caso real: o CNPJ 43851429000103 (CASA DA CERVEJA) volta da BrasilAPI com
+ * bairro, município, CEP e código IBGE preenchidos e `logradouro: ''`. O
+ * cadastro parecia bem-sucedido, o usuário via a mensagem de endereço
+ * incompleto e tinha de digitar a rua à mão em toda emissão.
+ *
+ * Só é chamada quando falta o logradouro: o CNPJá aberto tem limite de
+ * requisições, e gastá-lo em consultas já completas o esgotaria à toa.
+ *
+ * Nunca lança: é enriquecimento. Falhar aqui devolve o que já se tinha, que é
+ * exatamente o comportamento de antes desta função existir.
+ */
+async function completarEnderecoComCnpja(
+  clean: string,
+  atual: CnpjLookupResult,
+): Promise<CnpjLookupResult> {
+  if (atual.endereco.logradouro) return atual;
+
+  try {
+    const { data } = await axios.get<{
+      address?: {
+        street?: string; number?: string; details?: string; district?: string;
+        city?: string; state?: string; zip?: string;
+      };
+    }>(`${CNPJA_OPEN}/${clean}`, { timeout: 8000, headers: { Accept: 'application/json' } });
+
+    const endereco = data?.address;
+    const logradouro = pickString(endereco?.street);
+    if (!logradouro) return atual;
+
+    logger.info('Endereço completado pelo CNPJá', { cnpj: clean });
+
+    return {
+      ...atual,
+      endereco: {
+        ...atual.endereco,
+        logradouro,
+        // Só preenche o que está faltando: o que veio da Receita tem
+        // precedência sobre a base de terceiro.
+        numero: atual.endereco.numero || pickString(endereco?.number),
+        complemento: atual.endereco.complemento || pickString(endereco?.details),
+        bairro: atual.endereco.bairro || pickString(endereco?.district),
+      },
+      fonte: `${atual.fonte} + CNPJá`,
+    };
+  } catch (erro) {
+    // Limite de requisições, indisponibilidade, CNPJ ausente na base deles.
+    logger.warn('CNPJá não completou o endereço', {
+      cnpj: clean, motivo: (erro as Error).message,
+    });
+    return atual;
+  }
+}
+
 export class CnpjService {
   static async lookup(cnpj: string): Promise<CnpjLookupResult> {
     const clean = sanitizeDigits(cnpj);
@@ -453,16 +515,17 @@ export class CnpjService {
             fonte: `${trustcorpResult.fonte} + ${brasilResult.fonte}`,
             cached: false,
           } satisfies CnpjLookupResult;
-          cnpjCache.set(clean, result);
-          return result;
+          const completo = await completarEnderecoComCnpja(clean, result);
+          cnpjCache.set(clean, completo);
+          return completo;
         } catch {
           // Se a fallback falhar, devolve o que TrustCorp conseguiu mapear.
         }
       }
 
-      const result = trustcorpResult;
-      cnpjCache.set(clean, result);
-      return result;
+      const completo = await completarEnderecoComCnpja(clean, trustcorpResult);
+      cnpjCache.set(clean, completo);
+      return completo;
     } catch (err) {
       const known = err as Error & { status?: number };
       if (known.status && known.status < 500 && known.status !== 429) throw err;
@@ -474,9 +537,9 @@ export class CnpjService {
         timeout: 10000,
         headers: { Accept: 'application/json' },
       });
-      const result = mapBrasilApiResponse(data, false);
-      cnpjCache.set(clean, result);
-      return result;
+      const completo = await completarEnderecoComCnpja(clean, mapBrasilApiResponse(data, false));
+      cnpjCache.set(clean, completo);
+      return completo;
     } catch (err) {
       const axiosErr = err as AxiosError;
       if (axiosErr.response?.status === 404) {
