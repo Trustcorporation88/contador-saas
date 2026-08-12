@@ -5,6 +5,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { NfeService } from '../services/nfeService';
+import { DanfeService } from '../services/danfeService';
 import { NfeStatus, NfeListFilters } from '../models/dtos/nfeDTO';
 import { logger } from '../middleware/requestLogger';
 
@@ -126,6 +127,29 @@ export class NfeController {
     } catch (err: unknown) {
       const e = err as Error & { status?: number };
       if (e.status && e.status < 500) return res.status(e.status).json({ error: e.message });
+      return next(err);
+    }
+  }
+
+  /**
+   * GET /companies/:companyId/nfe/:id/danfe — DANFE em PDF.
+   *
+   * Responde o PDF inline (e não como attachment) porque o uso normal é abrir,
+   * conferir e imprimir; o navegador ainda permite salvar. O nome do arquivo
+   * leva a chave de acesso, que é como o documento é identificado depois.
+   */
+  static async getDanfe(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+    try {
+      const { companyId, id } = req.params;
+      const { pdf, nomeArquivo } = await DanfeService.gerar(id, companyId);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${nomeArquivo}"`);
+      res.setHeader('Content-Length', String(pdf.length));
+      return res.status(200).end(pdf);
+    } catch (err: unknown) {
+      const e = err as Error & { status?: number };
+      if (e.status && e.status < 500) return res.status(e.status).json({ error: e.message });
+      logger.error('DANFE error', { error: (err as Error).message });
       return next(err);
     }
   }

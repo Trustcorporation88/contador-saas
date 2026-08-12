@@ -10,7 +10,16 @@ function normalizeError(err: any): Error {
     (typeof data?.error === "string" && data.error) ||
     err.message ||
     "Erro de conexao com o servidor";
-  return new Error(msg);
+  // status e response seguem anexados ao Error de propósito. Em download com
+  // responseType 'blob' (XML da nota, DANFE), o corpo do erro chega como Blob:
+  // nenhuma das leituras acima encontra a mensagem, e o usuário via só
+  // "Request failed with status code 409" em vez do motivo real. Ler o Blob é
+  // assíncrono e não caberia aqui, então quem chama recupera o texto a partir
+  // de response.data — ver mensagemDeErroDeDownload em services/nfeService.ts.
+  return Object.assign(new Error(msg), {
+    status: err.response?.status,
+    response: err.response,
+  });
 }
 
 const hostname =

@@ -8,6 +8,7 @@
  * POST   /companies/:companyId/nfe/:id/autorizar     — Autorizar (envia ao SEFAZ mock)
  * POST   /companies/:companyId/nfe/:id/cancelar      — Cancelar NF-e autorizada
  * GET    /companies/:companyId/nfe/:id/xml           — Download XML
+ * GET    /companies/:companyId/nfe/:id/danfe         — DANFE em PDF (só nota autorizada)
  */
 
 import { Router } from 'express';
@@ -26,5 +27,6 @@ router.get   ('/:id',             NfeController.get);
 router.post  ('/:id/autorizar',   NfeController.authorize);
 router.post  ('/:id/cancelar',    NfeController.cancel);
 router.get   ('/:id/xml',         NfeController.getXml);
+router.get   ('/:id/danfe',       NfeController.getDanfe);
 
 export default router;
