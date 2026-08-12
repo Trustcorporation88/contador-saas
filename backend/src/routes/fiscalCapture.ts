@@ -33,4 +33,13 @@ router.get('/captures', FiscalCaptureController.listCaptures);
 router.post('/sync', FiscalCaptureController.sync);
 router.post('/reprocess', FiscalCaptureController.reprocess);
 
+/**
+ * Manifestação do destinatário — Ciência da Operação (210210).
+ *
+ * POST porque envia evento à SEFAZ: não é consulta e não é idempotente do ponto
+ * de vista do fisco (o reenvio devolve duplicidade, cStat 573).
+ */
+router.post('/manifestar', FiscalCaptureController.manifestar);
+router.post('/manifestar-resumos', FiscalCaptureController.manifestarResumos);
+
 export default router;
