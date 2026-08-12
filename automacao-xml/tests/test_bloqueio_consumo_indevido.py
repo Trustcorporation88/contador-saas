@@ -291,6 +291,19 @@ class TestManifestacao:
         assert ev_confirmacao.tp_evento == "210200"
         assert ev_confirmacao.tp_evento != manifestar_nfe.TP_EVENTO_CIENCIA
 
+    def test_136_NAO_E_SUCESSO_E_NAO_E_FALHA_DE_ENVIO(self):
+        # cStat 136 = "Evento registrado, mas nao vinculado a NF-e". Foi o que as
+        # 8 manifestacoes desta empresa receberam em 12/08/2026: o evento foi
+        # aceito e nao colou, porque foi enviado ao ambiente de homologacao e as
+        # notas dos fornecedores vivem em producao.
+        #
+        # Nao pode contar como ok (o XML nao sera liberado) nem como falha muda
+        # (o usuario reenviaria para sempre). Vira uma sinalizacao propria.
+        import manifestar_nfe
+        assert "136" in manifestar_nfe.CSTAT_NAO_VINCULADO
+        assert "136" not in manifestar_nfe.CSTAT_OK
+        assert "136" not in manifestar_nfe.CSTAT_JA_MANIFESTADO
+
     def test_573_duplicidade_conta_como_ok(self):
         # Já manifestado antes: o objetivo (liberar o XML) está atingido. Tratar
         # como erro faria o usuário reenviar à toa.

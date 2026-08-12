@@ -39,6 +39,14 @@ router.post('/reprocess', FiscalCaptureController.reprocess);
  * POST porque envia evento à SEFAZ: não é consulta e não é idempotente do ponto
  * de vista do fisco (o reenvio devolve duplicidade, cStat 573).
  */
+/**
+ * Download dos XMLs. O ZIP vem ANTES da rota com :id — Express casa na ordem, e
+ * registrado depois, `/captures/xmls.zip` seria capturado por `/captures/:id`,
+ * que trataria "xmls.zip" como id e responderia 404.
+ */
+router.get('/captures/xmls.zip', FiscalCaptureController.baixarZip);
+router.get('/captures/:id/xml', FiscalCaptureController.baixarXml);
+
 router.post('/manifestar', FiscalCaptureController.manifestar);
 router.post('/manifestar-resumos', FiscalCaptureController.manifestarResumos);
 

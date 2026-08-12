@@ -35,10 +35,30 @@ import { randomUUID } from 'crypto';
 import { getDatabase } from '../config/database';
 import { logger } from '../middleware/requestLogger';
 import { decryptSecret, decryptSecretWithLegacyFallback } from '../utils/certEncryption';
-import { getAmbiente, getAutomationDir, getPythonBin } from './nfeEmitter';
+import { getAutomationDir, getPythonBin } from './nfeEmitter';
 
 const PREFIXO_RESULTADO = 'MANIFEST_RESULT:';
 const SCRIPT = 'manifestar_nfe.py';
+
+/**
+ * Em que ambiente manifestar.
+ *
+ * NÃO é o ambiente de emissão. Escrevi assim na primeira versão — usando
+ * getAmbiente(), que lê NFE_AMBIENTE — e o resultado em produção foi o esperado
+ * para quem erra isso: as 8 notas voltaram com cStat 136, "Evento registrado,
+ * mas não vinculado a NF-e". O evento foi aceito e não colou, porque a nota do
+ * fornecedor vive em PRODUÇÃO e o evento foi para homologação.
+ *
+ * Manifestação tem de ir onde a NOTA está, e a nota está onde a captura a
+ * buscou. Por isso o critério é FISCAL_HOMOLOGACAO — a mesma variável que a
+ * captura usa — e não a da emissão: a emissão pode ficar em homologação por
+ * meses enquanto a captura trabalha com documentos reais.
+ */
+export function ambienteDaManifestacao(): 'homologacao' | 'producao' {
+  const bruto = String(process.env.FISCAL_HOMOLOGACAO || '').toLowerCase();
+  const emHomologacao = ['1', 'true', 'yes'].includes(bruto);
+  return emHomologacao ? 'homologacao' : 'producao';
+}
 
 export interface ManifestacaoResult {
   ok: boolean;
@@ -49,6 +69,8 @@ export interface ManifestacaoResult {
   dhRegEvento?: string;
   /** true quando a SEFAZ respondeu duplicidade: já havia manifestação. */
   ja_manifestado?: boolean;
+  /** cStat 136: evento aceito, mas a nota não existe no ambiente consultado. */
+  nao_vinculado?: boolean;
   xml_evento?: string;
   ambiente?: string;
 }
@@ -204,7 +226,7 @@ export class ManifestacaoService {
       await fs.writeFile(
         payloadFile,
         JSON.stringify({
-          ambiente: getAmbiente(),
+          ambiente: ambienteDaManifestacao(),
           cert_path: certPath,
           cert_senha: certSenha,
           uf: String(company.state).toUpperCase(),
@@ -218,13 +240,30 @@ export class ManifestacaoService {
 
       const resultado = await spawnManifestar(payloadFile);
 
+      const ambiente = ambienteDaManifestacao();
+
       logger.info('Manifestação do destinatário', {
         companyId,
         chave: chaveLimpa,
+        ambiente,
         ok: resultado.ok,
         cStat: resultado.cStat,
         jaManifestado: resultado.ja_manifestado,
+        naoVinculado: resultado.nao_vinculado,
       });
+
+      // cStat 136 merece explicação, não um "falhou" seco. O evento FOI aceito
+      // pela SEFAZ; o que não aconteceu foi a vinculação, porque a nota não
+      // existe no ambiente consultado. Sem esta mensagem o usuário reenvia e
+      // recebe 136 de novo, sem nunca saber que o problema é de ambiente.
+      if (resultado.nao_vinculado) {
+        resultado.motivo = `${resultado.motivo || 'Evento registrado, mas não vinculado à NF-e'} `
+          + `— a nota não existe no ambiente de ${ambiente}. `
+          + (ambiente === 'homologacao'
+            ? 'Notas de fornecedor vivem em produção: remova a variável FISCAL_HOMOLOGACAO '
+              + 'para manifestar no ambiente certo.'
+            : 'Confira se a chave está correta e se a nota é realmente destinada a este CNPJ.');
+      }
 
       if (resultado.ok) {
         await ManifestacaoService.registrarNoMetadata(companyId, chaveLimpa, resultado);

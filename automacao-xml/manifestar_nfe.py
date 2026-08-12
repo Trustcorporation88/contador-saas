@@ -77,6 +77,14 @@ OPERACAO_CIENCIA = 2  # índice que a pynfe usa para 210210
 CSTAT_OK = {"135"}
 CSTAT_JA_MANIFESTADO = {"573"}
 
+# 136 = "Evento registrado, mas nao vinculado a NF-e". O evento FOI aceito; o que
+# nao houve foi a vinculacao, porque a nota nao existe na base consultada. Em
+# 12/08/2026 as 8 manifestacoes desta empresa voltaram 136: o evento foi para
+# homologacao e as notas dos fornecedores vivem em producao. Nao e sucesso — o
+# XML nao sera liberado — mas tambem nao e falha de envio, e a mensagem precisa
+# dizer qual dos dois, senao o usuario reenvia para sempre.
+CSTAT_NAO_VINCULADO = {"136"}
+
 
 def _responder(dados: dict) -> None:
     print(PREFIXO_RESULTADO + json.dumps(dados, ensure_ascii=False))
@@ -163,9 +171,11 @@ def manifestar(payload: dict) -> dict:
         dh = (base.xpath("ns:dhRegEvento/text()", namespaces=ns) or [""])[0]
 
         ja_estava = cstat in CSTAT_JA_MANIFESTADO
+        nao_vinculado = cstat in CSTAT_NAO_VINCULADO
         resultado.update({
             "ok": cstat in CSTAT_OK or ja_estava,
             "ja_manifestado": ja_estava,
+            "nao_vinculado": nao_vinculado,
             "cStat": cstat,
             "motivo": motivo,
             "protocolo": nprot,

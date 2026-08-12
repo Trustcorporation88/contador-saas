@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { FiscalCaptureService } from '../services/fiscalCaptureService';
 import { ManifestacaoService } from '../services/manifestacaoService';
+import { XmlDownloadService } from '../services/xmlDownloadService';
 import { logger } from '../middleware/requestLogger';
 import { PfxValidationError } from '../utils/pfxCertificate';
 
@@ -148,6 +149,66 @@ export class FiscalCaptureController {
         return;
       }
       logger.error('Falha na manifestação', { error: e.message });
+      res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  /** GET /captures/:id/xml — baixa o XML de uma captura. */
+  static async baixarXml(req: Request, res: Response): Promise<void> {
+    try {
+      const { companyId, id } = req.params;
+      const { conteudo, nomeArquivo } = await XmlDownloadService.porId(companyId, id);
+
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
+      res.status(200).send(conteudo);
+    } catch (error) {
+      const e = error as Error & { status?: number };
+      if (e.status && e.status < 500) {
+        res.status(e.status).json({ success: false, error: e.message });
+        return;
+      }
+      res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  /**
+   * GET /captures/xmls.zip?ano=&mes= — todos os XMLs da competência num ZIP.
+   *
+   * É o que um escritório usa no fechamento: a pasta do mês, não arquivo por
+   * arquivo. O ZIP vai em stream — montar tudo em memória antes de responder
+   * derrubaria o processo num mês cheio.
+   */
+  static async baixarZip(req: Request, res: Response): Promise<void> {
+    try {
+      const { companyId } = req.params;
+      const ano = Number(req.query.ano);
+      const mes = Number(req.query.mes);
+
+      const { zip, nomeArquivo, total } = await XmlDownloadService.zipDaCompetencia(companyId, {
+        ano: Number.isFinite(ano) && ano > 2000 ? ano : undefined,
+        mes: Number.isFinite(mes) && mes >= 1 && mes <= 12 ? mes : undefined,
+      });
+
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
+      // Quantos arquivos vão dentro, para o usuário conferir sem abrir o ZIP.
+      res.setHeader('X-Total-Arquivos', String(total));
+
+      zip.pipe(res);
+    } catch (error) {
+      const e = error as Error & { status?: number };
+      if (res.headersSent) {
+        // O stream já começou: não há como trocar por JSON. Encerra e registra —
+        // um ZIP truncado é melhor que uma resposta meio ZIP meio JSON.
+        logger.error('Falha no meio do ZIP de XMLs', { error: e.message });
+        res.end();
+        return;
+      }
+      if (e.status && e.status < 500) {
+        res.status(e.status).json({ success: false, error: e.message });
+        return;
+      }
       res.status(500).json({ success: false, error: e.message });
     }
   }
