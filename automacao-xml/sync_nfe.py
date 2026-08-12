@@ -128,7 +128,13 @@ def sync_empresa_nfe(empresa: EmpresaConfig, company_id: str | None = None) -> S
                 # cStat 137/138 sem docs: fim normal (sem XMLs novos).
                 break
 
+            maior_nsu_docs = 0
             for doc in docs:
+                # Cada docZip carrega o seu NSU. Guardar o maior e a reserva para
+                # quando a resposta nao traz a tag ultNSU — ver o comentario do
+                # calculo de `ultimo_nsu`, logo abaixo do laco.
+                maior_nsu_docs = max(maior_nsu_docs, _nsu_int(doc.attrib.get("NSU")))
+
                 if not doc.text:
                     continue
                 xml_bytes = _decode_doc_zip(doc.text)
@@ -150,7 +156,22 @@ def sync_empresa_nfe(empresa: EmpresaConfig, company_id: str | None = None) -> S
                 ):
                     capturados += 1
 
-            ultimo_nsu = root.findtext(".//ns:ultNSU", namespaces=NS) or nsu
+            # Avanco do cursor, com reserva.
+            #
+            # Era so `ultNSU or nsu`: se a resposta nao trouxesse a tag, o cursor
+            # ficava onde estava, e a proxima consulta pedia tudo desde o mesmo
+            # ponto. Foi o que aconteceu aqui em 12/08/2026 — 8 documentos
+            # capturados e o cursor ainda em 0 — e pedir sempre do zero e
+            # exatamente o que a SEFAZ pune com cStat 656 (consumo indevido).
+            #
+            # A reserva e o maior NSU dos docZip que acabaram de chegar: se
+            # processamos o documento, ja passamos por aquele NSU. Nunca RETROCEDE
+            # (o max com o valor atual), porque cursor andando para tras
+            # reprocessaria tudo e cairia no mesmo castigo.
+            ultimo_nsu_tag = (root.findtext(".//ns:ultNSU", namespaces=NS) or "").strip()
+            candidatos = [_nsu_int(nsu), maior_nsu_docs, _nsu_int(ultimo_nsu_tag)]
+            ultimo_nsu = str(max(candidatos))
+
             max_nsu = root.findtext(".//ns:maxNSU", namespaces=NS)
             save_cursor(company_id, "nfe", ultimo_nsu)
             nsu = ultimo_nsu

@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CloudDownload, FileUp, KeyRound, RefreshCw, ShieldAlert, X } from 'lucide-react';
+import { CloudDownload, FileCheck, FileUp, KeyRound, RefreshCw, ShieldAlert, X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Button } from '../ui/Button';
 import { useAuthStore } from '../../store/authStore';
@@ -141,6 +141,25 @@ export default function FiscalCapturePanel() {
     onSuccess: async (data) => {
       setFormError('');
       setSyncInfo(data.message || 'Captura concluída.');
+      await invalidate();
+    },
+    onError: (error: Error) => {
+      setSyncInfo('');
+      setFormError(error.message);
+    },
+  });
+
+  const manifestarMutation = useMutation({
+    mutationFn: () => FiscalCaptureService.manifestarResumos(20),
+    onSuccess: async (data) => {
+      setFormError('');
+      setSyncInfo(
+        data.total === 0
+          ? 'Nenhum resumo pendente de manifestação.'
+          : `Ciência da Operação enviada: ${data.manifestados} de ${data.total}`
+            + `${data.falhas ? `, ${data.falhas} com falha` : ''}. `
+            + 'Clique em "Capturar XML agora" para baixar os XMLs completos.',
+      );
       await invalidate();
     },
     onError: (error: Error) => {
@@ -416,6 +435,32 @@ export default function FiscalCapturePanel() {
           </div>
           <Button type="button" icon={<CloudDownload className="h-4 w-4" />} loading={syncMutation.isPending} onClick={() => syncMutation.mutate()}>
             Capturar XML agora
+          </Button>
+          {/*
+            Manifestação. Fica ao lado da captura porque é o passo que falta para
+            o XML completo chegar: a SEFAZ entrega só o RESUMO das notas de
+            entrada até o destinatário dar ciência. Sem este botão, o painel
+            enche de "NF-e (resumo)" e não há como escriturar nada.
+          */}
+          <Button
+            type="button"
+            variant="secondary"
+            icon={<FileCheck className="h-4 w-4" />}
+            loading={manifestarMutation.isPending}
+            onClick={() => {
+              const confirmado = window.confirm(
+                'Enviar Ciência da Operação à SEFAZ para as notas de entrada ainda não '
+                + 'manifestadas?\n\n'
+                + 'A Ciência apenas declara que a empresa tomou conhecimento da nota, e é '
+                + 'o que libera o download do XML completo. Ela NÃO confirma a operação '
+                + 'nem impede o emitente de cancelar a nota.\n\n'
+                + 'O evento é registrado na SEFAZ e não se desfaz.',
+              );
+              if (confirmado) manifestarMutation.mutate();
+            }}
+            title="Ciência da Operação (evento 210210) — libera o XML completo das notas de entrada"
+          >
+            Dar ciência (liberar XML)
           </Button>
           <Button
             type="button"

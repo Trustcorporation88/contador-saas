@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { FiscalCaptureService } from '../services/fiscalCaptureService';
+import { ManifestacaoService } from '../services/manifestacaoService';
 import { logger } from '../middleware/requestLogger';
 import { PfxValidationError } from '../utils/pfxCertificate';
 
@@ -119,6 +120,58 @@ export class FiscalCaptureController {
       res.json({ success: true, ...result });
     } catch (error) {
       res.status(500).json({ success: false, error: (error as Error).message });
+    }
+  }
+
+  /**
+   * POST /manifestar — dá Ciência da Operação em UMA nota.
+   *
+   * Erros com status deliberado voltam com a mensagem: manifestação falha por
+   * motivos que o usuário resolve (empresa sem UF, certificado ausente, chave
+   * inválida), e um 500 genérico deixaria ele sem saber o que corrigir.
+   */
+  static async manifestar(req: Request, res: Response): Promise<void> {
+    try {
+      const companyId = req.params.companyId;
+      const chave = String(req.body?.chave ?? '');
+      const resultado = await ManifestacaoService.darCiencia(companyId, chave);
+
+      if (!resultado.ok) {
+        res.status(502).json({ success: false, ...resultado });
+        return;
+      }
+      res.json({ success: true, ...resultado });
+    } catch (error) {
+      const e = error as Error & { status?: number };
+      if (e.status && e.status < 500) {
+        res.status(e.status).json({ success: false, error: e.message });
+        return;
+      }
+      logger.error('Falha na manifestação', { error: e.message });
+      res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  /** POST /manifestar-resumos — dá ciência nos resumos ainda não manifestados. */
+  static async manifestarResumos(req: Request, res: Response): Promise<void> {
+    try {
+      const companyId = req.params.companyId;
+      const limiteBruto = Number(req.body?.limite);
+      const limite = Number.isFinite(limiteBruto) && limiteBruto > 0
+        ? Math.min(limiteBruto, 50)
+        : 20;
+
+      const resultado = await ManifestacaoService.darCienciaNosResumos(companyId, limite);
+
+      logger.info('Manifestação em lote', { companyId, ...resultado, resultados: undefined });
+      res.json({ success: true, ...resultado });
+    } catch (error) {
+      const e = error as Error & { status?: number };
+      if (e.status && e.status < 500) {
+        res.status(e.status).json({ success: false, error: e.message });
+        return;
+      }
+      res.status(500).json({ success: false, error: e.message });
     }
   }
 }

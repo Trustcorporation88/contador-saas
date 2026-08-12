@@ -96,4 +96,24 @@ export const FiscalCaptureService = {
     const { data } = await api.post(companyPath('/reprocess'), {}, { timeout: 300000 });
     return data;
   },
+
+  /**
+   * Ciência da Operação nos resumos ainda não manifestados.
+   *
+   * Timeout largo porque são eventos enviados um a um à SEFAZ, de propósito:
+   * disparar em paralelo contra o Ambiente Nacional é a receita para tomar
+   * consumo indevido.
+   */
+  async manifestarResumos(limite = 20): Promise<{
+    total: number;
+    manifestados: number;
+    falhas: number;
+  }> {
+    const { data } = await api.post(
+      companyPath('/manifestar-resumos'),
+      { limite },
+      { timeout: 600000 },
+    );
+    return data;
+  },
 };

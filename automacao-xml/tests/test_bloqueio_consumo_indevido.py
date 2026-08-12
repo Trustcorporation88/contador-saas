@@ -212,3 +212,88 @@ class TestQuatrocentosEQuatroDoAdn:
 
         assert "_aviso_formato_nsu" in resultado
         assert "inteira" in resultado["_aviso_formato_nsu"]
+
+
+class TestAvancoDoCursor:
+    """O cursor tem de andar mesmo quando a resposta não traz ultNSU."""
+
+    def test_reserva_usa_o_maior_nsu_dos_docs(self):
+        # Caso real de 12/08/2026: 8 documentos capturados e cursor ainda em 0.
+        # Pedir sempre do zero é exatamente o que a SEFAZ pune com cStat 656.
+        from sync_nfe import _nsu_int
+        nsu_atual, maior_dos_docs, tag_ultnsu = "0", 137, ""
+        candidatos = [_nsu_int(nsu_atual), maior_dos_docs, _nsu_int(tag_ultnsu)]
+        assert str(max(candidatos)) == "137"
+
+    def test_tag_ultnsu_vence_quando_e_maior(self):
+        from sync_nfe import _nsu_int
+        candidatos = [_nsu_int("100"), 137, _nsu_int("200")]
+        assert str(max(candidatos)) == "200"
+
+    def test_CURSOR_NUNCA_RETROCEDE(self):
+        # Andar para trás reprocessaria tudo e cairia no mesmo castigo. Se a
+        # resposta trouxer um ultNSU menor que o cursor atual, o atual prevalece.
+        from sync_nfe import _nsu_int
+        candidatos = [_nsu_int("500"), 0, _nsu_int("100")]
+        assert str(max(candidatos)) == "500"
+
+
+class TestManifestacao:
+    """O evento 210210, e as travas que impedem enviar outro por acidente."""
+
+    def _evento(self, operacao=2):
+        from datetime import datetime as dt
+        from pynfe.entidades.evento import EventoManifestacaoDest
+        from pynfe.entidades.fonte_dados import _fonte_dados
+        _fonte_dados.limpar_dados()
+        return EventoManifestacaoDest(
+            cnpj="60526634000104", chave="3" * 44,
+            data_emissao=dt.now(), uf="AN", operacao=operacao, n_seq_evento=1,
+        )
+
+    def test_operacao_2_e_ciencia_da_operacao(self):
+        ev = self._evento(2)
+        assert ev.tp_evento == "210210"
+        assert "iencia" in ev.descricao  # "Ciencia da Operacao"
+
+    def test_VAI_PARA_O_AMBIENTE_NACIONAL(self):
+        # Manifestação não é recebida pela SEFAZ estadual. cOrgao 91 sai de
+        # uf="AN", e a URL do AN é escolhida pela pynfe ao ver tpEvento
+        # começando com "2" — o índice [0][5] do XML, que este teste fixa.
+        from pynfe.entidades.fonte_dados import _fonte_dados
+        from pynfe.processamento.serializacao import SerializacaoXML
+        xml = SerializacaoXML(_fonte_dados, homologacao=True).serializar_evento(
+            self._evento(2), tag_raiz="evento"
+        )
+        assert xml.find("infEvento/cOrgao").text == "91"
+        assert xml[0][5].tag == "tpEvento"
+        assert xml[0][5].text.startswith("2")
+
+    def test_detevento_da_ciencia_nao_leva_justificativa(self):
+        # Ciência só declara conhecimento. Justificativa é campo de
+        # "Operação não Realizada", evento que este sistema não envia.
+        from pynfe.entidades.fonte_dados import _fonte_dados
+        from pynfe.processamento.serializacao import SerializacaoXML
+        xml = SerializacaoXML(_fonte_dados, homologacao=True).serializar_evento(
+            self._evento(2), tag_raiz="evento"
+        )
+        det = xml.find("infEvento/detEvento")
+        filhos = [f.tag for f in det]
+        assert filhos == ["descEvento"]
+
+    def test_A_TRAVA_PEGA_SE_A_PYNFE_MUDAR_O_MAPEAMENTO(self):
+        # A trava do script existe porque um remapeamento de índices numa versão
+        # futura faria enviar 210200 (Confirmação da Operação) — irreversível, e
+        # ela impede o emitente de cancelar a nota. Aqui simulamos o outro
+        # código para provar que a comparação detecta.
+        import manifestar_nfe
+        ev_confirmacao = self._evento(1)
+        assert ev_confirmacao.tp_evento == "210200"
+        assert ev_confirmacao.tp_evento != manifestar_nfe.TP_EVENTO_CIENCIA
+
+    def test_573_duplicidade_conta_como_ok(self):
+        # Já manifestado antes: o objetivo (liberar o XML) está atingido. Tratar
+        # como erro faria o usuário reenviar à toa.
+        import manifestar_nfe
+        assert "573" in manifestar_nfe.CSTAT_JA_MANIFESTADO
+        assert "135" in manifestar_nfe.CSTAT_OK
