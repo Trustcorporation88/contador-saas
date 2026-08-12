@@ -16,7 +16,7 @@ import { Request, Response, NextFunction } from 'express';
 import Redis from 'ioredis';
 import { envConfig } from '../config/env';
 import { logger } from './requestLogger';
-import { buildRedisOptions } from '../services/cache/redisConnection';
+import { buildRedisOptions, redisConfigurado } from '../services/cache/redisConnection';
 
 /**
  * Redis client singleton
@@ -176,11 +176,30 @@ const inMemoryStore = new Map<string, { count: number; resetAt: number }>();
  * @param windowMs - Janela de tempo em millisegundos
  * @returns {allowed, remaining, resetAt} - Resultado da verificação
  */
+/** Para dizer uma vez, e não a cada requisição, que o limite é em memória. */
+let avisouMemoria = false;
+
 async function slidingWindowRateLimit(
   key: string,
   limit: number,
   windowMs: number,
 ): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
+  // Sem Redis configurado, nem tenta conectar. Antes disto a primeira
+  // requisição depois de cada deploy abria conexão para localhost:6379 — que
+  // não existe neste projeto — e despejava quatro linhas de erro mais um
+  // "max retries exceeded" antes de desistir. O limite sempre foi o de
+  // memória; a diferença é não fingir que houve uma falha de infraestrutura.
+  if (!redisConfigurado()) {
+    if (!avisouMemoria) {
+      avisouMemoria = true;
+      logger.info(
+        'Rate limiting em memória: nenhum Redis configurado (defina REDIS_URL para usar Redis). '
+        + 'Os limites passam a valer por instância — com mais de uma réplica, cada uma conta o seu.',
+      );
+    }
+    return inMemoryFallback(key, limit, windowMs);
+  }
+
   const redis = getRedisClient();
   const now = Date.now();
   const windowStart = now - windowMs;

@@ -9,6 +9,7 @@
 
 import { envConfig } from './env';
 import { logger } from '../middleware/requestLogger';
+import { redisConfigurado } from '../services/cache/redisConnection';
 
 /**
  * Validação de segurança do ambiente
@@ -124,8 +125,12 @@ export function validateEnvironmentSecurity(): void {
     warnings.push('DATABASE_PASSWORD is using default value. ' + 'Set a strong random password.');
   }
 
-  // AVISO: Redis password deve estar configurado em produção
-  if (isProd && !envConfig.redis.password) {
+  // AVISO: Redis password deve estar configurado em produção — mas só faz
+  // sentido quando existe Redis. Sem esta condição o log de produção abria com
+  // "REDIS_PASSWORD is empty in production" num projeto que não tem Redis:
+  // aviso impossível de resolver, e aviso que não se resolve a gente aprende a
+  // ignorar junto com os que se resolvem.
+  if (isProd && redisConfigurado() && !envConfig.redis.password) {
     warnings.push('REDIS_PASSWORD is empty in production. ' + 'Secure Redis with a password.');
   }
 
