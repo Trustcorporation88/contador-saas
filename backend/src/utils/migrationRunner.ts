@@ -1141,6 +1141,45 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           console.log('✓ 027_fiscal_class_trib completed');
         },
       },
+      {
+        name: '028_nfe_itens_ipi',
+        up: async (db) => {
+          // O IPI foi implementado na emissão e as colunas nunca existiram. A
+          // NF-e era montada com o grupo IPI no XML, o total da nota já somava
+          // o imposto, e o INSERT em nfe_itens estourava:
+          //   column "aliquota_ipi" of relation "nfe_itens" does not exist
+          //
+          // A emissão inteira respondia 500. Não apareceu antes porque nenhuma
+          // nota havia sido emitida — foi a primeira tentativa real que expôs.
+          //
+          // Pior: havia um comentário no código afirmando que estas colunas
+          // "existiam desde a criação da tabela". Era falso e nunca conferido.
+          // A tabela itens_documentos_fiscais (outra) TEM as colunas de IPI, o
+          // que provavelmente originou a confusão.
+          const temTabela = await db.schema.hasTable('nfe_itens');
+          if (!temTabela) return;
+
+          const adicionar = async (
+            nome: string,
+            definir: (t: Knex.AlterTableBuilder) => void,
+          ): Promise<void> => {
+            if (await db.schema.hasColumn('nfe_itens', nome)) return;
+            console.log(`[MIGRATIONS] Adding nfe_itens.${nome}...`);
+            await db.schema.alterTable('nfe_itens', definir);
+          };
+
+          // CST do IPI: '50' tributado, '51' isento, etc. Nullable porque quem
+          // não é contribuinte de IPI não destaca o imposto, e a AUSÊNCIA do
+          // grupo na nota é o correto — diferente de destacar zero.
+          await adicionar('cst_ipi', (t) => t.string('cst_ipi', 2).nullable());
+          await adicionar('aliquota_ipi', (t) => t.decimal('aliquota_ipi', 7, 4).nullable().defaultTo(0));
+          await adicionar('valor_ipi', (t) => t.decimal('valor_ipi', 15, 2).nullable().defaultTo(0));
+          // cEnq: código de enquadramento legal. 999 = tributação normal.
+          await adicionar('codigo_enquadramento_ipi', (t) => t.string('codigo_enquadramento_ipi', 3).nullable());
+
+          console.log('✓ 028_nfe_itens_ipi completed');
+        },
+      },
     ];
 
     for (const migration of migrations) {
