@@ -8,6 +8,20 @@ import { getDatabase } from '../config/database';
 import { DASService } from './dasService';
 import { logger } from '../middleware/requestLogger';
 
+/**
+ * Monta uma linha única com o que importa para diagnosticar: mensagem, código
+ * SQLSTATE e a tabela/coluna que o Postgres apontou. `42P01` é "relation does
+ * not exist" e foi a causa das falhas diárias deste scheduler.
+ */
+function descreverErro(err: unknown): string {
+  const e = err as { message?: string; code?: string; table?: string; column?: string };
+  const partes = [e?.message ?? String(err)];
+  if (e?.code) partes.push(`code=${e.code}`);
+  if (e?.table) partes.push(`table=${e.table}`);
+  if (e?.column) partes.push(`column=${e.column}`);
+  return partes.join(' | ');
+}
+
 export class DASScheduler {
   /**
    * Executa geração automática de DAS para o mês corrente
@@ -146,8 +160,13 @@ export class DASScheduler {
 
       logger.info('[DAS_SCHEDULER] DAS marcados como vencidos', { count: resultado });
     } catch (err) {
-      logger.error('[DAS_SCHEDULER] Erro ao atualizar vencidos', {
+      // A mensagem sozinha some no agregador de logs do Railway, que exibe só a
+      // string do `message` e descarta os metadados do winston. Este cron falhou
+      // silenciosamente todo dia até alguém abrir o banco e ver que a tabela nem
+      // existia. O detalhe vai concatenado na própria mensagem, de propósito.
+      logger.error(`[DAS_SCHEDULER] Erro ao atualizar vencidos: ${descreverErro(err)}`, {
         erro: (err as Error).message,
+        stack: (err as Error).stack,
       });
     }
   }
@@ -199,9 +218,10 @@ export class DASScheduler {
 
       logger.info('[DAS_SCHEDULER] Verificação de vencimentos próximos concluída');
     } catch (err) {
-      logger.error('[DAS_SCHEDULER] Erro ao verificar vencimentos próximos', {
-        erro: (err as Error).message,
-      });
+      logger.error(
+        `[DAS_SCHEDULER] Erro ao verificar vencimentos próximos: ${descreverErro(err)}`,
+        { erro: (err as Error).message, stack: (err as Error).stack },
+      );
     }
   }
 

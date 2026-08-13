@@ -8,6 +8,7 @@ import { Knex } from 'knex';
 import { up as upContasReceber } from '../migrations/add_contas_receber';
 import { up as upContasPagar } from '../migrations/add_contas_pagar';
 import { up as upEfdTables } from '../migrations/add_efd_tables';
+import { up as upDasBoletos } from '../migrations/add_das_boletos';
 
 // Track which migrations have been run
 const executedMigrations = new Set<string>();
@@ -1178,6 +1179,125 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
           await adicionar('codigo_enquadramento_ipi', (t) => t.string('codigo_enquadramento_ipi', 3).nullable());
 
           console.log('✓ 028_nfe_itens_ipi completed');
+        },
+      },
+      {
+        // As tabelas de DAS existiam apenas em src/migrations/add_das_boletos.ts,
+        // que NINGUÉM importava. No Postgres antigo elas tinham sido criadas na
+        // mão (ver create_missing_tables.sql / fix_missing_tables.sql na raiz);
+        // ao migrar para o Supabase isso não veio junto, e os três crons de DAS
+        // passaram a falhar todo dia contra tabela inexistente.
+        name: '029_das_tables',
+        up: async (db) => {
+          const jaExiste = await db.schema.hasTable('das_boletos');
+          if (jaExiste) {
+            console.log('[MIGRATIONS] Skipping 029_das_tables (already exists)');
+            return;
+          }
+          // upDasBoletos usa createTable sem guarda própria — por isso a checagem
+          // acima é obrigatória, senão o boot quebra em ambiente já migrado.
+          await upDasBoletos(db);
+          console.log('✓ 029_das_tables completed');
+        },
+      },
+      {
+        name: '030_recurring_transactions',
+        up: async (db) => {
+          const jaExiste = await db.schema.hasTable('recurring_transactions');
+          if (jaExiste) {
+            console.log('[MIGRATIONS] Skipping 030_recurring_transactions (already exists)');
+            return;
+          }
+
+          // Não reaproveita 010_create_recurring_transactions.sql: aquele arquivo
+          // declara created_by_id UUID REFERENCES users(id), e neste banco
+          // users.id é VARCHAR — a FK é rejeitada com 42804 (tipos incompatíveis).
+          await db.schema.createTable('recurring_transactions', (table) => {
+            table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+            table
+              .uuid('company_id')
+              .notNullable()
+              .references('id')
+              .inTable('companies')
+              .onDelete('CASCADE');
+            table.string('description', 255).notNullable();
+            table.decimal('amount', 15, 2).notNullable();
+            table.uuid('debit_account_id').notNullable().references('id').inTable('accounts');
+            table.uuid('credit_account_id').notNullable().references('id').inTable('accounts');
+            table.string('frequency', 50).notNullable();
+            table.date('start_date').notNullable();
+            table.date('end_date').nullable();
+            table.boolean('is_active').defaultTo(true);
+            table.date('next_execution_date').nullable();
+            table.string('created_by_id', 255).nullable().references('id').inTable('users');
+            table.timestamp('created_at', { useTz: true }).defaultTo(db.fn.now());
+            table.timestamp('updated_at', { useTz: true }).defaultTo(db.fn.now());
+            table.index(['company_id', 'is_active']);
+            table.index(['next_execution_date', 'is_active']);
+            table.index('frequency');
+          });
+
+          await db.raw(`
+            ALTER TABLE recurring_transactions
+              ADD CONSTRAINT amount_positivo CHECK (amount > 0),
+              ADD CONSTRAINT valid_date_range CHECK (start_date <= end_date OR end_date IS NULL),
+              ADD CONSTRAINT different_accounts CHECK (debit_account_id <> credit_account_id),
+              ADD CONSTRAINT frequency_valida CHECK (frequency IN ('DIARIO','MENSAL','ANUAL'))
+          `);
+
+          await db.schema.createTable('recurring_transaction_executions', (table) => {
+            table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+            table
+              .uuid('recurring_transaction_id')
+              .notNullable()
+              .references('id')
+              .inTable('recurring_transactions')
+              .onDelete('CASCADE');
+            table.date('execution_date').notNullable();
+            table.uuid('journal_entry_id').nullable().references('id').inTable('journal_entries');
+            table.string('status', 50).notNullable();
+            table.text('error_message').nullable();
+            table.integer('retry_count').defaultTo(0);
+            table.timestamp('executed_at', { useTz: true }).nullable();
+            table.timestamp('created_at', { useTz: true }).defaultTo(db.fn.now());
+            table.index('recurring_transaction_id');
+            table.index('status');
+            table.index('execution_date');
+            table.index('created_at');
+          });
+
+          await db.raw(`
+            ALTER TABLE recurring_transaction_executions
+              ADD CONSTRAINT status_valido CHECK (status IN ('pending','success','failed')),
+              ADD CONSTRAINT execution_success_needs_entry CHECK (
+                (status = 'success' AND journal_entry_id IS NOT NULL) OR (status <> 'success')
+              )
+          `);
+
+          console.log('✓ 030_recurring_transactions completed');
+        },
+      },
+      {
+        // Toda tabela criada pelo Knex nasce SEM RLS, e o Supabase publica o
+        // schema public via PostgREST para a chave anon (que é pública, vai no
+        // frontend). Sem esta varredura, cada migration nova reabre o buraco que
+        // o scripts/supabase-blindar-tabelas.sql fechou uma vez só.
+        // Roda sempre, é idempotente e só toca no que ainda está sem RLS.
+        name: '031_rls_em_tabelas_novas',
+        up: async (db) => {
+          const { rows } = await db.raw(`
+            SELECT c.relname AS tabela
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = 'public'
+               AND c.relkind = 'r'
+               AND c.relrowsecurity = false
+          `);
+          for (const linha of rows as Array<{ tabela: string }>) {
+            await db.raw(`ALTER TABLE public.?? ENABLE ROW LEVEL SECURITY`, [linha.tabela]);
+            console.log(`[MIGRATIONS] RLS habilitado: ${linha.tabela}`);
+          }
+          console.log(`✓ 031_rls_em_tabelas_novas completed (${rows.length} tabela(s))`);
         },
       },
     ];

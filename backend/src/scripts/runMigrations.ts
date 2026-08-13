@@ -17,7 +17,11 @@ async function main() {
     client: 'pg',
     connection: {
       connectionString: url,
-      ssl: url.includes('railway') || url.includes('rlwy.net') ? { rejectUnauthorized: false } : false,
+      // A heurística antiga só ligava SSL para host do Railway. Com o banco no
+      // Supabase (que exige TLS) este script conectava sem SSL e falhava — foi
+      // por isso que migration virou "rodar SQL na mão no painel". Agora o
+      // padrão é SSL para qualquer host remoto, e só localhost fica sem.
+      ssl: /(^|@)(localhost|127\.0\.0\.1)/.test(url) ? false : { rejectUnauthorized: false },
     },
   } as any);
 

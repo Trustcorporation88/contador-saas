@@ -67,7 +67,16 @@ function startBackgroundJobs(): void {
       logger.info('[CRON] Recurring transactions execution completed', report);
       console.log(`[CRON] Recorrências: ${report.success} sucesso, ${report.failed} falhas`);
     } catch (error) {
-      logger.error('Recurring Transaction Scheduler: execution failed', { error });
+      // `{ error }` vira "[object Object]" no coletor de logs do Railway, que só
+      // mostra a string da mensagem. Este cron falhou todo dia sem revelar a
+      // causa (era tabela inexistente). A causa vai na mensagem.
+      const e = error as { message?: string; code?: string; table?: string };
+      const detalhe = [e?.message ?? String(error), e?.code && `code=${e.code}`, e?.table && `table=${e.table}`]
+        .filter(Boolean)
+        .join(' | ');
+      logger.error(`Recurring Transaction Scheduler: execution failed: ${detalhe}`, {
+        stack: (error as Error)?.stack,
+      });
     }
   });
 
