@@ -63,6 +63,10 @@ export default function NfeEmissaoPage() {
 
   // Destinatário
   const [destCpfCnpj, setDestCpfCnpj] = useState('');
+  // Contingência é decisão consciente do operador, nunca automática: usar com a
+  // SEFAZ no ar é irregularidade, e a justificativa vai gravada no XML.
+  const [contingenciaAtiva, setContingenciaAtiva] = useState(false);
+  const [contingenciaJust, setContingenciaJust] = useState('');
   const [destDataNascimento, setDestDataNascimento] = useState('');
   const [destNome, setDestNome] = useState('');
   const [destEmail, setDestEmail] = useState('');
@@ -187,7 +191,11 @@ export default function NfeEmissaoPage() {
       }
 
       const criada = await NfeService.create(companyId, payload);
-      return NfeService.authorize(companyId, criada.id);
+      return NfeService.authorize(
+        companyId,
+        criada.id,
+        contingenciaAtiva ? contingenciaJust.trim() : undefined,
+      );
     },
     onSuccess: async (nfe) => {
       setErro('');
@@ -225,6 +233,13 @@ export default function NfeEmissaoPage() {
   });
 
   const validar = (): string | null => {
+    if (contingenciaAtiva) {
+      const j = contingenciaJust.trim();
+      if (j.length < 20) {
+        return 'Descreva o motivo da contingência com pelo menos 20 caracteres (exigência da SEFAZ).';
+      }
+      if (j.length > 256) return 'A justificativa da contingência passa de 256 caracteres.';
+    }
     if (destCpfCnpj.replace(/\D/g, '').length < 11) return 'Informe um CPF/CNPJ válido do destinatário.';
     if (!destNome.trim()) return 'Informe a razão social / nome do destinatário.';
     const log = cleanAddr(logradouro);
@@ -641,6 +656,44 @@ export default function NfeEmissaoPage() {
           </div>
         </div>
       )}
+
+      {/* Contingência */}
+      <section className="card space-y-3 p-5">
+        <label className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={contingenciaAtiva}
+            onChange={(e) => setContingenciaAtiva(e.target.checked)}
+          />
+          <span>
+            <span className="text-sm font-semibold text-gray-800">
+              Emitir em contingência (SEFAZ Virtual)
+            </span>
+            <span className="block text-xs text-gray-500">
+              Use apenas quando a SEFAZ do estado estiver fora do ar. A nota é
+              autorizada por outra SEFAZ, vale normalmente e não precisa ser
+              reemitida depois.
+            </span>
+          </span>
+        </label>
+
+        {contingenciaAtiva && (
+          <div className="space-y-2">
+            <Input
+              label="Motivo da contingência"
+              value={contingenciaJust}
+              hint={`${contingenciaJust.trim().length}/256 — mínimo de 20 caracteres. Este texto vai gravado no XML da nota.`}
+              placeholder="Ex.: SEFAZ SP indisponivel desde 09h, conforme consulta de status do servico"
+              onChange={(e) => setContingenciaJust(e.target.value)}
+            />
+            <p className="rounded bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Emitir em contingência com a SEFAZ funcionando é irregularidade. A
+              justificativa fica registrada no documento fiscal.
+            </p>
+          </div>
+        )}
+      </section>
 
       {/* Destinatário */}
       <section className="card space-y-4 p-5">

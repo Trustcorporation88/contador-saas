@@ -88,7 +88,16 @@ export class NfeController {
   static async authorize(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
     try {
       const { companyId, id } = req.params;
-      const nfe = await NfeService.authorize(id, companyId);
+      const { contingencia } = (req.body ?? {}) as { contingencia?: string };
+      if (contingencia !== undefined) {
+        const texto = String(contingencia).trim();
+        if (texto.length < 20 || texto.length > 256) {
+          return res.status(422).json({
+            error: 'A justificativa da contingência deve ter de 20 a 256 caracteres.',
+          });
+        }
+      }
+      const nfe = await NfeService.authorize(id, companyId, contingencia);
       return res.status(200).json(nfe);
     } catch (err: unknown) {
       const e = err as Error & { status?: number };

@@ -164,8 +164,20 @@ export class NfeService {
     return data;
   }
 
-  static async authorize(companyId: string, id: string): Promise<NfeRecord> {
-    const { data } = await api.post<NfeRecord>(`${this.base(companyId)}/${id}/autorizar`, {});
+  /**
+   * @param contingencia justificativa da entrada em contingência. Enviada só
+   * quando o operador liga a contingência: a nota passa a ser autorizada pela
+   * SEFAZ Virtual, e a justificativa fica gravada no XML.
+   */
+  static async authorize(
+    companyId: string,
+    id: string,
+    contingencia?: string,
+  ): Promise<NfeRecord> {
+    const { data } = await api.post<NfeRecord>(
+      `${this.base(companyId)}/${id}/autorizar`,
+      contingencia ? { contingencia } : {},
+    );
     return data;
   }
 

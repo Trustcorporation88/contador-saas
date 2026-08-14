@@ -24,6 +24,7 @@
 
 import { randomUUID } from 'crypto';
 import { getDatabase } from '../config/database';
+import { resolverSvc } from './svcContingencia';
 import { logger } from '../middleware/requestLogger';
 import {
   CreateNfeDTO,
@@ -39,6 +40,7 @@ import {
   getEmissionMode,
   getAmbiente,
   verificarNumeracaoSefaz,
+  type ContingenciaOpts,
   crtFromRegime,
 } from './nfeEmitter';
 
@@ -1154,7 +1156,17 @@ export class NfeService {
    * AUTORIZADA nem podia ser cancelada, já que cancel() exige AUTORIZADA),
    * e o número/série ficava bloqueado sem nenhuma saída para o usuário.
    */
-  static async authorize(id: string, companyId: string): Promise<NfeRecord> {
+  /**
+   * @param contingencia justificativa da entrada em contingencia. Presente =
+   * a nota vai para a SEFAZ Virtual em vez da SEFAZ da UF. E decisao do
+   * operador, nunca automatica: usar contingencia com a SEFAZ no ar e
+   * irregularidade, e a justificativa fica gravada no XML.
+   */
+  static async authorize(
+    id: string,
+    companyId: string,
+    contingencia?: string,
+  ): Promise<NfeRecord> {
     const db = await getDatabase();
     const nfe = await db('nfe').where({ id, company_id: companyId }).first();
     if (!nfe) throw Object.assign(new Error('NF-e não encontrada'), { status: 404 });
@@ -1206,7 +1218,13 @@ export class NfeService {
 
       let result;
       try {
-        result = await emitirNfeReal(company, nfe, itens);
+        let opcoesContingencia: ContingenciaOpts | undefined;
+        if (contingencia) {
+          // resolverSvc recusa UF divergente em vez de chutar (svcContingencia.ts).
+          const { svc, tpEmis } = resolverSvc(String(company.state || ''));
+          opcoesContingencia = { svc, tp_emis: tpEmis, justificativa: contingencia.trim() };
+        }
+        result = await emitirNfeReal(company, nfe, itens, opcoesContingencia);
       } catch (error) {
         await NfeService.liberarTravaTransmissao(id, companyId);
         throw error;
