@@ -225,6 +225,13 @@ export function validarEmitente(company: CompanyRow): void {
   }
 }
 
+/** Contingencia SVC: os tres campos andam juntos (ver svcContingencia.ts). */
+export type ContingenciaOpts = {
+  svc: 'SVC-AN' | 'SVC-RS';
+  tp_emis: 6 | 7;
+  justificativa: string;
+};
+
 export function buildPayload(
   company: CompanyRow,
   nfe: NfeRow,
@@ -232,6 +239,7 @@ export function buildPayload(
   ambiente: string,
   certPath: string,
   certSenha: string,
+  contingencia?: ContingenciaOpts,
 ): Record<string, unknown> {
   const crt = crtFromRegime(company.tax_regime, company.crt);
   const simples = crt === '1';
@@ -282,6 +290,9 @@ export function buildPayload(
 
   return {
     ambiente,
+    // Ausente = emissao normal (tpEmis 1). Presente = SVC, e o Python valida a
+    // coerencia entre tp_emis, svc e justificativa antes de assinar.
+    ...(contingencia ? { contingencia } : {}),
     modelo: nfe.modelo,
     numero: nfe.numero,
     serie: nfe.serie,
@@ -443,6 +454,7 @@ export async function emitirNfeReal(
   company: CompanyRow,
   nfe: NfeRow,
   itens: NfeItemRow[],
+  contingencia?: ContingenciaOpts,
 ): Promise<NfeEmissionResult> {
   const db = await getDatabase();
   const ambiente = getAmbiente();
@@ -466,7 +478,7 @@ export async function emitirNfeReal(
     cert.pfx_data ? decryptSecretWithLegacyFallback(cert.pfx_data as string) : null,
   );
 
-  const payload = buildPayload(company, nfe, itens, ambiente, certPath, certSenha);
+  const payload = buildPayload(company, nfe, itens, ambiente, certPath, certSenha, contingencia);
 
   const payloadFile = path.join(os.tmpdir(), `nfe-payload-${randomUUID()}.json`);
   await escreverPayloadSeguro(payloadFile, payload);

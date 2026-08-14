@@ -173,7 +173,11 @@ def _construir_nota(payload: dict):
         tipo_documento=1,            # 1 = saída
         municipio=str(emit["cod_municipio"]),
         tipo_impressao_danfe=1,      # 1 = DANFE normal retrato
-        forma_emissao="1",           # 1 = normal
+        # 1 = normal · 6 = SVC-AN · 7 = SVC-RS. Precisa ser string: a pynfe so
+        # sobrescreve o valor quando ele e exatamente "1" (linha ~1479 da
+        # serializacao, que forca "9" para o offline da NFC-e). Passando 6 ou 7
+        # explicitamente, o valor atravessa intacto — que e o comportamento certo.
+        forma_emissao=str(payload.get("contingencia", {}).get("tp_emis") or 1),
         cliente_final=int(payload.get("cliente_final", 1)),
         indicador_destino=int(payload.get("indicador_destino", 1)),
         indicador_presencial=int(payload.get("indicador_presencial", 1)),
@@ -370,7 +374,12 @@ def montar_xml(payload: dict, retorna_string: bool = False):
 
     homologacao = str(payload.get("ambiente", "homologacao")).lower() != "producao"
     _construir_nota(payload)
-    serializador = SerializacaoXML(_fonte_dados, homologacao=homologacao)
+    # A justificativa liga a emissao de dhCont e xJust no bloco <ide>. Sem ela a
+    # SEFAZ rejeita nota com tpEmis de contingencia.
+    justificativa = (payload.get("contingencia") or {}).get("justificativa")
+    serializador = SerializacaoXML(
+        _fonte_dados, homologacao=homologacao, contingencia=justificativa
+    )
     arvore = serializador.exportar(retorna_string=False)
 
     if formaPagamento_do_payload(payload) == "90":
@@ -399,13 +408,34 @@ def _emitir(payload: dict) -> dict:
     # numérico 55/65. São conversões independentes — não trocar uma pela outra.
     modelo = modelo_pynfe(payload.get("modelo", 55))
 
+    # Guarda de coerencia: os tres andam juntos ou nao anda nenhum. Emitir com
+    # tpEmis 6/7 sem xJust, ou mandar para a SVC sem trocar o tpEmis, resulta em
+    # rejeicao — e sempre no pior momento, porque contingencia so roda quando a
+    # SEFAZ da UF ja caiu.
+    if conting:
+        tp = int(conting.get("tp_emis") or 0)
+        just = (conting.get("justificativa") or "").strip()
+        if tp not in (6, 7):
+            raise ValueError("Contingencia exige tp_emis 6 (SVC-AN) ou 7 (SVC-RS).")
+        if conting.get("svc") not in ("SVC-AN", "SVC-RS"):
+            raise ValueError("Contingencia exige svc igual a SVC-AN ou SVC-RS.")
+        if (tp == 6) != (conting.get("svc") == "SVC-AN"):
+            raise ValueError("tp_emis e svc incompativeis: 6=SVC-AN, 7=SVC-RS.")
+        if len(just) < 20 or len(just) > 256:
+            raise ValueError("Justificativa da contingencia deve ter de 20 a 256 caracteres.")
+
     # Serialização -> assinatura -> transmissão
     xml = montar_xml(payload)
 
     assinatura = AssinaturaA1(cert_path, cert_senha)
     xml_assinado = assinatura.assinar(xml)
 
-    con = ComunicacaoSefaz(uf, cert_path, cert_senha, homologacao)
+    # Em contingencia a nota NAO vai para a SEFAZ da UF (que esta fora do ar) e
+    # sim para a SEFAZ Virtual. A pynfe ja traz "SVC-AN" e "SVC-RS" na tabela de
+    # webservices, entao basta passar o autorizador no lugar da UF.
+    conting = payload.get("contingencia") or {}
+    autorizador = conting.get("svc") or uf
+    con = ComunicacaoSefaz(autorizador, cert_path, cert_senha, homologacao)
     envio = con.autorizacao(modelo=modelo, nota_fiscal=xml_assinado)
 
     ns = {"ns": NAMESPACE_NFE}
