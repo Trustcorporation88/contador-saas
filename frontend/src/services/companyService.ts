@@ -136,9 +136,11 @@ export const CompanyService = {
     return data;
   },
 
-  async lookupDocumento(documento: string): Promise<DocumentoLookupResult> {
+  async lookupDocumento(documento: string, dataNascimento?: string): Promise<DocumentoLookupResult> {
     const clean = documento.replace(/\D/g, '');
-    const { data } = await api.get<DocumentoLookupResult>(`/cnpj/documento/${clean}`);
+    // A Receita so responde consulta de CPF com data de nascimento junto.
+    const params = dataNascimento ? { 'data-nascimento': dataNascimento } : undefined;
+    const { data } = await api.get<DocumentoLookupResult>(`/cnpj/documento/${clean}`, { params });
     return data;
   },
 

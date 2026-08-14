@@ -63,6 +63,7 @@ export default function NfeEmissaoPage() {
 
   // Destinatário
   const [destCpfCnpj, setDestCpfCnpj] = useState('');
+  const [destDataNascimento, setDestDataNascimento] = useState('');
   const [destNome, setDestNome] = useState('');
   const [destEmail, setDestEmail] = useState('');
   const [destIe, setDestIe] = useState('');
@@ -497,7 +498,10 @@ export default function NfeEmissaoPage() {
     setCnpjLookupLoading(true);
     setCnpjLookupInfo('');
     try {
-      const data: DocumentoLookupResult = await CompanyService.lookupDocumento(documento);
+      const data: DocumentoLookupResult = await CompanyService.lookupDocumento(
+        documento,
+        documento.length === 11 ? destDataNascimento : undefined,
+      );
 
       if (data.tipo === 'cnpj') {
         if (data.razao_social) setDestNome(data.razao_social);
@@ -539,8 +543,15 @@ export default function NfeEmissaoPage() {
         if (end?.cep) setCep(end.cep);
         setCnpjLookupInfo('CPF consultado: nome e endereço preenchidos quando disponíveis.');
       }
-    } catch {
-      setCnpjLookupInfo('Não foi possível consultar esse documento agora. Você pode preencher manualmente.');
+    } catch (err) {
+      // Mostrar a mensagem do servidor importa: "informe a data de nascimento"
+      // e "CPF nao encontrado com essa data" pedem acao diferente do usuario, e
+      // engolir as duas num aviso generico deixava a pessoa sem saber o que fazer.
+      const resposta = (err as { response?: { data?: { error?: string } } }).response;
+      setCnpjLookupInfo(
+        resposta?.data?.error ||
+          'Não foi possível consultar esse documento agora. Você pode preencher manualmente.',
+      );
     } finally {
       setCnpjLookupLoading(false);
     }
@@ -649,6 +660,19 @@ export default function NfeEmissaoPage() {
             }}
             onBlur={preencherDestinatarioPorDocumento}
           />
+          {destCpfCnpj.replace(/\D/g, '').length === 11 && (
+            <Input
+              label="Data de nascimento"
+              type="date"
+              value={destDataNascimento}
+              hint="Obrigatória: a Receita só consulta CPF com a data de nascimento."
+              onChange={(e) => {
+                setDestDataNascimento(e.target.value);
+                setCnpjLookupInfo('');
+              }}
+              onBlur={preencherDestinatarioPorDocumento}
+            />
+          )}
           <Input label="Razão social / Nome" value={destNome} onChange={(e) => setDestNome(e.target.value)} />
           <Input label="E-mail" type="email" value={destEmail} onChange={(e) => setDestEmail(e.target.value)} />
           <Input
