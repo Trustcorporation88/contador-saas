@@ -19,8 +19,36 @@ const BRASIL_API = 'https://brasilapi.com.br/api/cnpj/v1';
 // aquele registro está sem rua as duas ficam sem — não adianta trocar uma pela
 // outra. O CNPJá mantém base própria e tem o dado nesses casos.
 const CNPJA_OPEN = 'https://open.cnpja.com/office';
-const TRUSTCORP_BASE_URL = (process.env.DOC_LOOKUP_BASE_URL || 'https://cnpj.trustcorp.com.br').replace(/\/+$/, '');
+const TRUSTCORP_BASE_URL = (process.env.DOC_LOOKUP_BASE_URL || '').replace(/\/+$/, '');
 const TRUSTCORP_TIMEOUT_MS = Number(process.env.DOC_LOOKUP_TIMEOUT_MS || 10000);
+const TRUSTCORP_ACCESS_KEY = process.env.DOC_LOOKUP_ACCESS_KEY?.trim() || '';
+/**
+ * Caminho da API, com {documento} onde entra o numero. Ex.: /api/v1/cnpj/{documento}
+ *
+ * Precisa ser EXPLICITO. Antes o codigo chutava nove caminhos diferentes ate um
+ * responder — e o problema e que cnpj.trustcorp.com.br e um app de pagina unica:
+ * ele devolve HTTP 200 com o MESMO HTML para qualquer caminho. Os nove "davam
+ * certo", o mapper lia propriedade de string (undefined em tudo) e o resultado
+ * era cadastro vazio, gravado em cache por 24h. Era essa a causa das notas
+ * saindo sem os dados do destinatario.
+ */
+const TRUSTCORP_PATH_CNPJ = process.env.DOC_LOOKUP_PATH_CNPJ?.trim() || '';
+const TRUSTCORP_PATH_CPF = process.env.DOC_LOOKUP_PATH_CPF?.trim() || '';
+
+function lookupUrl(tipo: 'cnpj' | 'cpf', documento: string): string | null {
+  const path = tipo === 'cnpj' ? TRUSTCORP_PATH_CNPJ : TRUSTCORP_PATH_CPF;
+  if (!TRUSTCORP_BASE_URL || !path) return null;
+  return TRUSTCORP_BASE_URL + (path.startsWith('/') ? path : `/${path}`)
+    .replace('{documento}', documento);
+}
+
+/**
+ * Resposta util e OBJETO JSON. String (HTML de SPA, pagina de erro, portal de
+ * captura de wi-fi) nao e dado, e tratar como dado foi exatamente o bug.
+ */
+function ehJson(raw: unknown): raw is Record<string, unknown> {
+  return Boolean(raw) && typeof raw === 'object' && !Array.isArray(raw);
+}
 
 export interface CnpjLookupResult {
   cnpj: string;
@@ -326,51 +354,58 @@ function mapTrustcorpCpfResponse(raw: unknown, documento: string, cached: boolea
   };
 }
 
-function trustcorpCandidates(tipo: 'cnpj' | 'cpf', documento: string): string[] {
-  const base = TRUSTCORP_BASE_URL;
-  return [
-    `${base}/api/v1/${tipo}/${documento}`,
-    `${base}/api/${tipo}/${documento}`,
-    `${base}/${tipo}/${documento}`,
-    `${base}/api/v1/consulta?tipo=${tipo}&documento=${documento}`,
-    `${base}/api/consulta?tipo=${tipo}&documento=${documento}`,
-    `${base}/consulta?tipo=${tipo}&documento=${documento}`,
-    `${base}/api/v1/busca/${documento}`,
-    `${base}/api/busca/${documento}`,
-    `${base}/busca/${documento}`,
-  ];
-}
-
 async function fetchFromTrustcorp(tipo: 'cnpj' | 'cpf', documento: string): Promise<unknown> {
-  const urls = trustcorpCandidates(tipo, documento);
-  let lastError: AxiosError | null = null;
+  const url = lookupUrl(tipo, documento);
+  if (!url) {
+    throw Object.assign(
+      new Error(`Consulta ${tipo.toUpperCase()} por provedor proprio nao configurada.`),
+      { status: 501 },
+    );
+  }
 
-  for (const url of urls) {
-    try {
-      logger.info('TrustCorp lookup attempt', { tipo, documento, url });
-      const { data } = await axios.get(url, {
-        timeout: TRUSTCORP_TIMEOUT_MS,
-        headers: { Accept: 'application/json' },
+  try {
+    const { data } = await axios.get(url, {
+      timeout: TRUSTCORP_TIMEOUT_MS,
+      headers: {
+        Accept: 'application/json',
+        ...(TRUSTCORP_ACCESS_KEY
+          ? {
+              Authorization: `Bearer ${TRUSTCORP_ACCESS_KEY}`,
+              'x-api-key': TRUSTCORP_ACCESS_KEY,
+            }
+          : {}),
+      },
+      // Sem isto, HTML de 200 passa como se fosse resposta valida.
+      validateStatus: (status) => status >= 200 && status < 300,
+    });
+
+    if (!ehJson(data)) {
+      logger.warn('Provedor de consulta respondeu algo que nao e JSON', {
+        tipo,
+        url,
+        amostra: typeof data === 'string' ? data.slice(0, 80) : typeof data,
       });
-      return data;
-    } catch (err) {
-      const axiosErr = err as AxiosError;
-      lastError = axiosErr;
-      const status = axiosErr.response?.status;
-      if (status === 404) continue;
-      if (status && status < 500 && status !== 429) {
-        throw Object.assign(new Error(`Consulta ${tipo.toUpperCase()} recusada pelo provedor.`), { status });
-      }
+      throw Object.assign(
+        new Error(`Provedor de consulta ${tipo.toUpperCase()} devolveu resposta invalida.`),
+        { status: 502 },
+      );
     }
+    return data;
+  } catch (err) {
+    const axiosErr = err as AxiosError & { status?: number };
+    if (axiosErr.status === 502) throw err;
+    const status = axiosErr.response?.status;
+    if (status === 429) {
+      throw Object.assign(new Error('Limite de consultas atingido. Aguarde alguns minutos.'), { status: 429 });
+    }
+    if (status && status < 500) {
+      throw Object.assign(new Error(`Consulta ${tipo.toUpperCase()} recusada pelo provedor.`), { status });
+    }
+    throw Object.assign(
+      new Error(`Servico de consulta ${tipo.toUpperCase()} indisponivel. Tente novamente em instantes.`),
+      { status: 503 },
+    );
   }
-
-  if (lastError?.response?.status === 429) {
-    throw Object.assign(new Error('Limite de consultas atingido. Aguarde alguns minutos.'), { status: 429 });
-  }
-  throw Object.assign(
-    new Error(`Serviço de consulta ${tipo.toUpperCase()} indisponível. Tente novamente em instantes.`),
-    { status: 503 },
-  );
 }
 
 function validateCpfDigits(cpf: string): boolean {
@@ -567,6 +602,17 @@ export class CnpjService {
 
     const raw = await fetchFromTrustcorp('cpf', clean);
     const result = mapTrustcorpCpfResponse(raw, clean, false);
+
+    // Sem nome nao ha consulta: ha um documento que voltou vazio. Devolver isso
+    // como sucesso fazia a nota sair com destinatario em branco — e o cache
+    // segurava o erro por 24h, entao tentar de novo nao adiantava.
+    if (!result.nome) {
+      throw Object.assign(
+        new Error('Consulta de CPF nao retornou dados. Preencha os dados do destinatario manualmente.'),
+        { status: 502 },
+      );
+    }
+
     cpfCache.set(clean, result);
     return result;
   }
