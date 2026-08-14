@@ -32,6 +32,11 @@ const TRUSTCORP_ACCESS_KEY = process.env.DOC_LOOKUP_ACCESS_KEY?.trim() || '';
  * era cadastro vazio, gravado em cache por 24h. Era essa a causa das notas
  * saindo sem os dados do destinatario.
  */
+const SINTEGRA_TOKEN = process.env.SINTEGRA_TOKEN?.trim() || '';
+const SINTEGRA_URL = (process.env.SINTEGRA_BASE_URL || 'https://www.sintegraws.com.br/api/v1/execute-api.php').trim();
+const CNPJA_TOKEN = process.env.CNPJA_TOKEN?.trim() || '';
+const CNPJA_COMERCIAL = (process.env.CNPJA_BASE_URL || 'https://api.cnpja.com').replace(/\/+$/, '');
+
 const TRUSTCORP_PATH_CNPJ = process.env.DOC_LOOKUP_PATH_CNPJ?.trim() || '';
 const TRUSTCORP_PATH_CPF = process.env.DOC_LOOKUP_PATH_CPF?.trim() || '';
 
@@ -73,6 +78,9 @@ export interface CnpjLookupResult {
   };
   porte: string;
   natureza_juridica: string;
+  /** Inscricao estadual — so o SINTEGRA tem. Obrigatoria na NF-e quando o
+   *  destinatario e contribuinte de ICMS; sem ela a nota e rejeitada. */
+  inscricao_estadual?: string;
   cnae_principal: { codigo: number; descricao: string };
   cnaes_secundarios: Array<{ codigo: number; descricao: string }>;
   socios: Array<{ nome: string; qualificacao: string }>;
@@ -408,6 +416,125 @@ async function fetchFromTrustcorp(tipo: 'cnpj' | 'cpf', documento: string): Prom
   }
 }
 
+/* ------------------------------------------------------------------ *
+ * SINTEGRA WS
+ *
+ * Endpoint unico com um parametro `plugin` escolhendo a base:
+ *   ST  = SINTEGRA (unica fonte com INSCRICAO ESTADUAL)
+ *   RF  = ficha da Receita Federal
+ *   CPF = pessoa fisica (exige CPF + data de nascimento)
+ *
+ * Responde HTTP 200 mesmo em erro, com `status` no corpo — entao checar o
+ * status HTTP nao basta, tem que ler o campo.
+ * ------------------------------------------------------------------ */
+
+type SintegraResposta = Record<string, unknown> & {
+  status?: string;
+  message?: string;
+};
+
+async function fetchSintegra(params: Record<string, string>): Promise<SintegraResposta> {
+  if (!SINTEGRA_TOKEN) {
+    throw Object.assign(new Error('SINTEGRA_TOKEN nao configurado.'), { status: 501 });
+  }
+
+  const { data } = await axios.get<SintegraResposta>(SINTEGRA_URL, {
+    params: { token: SINTEGRA_TOKEN, ...params },
+    timeout: 15000,
+    headers: { Accept: 'application/json' },
+  });
+
+  if (!ehJson(data)) {
+    throw Object.assign(new Error('SINTEGRA devolveu resposta invalida.'), { status: 502 });
+  }
+  const status = String(data.status ?? '').toUpperCase();
+  if (status && status !== 'OK') {
+    const msg = String(data.message ?? 'Consulta recusada pelo SINTEGRA.');
+    // Credito acabado e erro de operacao, nao de dado: precisa aparecer.
+    const semCredito = /credito|saldo|limite/i.test(msg);
+    throw Object.assign(new Error(msg), { status: semCredito ? 402 : 404 });
+  }
+  return data;
+}
+
+function mapSintegraCnpj(data: SintegraResposta, documento: string): CnpjLookupResult {
+  const atividade = (data.atividade_principal as Array<Record<string, unknown>> | undefined)?.[0];
+  const secundarias = (data.atividades_secundarias as Array<Record<string, unknown>> | undefined) ?? [];
+  const socios = (data.quadro_socios as Array<Record<string, unknown>> | undefined) ?? [];
+  const situacao = pickString(data.situacao_cadastral, data.situacao);
+
+  return {
+    cnpj: sanitizeDigits(pickString(data.cnpj, documento)),
+    razao_social: pickString(data.nome_empresarial, data.razao_social),
+    nome_fantasia: pickString(data.nome_fantasia),
+    situacao,
+    ativa: /ativ/i.test(situacao),
+    endereco: {
+      logradouro: pickString(data.logradouro),
+      numero: pickString(data.numero),
+      complemento: pickString(data.complemento),
+      bairro: pickString(data.bairro),
+      municipio: pickString(data.municipio, data.cidade),
+      uf: pickString(data.uf),
+      cep: sanitizeDigits(pickString(data.cep)),
+      codigo_municipio_ibge: pickString(data.codigo_municipio, data.codigo_ibge) || undefined,
+    },
+    contato: {
+      telefone: pickString(data.telefone),
+      email: pickString(data.email),
+    },
+    porte: pickString(data.porte),
+    natureza_juridica: pickString(data.natureza_juridica),
+    inscricao_estadual: pickString(data.inscricao_estadual) || undefined,
+    cnae_principal: {
+      codigo: Number(sanitizeDigits(pickString(atividade?.code, atividade?.codigo))) || 0,
+      descricao: pickString(atividade?.text, atividade?.descricao),
+    },
+    cnaes_secundarios: secundarias.map((a) => ({
+      codigo: Number(sanitizeDigits(pickString(a?.code, a?.codigo))) || 0,
+      descricao: pickString(a?.text, a?.descricao),
+    })),
+    socios: socios.map((q) => ({
+      nome: pickString(q?.nome, q?.nome_socio),
+      qualificacao: pickString(q?.qualificacao, q?.qual),
+    })),
+    capital_social: Number(String(pickString(data.capital_social)).replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.')) || 0,
+    simples_nacional: /sim/i.test(pickString(data.simples_nacional, data.simples)),
+    mei: /sim/i.test(pickString(data.mei, data.simei)),
+    fonte: 'SINTEGRA WS',
+    cached: false,
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * CNPJá comercial — chave no header Authorization.
+ * ------------------------------------------------------------------ */
+
+async function fetchCnpjaComercial(cnpj: string): Promise<Record<string, unknown>> {
+  if (!CNPJA_TOKEN) {
+    throw Object.assign(new Error('CNPJA_TOKEN nao configurado.'), { status: 501 });
+  }
+  const { data } = await axios.get(`${CNPJA_COMERCIAL}/office/${cnpj}`, {
+    timeout: 15000,
+    headers: { Accept: 'application/json', Authorization: CNPJA_TOKEN },
+  });
+  if (!ehJson(data)) {
+    throw Object.assign(new Error('CNPJa devolveu resposta invalida.'), { status: 502 });
+  }
+  return data;
+}
+
+/** Aceita dd/mm/aaaa ou aaaa-mm-dd e devolve no formato do SINTEGRA (dd/mm/aaaa). */
+function normalizarData(valor?: string): string | null {
+  const v = (valor ?? '').trim();
+  if (!v) return null;
+  const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+  const br = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (br) return v;
+  return null;
+}
+
 function validateCpfDigits(cpf: string): boolean {
   const clean = sanitizeDigits(cpf);
   if (clean.length !== 11 || /^(\d)\1+$/.test(clean)) return false;
@@ -492,6 +619,28 @@ export class CnpjService {
 
     const cached = cnpjCache.get<CnpjLookupResult>(clean);
     if (cached) return { ...cached, cached: true };
+
+    // 1) SINTEGRA: unica fonte com inscricao estadual, que a NF-e exige quando o
+    //    destinatario e contribuinte. Falhou, segue o baile — as outras fontes
+    //    resolvem o resto do cadastro.
+    if (SINTEGRA_TOKEN) {
+      try {
+        const sintegra = mapSintegraCnpj(await fetchSintegra({ cnpj: clean, plugin: 'ST' }), clean);
+        if (sintegra.razao_social && sintegra.endereco.municipio) {
+          const completo = await completarEnderecoComCnpja(clean, sintegra);
+          cnpjCache.set(clean, completo);
+          return completo;
+        }
+      } catch (err) {
+        const e = err as Error & { status?: number };
+        // 402 = sem credito. Precisa gritar no log, senao vira "sistema lento".
+        logger.warn('SINTEGRA indisponivel, seguindo para as demais fontes', {
+          cnpj: clean,
+          status: e.status,
+          message: e.message,
+        });
+      }
+    }
 
     try {
       const raw = await fetchFromTrustcorp('cnpj', clean);
@@ -588,7 +737,13 @@ export class CnpjService {
     }
   }
 
-  static async lookupCpf(cpf: string): Promise<CpfLookupResult> {
+  /**
+   * Consulta de CPF.
+   *
+   * A data de nascimento NAO e capricho do provedor: a Receita so responde
+   * consulta de CPF com os dois dados juntos. Nenhum servico contorna isso.
+   */
+  static async lookupCpf(cpf: string, dataNascimento?: string): Promise<CpfLookupResult> {
     const clean = sanitizeDigits(cpf);
     if (clean.length !== 11) {
       throw Object.assign(new Error('CPF deve ter 11 dígitos'), { status: 400 });
@@ -599,6 +754,36 @@ export class CnpjService {
 
     const cached = cpfCache.get<CpfLookupResult>(clean);
     if (cached) return { ...cached, cached: true };
+
+    if (SINTEGRA_TOKEN) {
+      const nascimento = normalizarData(dataNascimento);
+      if (!nascimento) {
+        throw Object.assign(
+          new Error('Informe a data de nascimento: a Receita exige CPF e data de nascimento juntos.'),
+          { status: 422 },
+        );
+      }
+      const data = await fetchSintegra({ cpf: clean, 'data-nascimento': nascimento, plugin: 'CPF' });
+      const situacao = pickString(data.situacao_cadastral, data.situacao);
+      const resultado: CpfLookupResult = {
+        cpf: clean,
+        nome: pickString(data.nome, data.nome_completo),
+        situacao,
+        ativo: /regular/i.test(situacao),
+        data_nascimento: pickString(data.data_nascimento, data['data-nascimento']) || undefined,
+        endereco: {},
+        fonte: 'SINTEGRA WS',
+        cached: false,
+      };
+      if (!resultado.nome) {
+        throw Object.assign(
+          new Error('CPF nao encontrado com essa data de nascimento.'),
+          { status: 404 },
+        );
+      }
+      cpfCache.set(clean, resultado);
+      return resultado;
+    }
 
     const raw = await fetchFromTrustcorp('cpf', clean);
     const result = mapTrustcorpCpfResponse(raw, clean, false);
@@ -617,13 +802,13 @@ export class CnpjService {
     return result;
   }
 
-  static async lookupDocumento(documento: string): Promise<DocumentoLookupResult> {
+  static async lookupDocumento(documento: string, dataNascimento?: string): Promise<DocumentoLookupResult> {
     const clean = sanitizeDigits(documento);
     if (clean.length === 14) {
       return { tipo: 'cnpj', ...(await this.lookup(clean)) };
     }
     if (clean.length === 11) {
-      return { tipo: 'cpf', ...(await this.lookupCpf(clean)) };
+      return { tipo: 'cpf', ...(await this.lookupCpf(clean, dataNascimento)) };
     }
     throw Object.assign(new Error('Documento deve ter 11 dígitos (CPF) ou 14 dígitos (CNPJ)'), { status: 400 });
   }

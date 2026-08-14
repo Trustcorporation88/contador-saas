@@ -34,7 +34,9 @@ export class CnpjController {
   static async lookupCpf(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
     try {
       const { cpf } = req.params;
-      const result = await CnpjService.lookupCpf(cpf);
+      // A Receita so responde consulta de CPF com a data de nascimento junto.
+      const nascimento = (req.query['data-nascimento'] ?? req.query.dataNascimento) as string | undefined;
+      const result = await CnpjService.lookupCpf(cpf, nascimento);
       return res.status(200).json(result);
     } catch (err: unknown) {
       const error = err as Error & { status?: number };
@@ -53,7 +55,8 @@ export class CnpjController {
   static async lookupDocumento(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
     try {
       const { documento } = req.params;
-      const result = await CnpjService.lookupDocumento(documento);
+      const nascimento = (req.query['data-nascimento'] ?? req.query.dataNascimento) as string | undefined;
+      const result = await CnpjService.lookupDocumento(documento, nascimento);
       return res.status(200).json(result);
     } catch (err: unknown) {
       const error = err as Error & { status?: number };
