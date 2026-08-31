@@ -24,6 +24,8 @@ import {
   type NfeRecord,
 } from '../../services/nfeService';
 import { textoLivre } from '../../utils/textoLimpo';
+import { ProdutoBusca } from '../../components/Nfe/ProdutoBusca';
+import type { ProdutoRecord } from '../../services/produtoService';
 
 interface ItemForm extends NfeItemPayload {
   _key: string;
@@ -39,9 +41,31 @@ function novoItem(): ItemForm {
     unidade: 'UN',
     quantidade: 1,
     valor_unitario: 0,
+    cst_icms: '',
     aliquota_icms: 0,
     aliquota_pis: 0,
     aliquota_cofins: 0,
+  };
+}
+
+/**
+ * Preenche um item do formulário a partir de um produto do catálogo (o que já
+ * foi emitido ou cadastrado). Quantidade fica como está: o produto é o mesmo,
+ * a quantidade é de cada nota.
+ */
+function itemDoProduto(atual: ItemForm, p: ProdutoRecord): ItemForm {
+  return {
+    ...atual,
+    codigo_produto: p.codigo ?? '',
+    descricao: p.descricao,
+    ncm: p.ncm ?? '',
+    cfop: p.cfop || atual.cfop || '5102',
+    unidade: p.unidade || 'UN',
+    valor_unitario: Number(p.valor_unitario) || 0,
+    cst_icms: p.cst_icms ?? '',
+    aliquota_icms: Number(p.aliquota_icms) || 0,
+    aliquota_pis: Number(p.aliquota_pis) || 0,
+    aliquota_cofins: Number(p.aliquota_cofins) || 0,
   };
 }
 
@@ -161,6 +185,7 @@ export default function NfeEmissaoPage() {
           unidade: i.unidade || 'UN',
           quantidade: Number(i.quantidade),
           valor_unitario: Number(i.valor_unitario),
+          cst_icms: i.cst_icms ? i.cst_icms.replace(/\D/g, '').slice(0, 3) : undefined,
           aliquota_icms: Number(i.aliquota_icms) || 0,
           aliquota_pis: Number(i.aliquota_pis) || 0,
           aliquota_cofins: Number(i.aliquota_cofins) || 0,
@@ -206,6 +231,12 @@ export default function NfeEmissaoPage() {
     onError: (e: Error) => {
       setResultado(null);
       setErro(e.message);
+    },
+    // O catálogo aprende na criação da nota, que acontece antes da autorização:
+    // mesmo quando a SEFAZ rejeita, os produtos digitados já entraram. Por isso
+    // a busca é invalidada em onSettled, e não só no sucesso.
+    onSettled: async () => {
+      await qc.invalidateQueries({ queryKey: ['produtos-busca', companyId] });
     },
   });
 
@@ -392,6 +423,7 @@ export default function NfeEmissaoPage() {
       unidade: item.unidade || 'UN',
       quantidade: Number(item.quantidade) || 1,
       valor_unitario: Number(item.valor_unitario) || 0,
+      cst_icms: item.cst_icms || '',
       aliquota_icms: Number(item.aliquota_icms) || 0,
       aliquota_pis: Number(item.aliquota_pis) || 0,
       aliquota_cofins: Number(item.aliquota_cofins) || 0,
@@ -778,6 +810,10 @@ export default function NfeEmissaoPage() {
             Adicionar item
           </Button>
         </div>
+        <p className="text-xs text-gray-500">
+          Busque um produto já emitido para preencher código, descrição, NCM, CFOP, CST e alíquotas de uma vez.
+          Produto novo: preencha à mão e ele entra no catálogo assim que a nota for criada.
+        </p>
         <div className="space-y-4">
           {itens.map((item, idx) => (
             <div key={item._key} className="rounded-xl border border-gray-200 p-4">
@@ -794,6 +830,13 @@ export default function NfeEmissaoPage() {
                   </button>
                 )}
               </div>
+              <ProdutoBusca
+                companyId={companyId}
+                className="mb-3"
+                onSelect={(p) =>
+                  setItens((prev) => prev.map((i) => (i._key === item._key ? itemDoProduto(i, p) : i)))
+                }
+              />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <Input label="Código" value={item.codigo_produto} onChange={(e) => updateItem(item._key, { codigo_produto: e.target.value })} />
                 <Input label="Descrição" value={item.descricao} onChange={(e) => updateItem(item._key, { descricao: e.target.value })} />
@@ -822,6 +865,18 @@ export default function NfeEmissaoPage() {
                 <Input label="Unidade" value={item.unidade} onChange={(e) => updateItem(item._key, { unidade: e.target.value })} />
                 <Input label="Quantidade" type="number" step="0.0001" value={item.quantidade} onChange={(e) => updateItem(item._key, { quantidade: Number(e.target.value) })} />
                 <Input label="Valor unitário" type="number" step="0.01" value={item.valor_unitario} onChange={(e) => updateItem(item._key, { valor_unitario: Number(e.target.value) })} />
+                <Input
+                  label="CST ICMS"
+                  placeholder="00"
+                  maxLength={3}
+                  hint="Regime normal. No Simples a nota sai com CSOSN 102."
+                  value={item.cst_icms ?? ''}
+                  onChange={(e) =>
+                    updateItem(item._key, {
+                      cst_icms: e.target.value.replace(/\D/g, '').slice(0, 3),
+                    })
+                  }
+                />
                 <Input label="Alíq. ICMS %" type="number" step="0.01" value={item.aliquota_icms} onChange={(e) => updateItem(item._key, { aliquota_icms: Number(e.target.value) })} />
                 <Input label="Alíq. PIS %" type="number" step="0.01" value={item.aliquota_pis} onChange={(e) => updateItem(item._key, { aliquota_pis: Number(e.target.value) })} />
                 <Input label="Alíq. COFINS %" type="number" step="0.01" value={item.aliquota_cofins} onChange={(e) => updateItem(item._key, { aliquota_cofins: Number(e.target.value) })} />
