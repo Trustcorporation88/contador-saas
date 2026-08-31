@@ -27,6 +27,7 @@ import {
   X,
   Scale,
   GraduationCap,
+  Package,
 } from 'lucide-react';
 
 // ─── Nav structure ───────────────────────────────────────────────────────────
@@ -47,6 +48,7 @@ const navItems: NavItem[] = [
   { label: 'Lançamentos',        icon: FileText,        path: '/lancamentos'            },
   { label: 'Documentos Fiscais', icon: FileText,        path: '/documentos'             },
   { label: 'Emissão NF-e',       icon: FileText,        path: '/documentos/nfe'         },
+  { label: 'Produtos',           icon: Package,         path: '/documentos/produtos'    },
   { label: 'Contas a Receber',   icon: FileText,        path: '/contas-receber'         },
   { label: 'Contas a Pagar',     icon: FileText,        path: '/contas-pagar'           },
   {

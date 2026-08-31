@@ -1278,11 +1278,139 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
         },
       },
       {
+        // Catálogo de produtos por empresa, fonte do campo "Buscar produto" na
+        // emissão de NF-e. Fica ANTES de 031 de propósito: a varredura de RLS
+        // roda na ordem do array, então uma tabela criada depois dela só
+        // ganharia RLS no restart seguinte. Novas tabelas: coloque acima de 031.
+        //
+        // O backfill puxa de nfe_itens tudo que já foi emitido, para que o
+        // catálogo nasça cheio no primeiro deploy em vez de depender de novas
+        // notas. A regra da coluna `chave` tem que ser idêntica à de
+        // chaveDoProduto() em services/produtoService.ts.
+        name: '032_produtos',
+        up: async (db) => {
+          if (!(await db.schema.hasTable('produtos'))) {
+            console.log('[MIGRATIONS] Creating produtos table...');
+            await db.schema.createTable('produtos', (table) => {
+              table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+              table.uuid('company_id').notNullable();
+              table.string('chave', 140).notNullable();
+              table.string('codigo', 60).nullable();
+              table.string('descricao', 255).notNullable();
+              table.string('ncm', 8).nullable();
+              // Código + descrição + NCM em minúsculas e sem acento, para a
+              // busca do autocomplete ("filtro agua" acha "Filtro de Água").
+              table.string('busca', 400).notNullable().defaultTo('');
+              table.string('cfop', 4).nullable();
+              table.string('unidade', 6).notNullable().defaultTo('UN');
+              table.decimal('valor_unitario', 15, 4).notNullable().defaultTo(0);
+              // CST (2 díg.) ou CSOSN (3 díg.), mesmo tamanho de nfe_itens.cst_icms.
+              table.string('cst_icms', 4).nullable();
+              table.decimal('aliquota_icms', 7, 4).notNullable().defaultTo(0);
+              table.string('cst_pis', 4).nullable();
+              table.decimal('aliquota_pis', 7, 4).notNullable().defaultTo(0);
+              table.string('cst_cofins', 4).nullable();
+              table.decimal('aliquota_cofins', 7, 4).notNullable().defaultTo(0);
+              table.string('cst_ipi', 2).nullable();
+              table.decimal('aliquota_ipi', 7, 4).notNullable().defaultTo(0);
+              table.string('codigo_enquadramento_ipi', 3).nullable();
+              table.integer('vezes_emitido').notNullable().defaultTo(0);
+              table.timestamp('ultima_emissao_em', { useTz: true }).nullable();
+              table.timestamp('created_at', { useTz: true }).notNullable().defaultTo(db.fn.now());
+              table.timestamp('updated_at', { useTz: true }).notNullable().defaultTo(db.fn.now());
+              table.unique(['company_id', 'chave']);
+              table.index(['company_id', 'vezes_emitido']);
+            });
+            // Busca por trecho (ILIKE '%x%'): índice trigram se a extensão
+            // existir (Supabase tem), senão segue com scan por empresa, que
+            // para catálogos de centenas de itens é imperceptível.
+            try {
+              await db.raw('CREATE EXTENSION IF NOT EXISTS pg_trgm');
+              await db.raw(
+                'CREATE INDEX IF NOT EXISTS idx_produtos_busca_trgm ON produtos USING gin (busca gin_trgm_ops)',
+              );
+            } catch (e) {
+              console.warn('[MIGRATIONS] pg_trgm indisponível, produtos sem índice trigram:', (e as Error).message);
+            }
+          }
+
+          // Backfill idempotente: ON CONFLICT DO NOTHING preserva o que já
+          // existe, então rodar de novo (todo boot) não sobrescreve cadastros.
+          const temItens = await db.schema.hasTable('nfe_itens');
+          const temNfe = await db.schema.hasTable('nfe');
+          if (temItens && temNfe) {
+            const resultado = await db.raw(`
+              WITH itens AS (
+                SELECT n.company_id,
+                       NULLIF(BTRIM(i.codigo_produto), '')                          AS codigo,
+                       LEFT(REGEXP_REPLACE(BTRIM(i.descricao), '\\s+', ' ', 'g'), 255) AS descricao,
+                       NULLIF(REGEXP_REPLACE(COALESCE(i.ncm, ''),  '\\D', '', 'g'), '') AS ncm,
+                       LEFT(BTRIM(REGEXP_REPLACE(LOWER(TRANSLATE(
+                         CONCAT_WS(' ', NULLIF(BTRIM(i.codigo_produto), ''), BTRIM(i.descricao),
+                                   NULLIF(REGEXP_REPLACE(COALESCE(i.ncm, ''), '\\D', '', 'g'), '')),
+                         'ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑáàâãäéèêëíìîïóòôõöúùûüçñ',
+                         'AAAAAEEEEIIIIOOOOOUUUUCNaaaaaeeeeiiiiooooouuuucn'
+                       )), '\\s+', ' ', 'g')), 400)                                         AS busca,
+                       NULLIF(REGEXP_REPLACE(COALESCE(i.cfop, ''), '\\D', '', 'g'), '') AS cfop,
+                       UPPER(COALESCE(NULLIF(BTRIM(i.unidade), ''), 'UN'))          AS unidade,
+                       COALESCE(i.valor_unitario, 0)   AS valor_unitario,
+                       i.cst_icms,
+                       COALESCE(i.aliquota_icms, 0)    AS aliquota_icms,
+                       i.cst_pis,
+                       COALESCE(i.aliquota_pis, 0)     AS aliquota_pis,
+                       i.cst_cofins,
+                       COALESCE(i.aliquota_cofins, 0)  AS aliquota_cofins,
+                       i.cst_ipi,
+                       COALESCE(i.aliquota_ipi, 0)     AS aliquota_ipi,
+                       i.codigo_enquadramento_ipi,
+                       n.data_emissao,
+                       LEFT(
+                         CASE WHEN NULLIF(BTRIM(i.codigo_produto), '') IS NOT NULL
+                              THEN 'COD:'  || UPPER(BTRIM(i.codigo_produto))
+                              ELSE 'DESC:' || UPPER(REGEXP_REPLACE(BTRIM(i.descricao), '\\s+', ' ', 'g'))
+                         END, 140)                                                  AS chave
+                  FROM nfe_itens i
+                  JOIN nfe n ON n.id = i.nfe_id
+                 WHERE BTRIM(COALESCE(i.descricao, '')) <> ''
+              ),
+              ultimos AS (
+                SELECT DISTINCT ON (company_id, chave) *
+                  FROM itens
+                 ORDER BY company_id, chave, data_emissao DESC NULLS LAST
+              ),
+              contagem AS (
+                SELECT company_id, chave, COUNT(*) AS vezes, MAX(data_emissao) AS ultima
+                  FROM itens
+                 GROUP BY company_id, chave
+              )
+              INSERT INTO produtos (
+                company_id, chave, codigo, descricao, ncm, busca, cfop, unidade, valor_unitario,
+                cst_icms, aliquota_icms, cst_pis, aliquota_pis, cst_cofins, aliquota_cofins,
+                cst_ipi, aliquota_ipi, codigo_enquadramento_ipi, vezes_emitido, ultima_emissao_em
+              )
+              SELECT u.company_id, u.chave, u.codigo, u.descricao, u.ncm, u.busca, u.cfop, u.unidade, u.valor_unitario,
+                     u.cst_icms, u.aliquota_icms, u.cst_pis, u.aliquota_pis, u.cst_cofins, u.aliquota_cofins,
+                     u.cst_ipi, u.aliquota_ipi, u.codigo_enquadramento_ipi, c.vezes, c.ultima
+                FROM ultimos u
+                JOIN contagem c ON c.company_id = u.company_id AND c.chave = u.chave
+              ON CONFLICT (company_id, chave) DO NOTHING
+            `);
+            const inseridos = Number((resultado as { rowCount?: number })?.rowCount ?? 0);
+            if (inseridos > 0) {
+              console.log(`[MIGRATIONS] produtos: ${inseridos} produto(s) importado(s) de nfe_itens`);
+            }
+          }
+
+          console.log('✓ 032_produtos completed');
+        },
+      },
+      {
         // Toda tabela criada pelo Knex nasce SEM RLS, e o Supabase publica o
         // schema public via PostgREST para a chave anon (que é pública, vai no
         // frontend). Sem esta varredura, cada migration nova reabre o buraco que
         // o scripts/supabase-blindar-tabelas.sql fechou uma vez só.
         // Roda sempre, é idempotente e só toca no que ainda está sem RLS.
+        // Por isso ela é a ÚLTIMA do array: migrations novas entram acima dela.
         name: '031_rls_em_tabelas_novas',
         up: async (db) => {
           const { rows } = await db.raw(`

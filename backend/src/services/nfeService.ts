@@ -25,6 +25,7 @@
 import { randomUUID } from 'crypto';
 import { getDatabase } from '../config/database';
 import { resolverSvc } from './svcContingencia';
+import { ProdutoService } from './produtoService';
 import { logger } from '../middleware/requestLogger';
 import {
   CreateNfeDTO,
@@ -1142,6 +1143,21 @@ export class NfeService {
         })),
       );
 
+      return record;
+    }).then(async (record) => {
+      // Catálogo de produtos: aprende com os itens desta nota para o campo
+      // "Buscar produto" da próxima emissão. Roda DEPOIS do commit e engole o
+      // erro de propósito: a nota já está gravada e o catálogo é conveniência,
+      // não pode devolver 500 numa emissão que deu certo.
+      try {
+        await ProdutoService.registrarEmissao(companyId, itensCalc);
+      } catch (e) {
+        logger.warn('Catálogo de produtos não atualizado após criar NF-e', {
+          nfeId: record.id,
+          companyId,
+          error: (e as Error).message,
+        });
+      }
       return record;
     });
   }
