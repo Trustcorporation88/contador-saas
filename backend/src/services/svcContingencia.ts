@@ -95,7 +95,7 @@ export function resolverSvc(ufBruta: string): ResolucaoSvc {
       new Error(
         `A vinculação de ${uf} à SVC-AN ou SVC-RS está divergente entre as fontes e precisa ser confirmada `
         + `no Portal Nacional da NF-e. Depois de confirmar, configure SVC_UF_MAP="${uf}=SVC-AN" `
-        + `(ou SVC-RS) e repita a emissão. Emitir na SVC errada resulta em rejeição.`,
+        + '(ou SVC-RS) e repita a emissão. Emitir na SVC errada resulta em rejeição.',
       ),
       { status: 409, uf, motivo: 'SVC_DIVERGENTE' },
     );

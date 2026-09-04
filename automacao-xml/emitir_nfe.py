@@ -412,6 +412,14 @@ def _emitir(payload: dict) -> dict:
     # tpEmis 6/7 sem xJust, ou mandar para a SVC sem trocar o tpEmis, resulta em
     # rejeicao — e sempre no pior momento, porque contingencia so roda quando a
     # SEFAZ da UF ja caiu.
+    #
+    # `conting` precisa ser definido AQUI, antes da guarda. Ele era atribuido so
+    # mais abaixo (na hora de escolher o autorizador), e como o Python trata a
+    # variavel como local da funcao inteira, ler antes de atribuir estourava
+    # UnboundLocalError em TODA emissao real, com ou sem contingencia. Os testes
+    # de regressao (test_emissao_modelo_regressao, test_emissao_cstat_lote_vs_nota)
+    # pegavam isso, mas rodavam vermelhos no CI junto com outra falha e ninguem viu.
+    conting = payload.get("contingencia") or {}
     if conting:
         tp = int(conting.get("tp_emis") or 0)
         just = (conting.get("justificativa") or "").strip()
@@ -433,7 +441,6 @@ def _emitir(payload: dict) -> dict:
     # Em contingencia a nota NAO vai para a SEFAZ da UF (que esta fora do ar) e
     # sim para a SEFAZ Virtual. A pynfe ja traz "SVC-AN" e "SVC-RS" na tabela de
     # webservices, entao basta passar o autorizador no lugar da UF.
-    conting = payload.get("contingencia") or {}
     autorizador = conting.get("svc") or uf
     con = ComunicacaoSefaz(autorizador, cert_path, cert_senha, homologacao)
     envio = con.autorizacao(modelo=modelo, nota_fiscal=xml_assinado)
