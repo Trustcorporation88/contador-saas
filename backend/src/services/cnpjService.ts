@@ -378,9 +378,9 @@ async function fetchFromTrustcorp(tipo: 'cnpj' | 'cpf', documento: string): Prom
         Accept: 'application/json',
         ...(TRUSTCORP_ACCESS_KEY
           ? {
-              Authorization: `Bearer ${TRUSTCORP_ACCESS_KEY}`,
-              'x-api-key': TRUSTCORP_ACCESS_KEY,
-            }
+            Authorization: `Bearer ${TRUSTCORP_ACCESS_KEY}`,
+            'x-api-key': TRUSTCORP_ACCESS_KEY,
+          }
           : {}),
       },
       // Sem isto, HTML de 200 passa como se fosse resposta valida.

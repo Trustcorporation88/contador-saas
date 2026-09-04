@@ -1422,7 +1422,7 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
                AND c.relrowsecurity = false
           `);
           for (const linha of rows as Array<{ tabela: string }>) {
-            await db.raw(`ALTER TABLE public.?? ENABLE ROW LEVEL SECURITY`, [linha.tabela]);
+            await db.raw('ALTER TABLE public.?? ENABLE ROW LEVEL SECURITY', [linha.tabela]);
             console.log(`[MIGRATIONS] RLS habilitado: ${linha.tabela}`);
           }
           console.log(`✓ 031_rls_em_tabelas_novas completed (${rows.length} tabela(s))`);

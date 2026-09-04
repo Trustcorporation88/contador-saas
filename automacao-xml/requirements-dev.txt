@@ -1,0 +1,10 @@
+# Dependencias so de teste (CI e desenvolvimento). NAO entram na imagem do
+# backend: o Dockerfile instala apenas requirements.txt.
+#
+# pytest e necessario porque tests/test_bloqueio_consumo_indevido.py usa
+# fixtures e pytest.raises; sob "unittest discover" o modulo nem importava
+# (ModuleNotFoundError: pytest) e o job inteiro do CI ficava vermelho.
+# O pytest tambem executa os testes escritos em unittest, entao um unico
+# comando cobre a suite inteira: python -m pytest tests -v
+-r requirements.txt
+pytest>=8.0
