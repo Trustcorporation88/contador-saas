@@ -17,10 +17,10 @@
  * evita oferecer o que seria recusado.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  UserPlus, Users, Building2, Check, X, KeyRound, ShieldAlert, Trash2, Plus,
+  UserPlus, Users, Building2, Check, X, KeyRound, ShieldAlert, Trash2, Plus, UserCog,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Button } from '../../components/ui/Button';
@@ -299,6 +299,102 @@ function SenhaModal({ usuario, fechar, toast }: {
   );
 }
 
+// ─── Modal: trocar papel ──────────────────────────────────────────────────────
+
+function TrocarPapelModal({ usuario, fechar, toast }: {
+  usuario: Usuario | null; fechar: () => void; toast: Toast;
+}) {
+  const queryClient = useQueryClient();
+  const [papel, setPapel] = useState<Papel>('accountant');
+  const [confirmouAcessoTotal, setConfirmouAcessoTotal] = useState(false);
+  const [erro, setErro] = useState('');
+  const aberto = Boolean(usuario);
+
+  // O modal fica montado o tempo todo; quando um usuário é escolhido, o select
+  // precisa partir do papel atual dele, não do valor da última abertura.
+  useEffect(() => {
+    if (usuario) {
+      setPapel(usuario.papel as Papel);
+      setConfirmouAcessoTotal(false);
+      setErro('');
+    }
+  }, [usuario]);
+
+  const salvar = useMutation({
+    mutationFn: () => UserManagementService.definirPapel(
+      usuario!.id, papel, papel === 'admin' ? confirmouAcessoTotal : undefined,
+    ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['usuarios'] });
+      toast(`Papel de ${usuario?.nome_completo} alterado para ${rotuloPapel(papel)}.`);
+      fechar();
+    },
+    onError: (e) => setErro(mensagemDoErro(e, 'Não foi possível alterar o papel.')),
+  });
+
+  const viraAdmin = papel === 'admin' && usuario?.papel !== 'admin';
+  const deixaDeSerAdmin = usuario?.papel === 'admin' && papel !== 'admin';
+  const semMudanca = papel === usuario?.papel;
+  const podeSalvar = !semMudanca && (!viraAdmin || confirmouAcessoTotal);
+  const descricaoPapel = PAPEIS.find((p) => p.valor === papel)?.descricao ?? '';
+
+  return (
+    <Modal open={aberto} onClose={fechar} title={`Trocar papel de ${usuario?.nome_completo ?? ''}`}>
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Papel</label>
+          <select
+            value={papel}
+            onChange={(e) => { setPapel(e.target.value as Papel); setConfirmouAcessoTotal(false); setErro(''); }}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          >
+            {PAPEIS.map((p) => (
+              <option key={p.valor} value={p.valor}>{p.rotulo}</option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-gray-500">{descricaoPapel}</p>
+        </div>
+
+        {viraAdmin && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+            <div className="flex gap-2">
+              <ShieldAlert className="h-5 w-5 flex-none text-amber-600" />
+              <div className="text-sm text-amber-900">
+                <p className="font-semibold">Administrador enxerga tudo</p>
+                <p className="mt-1">
+                  Este usuário passará a ver a contabilidade de <strong>todas</strong> as
+                  empresas da base, poderá criar empresas e outros usuários.
+                </p>
+                <label className="mt-2 flex items-center gap-2 font-medium">
+                  <input type="checkbox" checked={confirmouAcessoTotal}
+                    onChange={(e) => setConfirmouAcessoTotal(e.target.checked)} />
+                  Entendi, quero conceder acesso total
+                </label>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {deixaDeSerAdmin && (
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+            Ao deixar de ser administrador, ele volta a enxergar apenas as empresas
+            atribuídas a ele (e as que criar, se o papel permitir). Nada é apagado.
+          </div>
+        )}
+
+        {erro && <p className="text-sm text-red-600">{erro}</p>}
+
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="secondary" onClick={fechar}>Cancelar</Button>
+          <Button onClick={() => salvar.mutate()} disabled={!podeSalvar || salvar.isPending}>
+            {salvar.isPending ? 'Salvando...' : 'Salvar papel'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ─── Aba ──────────────────────────────────────────────────────────────────────
 
 export default function UsuariosTab({ toast }: { toast: Toast }) {
@@ -307,6 +403,7 @@ export default function UsuariosTab({ toast }: { toast: Toast }) {
   const [novoAberto, setNovoAberto] = useState(false);
   const [verEmpresasDe, setVerEmpresasDe] = useState<Usuario | null>(null);
   const [trocarSenhaDe, setTrocarSenhaDe] = useState<Usuario | null>(null);
+  const [trocarPapelDe, setTrocarPapelDe] = useState<Usuario | null>(null);
 
   const { data: usuarios = [], isLoading, error } = useQuery({
     queryKey: ['usuarios'],
@@ -427,6 +524,23 @@ export default function UsuariosTab({ toast }: { toast: Toast }) {
                       >
                         <KeyRound className="h-4 w-4" />
                       </button>
+                      {/* O backend recusa rebaixar a própria conta admin (422);
+                          desabilitar aqui evita abrir um modal fadado ao erro. */}
+                      <button
+                        onClick={() => setTrocarPapelDe(u)}
+                        disabled={souEu}
+                        title={souEu
+                          ? 'Você não pode trocar o próprio papel'
+                          : 'Trocar papel'}
+                        className={clsx(
+                          'rounded p-1.5',
+                          souEu
+                            ? 'cursor-not-allowed text-gray-200'
+                            : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700',
+                        )}
+                      >
+                        <UserCog className="h-4 w-4" />
+                      </button>
                       <button
                         onClick={() => alternarAtivo.mutate({ id: u.id, ativo: !u.ativo })}
                         // Desativar a própria conta tranca quem está usando a
@@ -455,6 +569,7 @@ export default function UsuariosTab({ toast }: { toast: Toast }) {
       <EmpresasDoUsuarioModal usuario={verEmpresasDe}
         fechar={() => setVerEmpresasDe(null)} toast={toast} />
       <SenhaModal usuario={trocarSenhaDe} fechar={() => setTrocarSenhaDe(null)} toast={toast} />
+      <TrocarPapelModal usuario={trocarPapelDe} fechar={() => setTrocarPapelDe(null)} toast={toast} />
     </div>
   );
 }
