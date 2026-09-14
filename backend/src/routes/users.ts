@@ -15,6 +15,7 @@
  *   PATCH  /users/:id/senha            define nova senha
  *   GET    /users/:id/empresas         empresas que o usuário enxerga
  *   POST   /users/:id/empresas         atribui uma empresa
+ *   POST   /users/:id/empresas/por-projeto  atribui todas as empresas de um projeto
  *   DELETE /users/:id/empresas/:companyId   revoga o acesso a uma empresa
  */
 
@@ -125,6 +126,22 @@ router.post('/:id/empresas', async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (erro) {
     responderErro(res, erro, 'atribuir empresa');
+  }
+});
+
+router.post('/:id/empresas/por-projeto', async (req: Request, res: Response) => {
+  try {
+    const { projeto } = req.body as { projeto?: string };
+    if (!projeto) {
+      res.status(400).json({ success: false, message: 'Informe o projeto.' });
+      return;
+    }
+    const resultado = await UserManagementService.atribuirPorProjeto(
+      req.params.id, projeto, req.user!.id,
+    );
+    res.json({ success: true, data: resultado });
+  } catch (erro) {
+    responderErro(res, erro, 'atribuir empresas do projeto');
   }
 });
 

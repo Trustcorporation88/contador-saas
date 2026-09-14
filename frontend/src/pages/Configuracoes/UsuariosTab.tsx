@@ -152,6 +152,7 @@ function EmpresasDoUsuarioModal({ usuario, fechar, toast }: {
 }) {
   const queryClient = useQueryClient();
   const [selecionada, setSelecionada] = useState('');
+  const [projetoEmMassa, setProjetoEmMassa] = useState('');
   const aberto = Boolean(usuario);
 
   const { data: vinculadas = [], isLoading } = useQuery({
@@ -177,6 +178,16 @@ function EmpresasDoUsuarioModal({ usuario, fechar, toast }: {
     onError: (e) => toast(mensagemDoErro(e, 'Não foi possível atribuir.'), false),
   });
 
+  const atribuirProjeto = useMutation({
+    mutationFn: (projeto: string) => UserManagementService.atribuirPorProjeto(usuario!.id, projeto),
+    onSuccess: (r) => {
+      invalidar();
+      setProjetoEmMassa('');
+      toast(`${r.atribuidas} empresa(s) atribuída(s)${r.jaTinha ? `, ${r.jaTinha} já estavam` : ''}.`);
+    },
+    onError: (e) => toast(mensagemDoErro(e, 'Não foi possível atribuir a carteira.'), false),
+  });
+
   const revogar = useMutation({
     mutationFn: (companyId: string) => UserManagementService.revogarEmpresa(usuario!.id, companyId),
     onSuccess: () => { invalidar(); toast('Acesso revogado.'); },
@@ -184,12 +195,47 @@ function EmpresasDoUsuarioModal({ usuario, fechar, toast }: {
   });
 
   const ehAdmin = usuario?.papel === 'admin';
+  const carteiraEmAndamento = atribuirProjeto.isPending;
   const jaVinculadas = new Set(vinculadas.map((e) => e.id));
   const disponiveis = (todas?.data ?? []).filter((c) => !jaVinculadas.has(c.id));
 
   return (
     <Modal open={aberto} onClose={fechar} title={`Empresas de ${usuario?.nome_completo ?? ''}`}>
       <div className="space-y-4">
+        {!ehAdmin && (
+          <div className="rounded-lg border border-ink-200 bg-ink-50 p-3">
+            <p className="text-sm font-semibold text-ink-800">Atribuir uma carteira inteira</p>
+            <p className="mt-0.5 text-xs text-ink-500">
+              Dá acesso a todas as empresas de um projeto de uma vez. As já atribuídas são
+              ignoradas, então dá para repetir depois de importar mais empresas.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <select
+                className="input-field w-auto flex-1"
+                value={projetoEmMassa}
+                onChange={(e) => setProjetoEmMassa(e.target.value)}
+                disabled={carteiraEmAndamento}
+              >
+                <option value="">Escolha o projeto</option>
+                {PROJETOS_CARTEIRA.map((p) => (
+                  <option key={p.valor} value={p.valor}>{p.rotulo}</option>
+                ))}
+              </select>
+              <Button
+                variant="secondary"
+                disabled={!projetoEmMassa || carteiraEmAndamento}
+                onClick={() => atribuirProjeto.mutate(projetoEmMassa)}
+              >
+                {carteiraEmAndamento ? 'Atribuindo...' : 'Atribuir carteira'}
+              </Button>
+            </div>
+            {carteiraEmAndamento && (
+              <p className="mt-2 text-xs text-ink-500">
+                Carteiras grandes levam alguns minutos. Não feche a janela.
+              </p>
+            )}
+          </div>
+        )}
         {ehAdmin && (
           <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
             {/* Sem este aviso, a lista cheia pareceria resultado de atribuições
@@ -298,6 +344,15 @@ function SenhaModal({ usuario, fechar, toast }: {
     </Modal>
   );
 }
+
+/** Projetos que formam carteira, para a atribuição em massa. */
+const PROJETOS_CARTEIRA = [
+  { valor: 'LIDER_MEI', rotulo: 'Líder MEI' },
+  { valor: 'LIDER_ME', rotulo: 'Líder ME' },
+  { valor: 'CBPJ_MEI', rotulo: 'CBPJ MEI' },
+  { valor: 'CBPJ_ME', rotulo: 'CBPJ ME' },
+  { valor: 'TREINADORAS', rotulo: 'Treinadoras' },
+];
 
 // ─── Modal: trocar papel ──────────────────────────────────────────────────────
 
