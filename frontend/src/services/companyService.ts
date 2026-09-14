@@ -21,6 +21,7 @@ export interface APICompany {
   postal_code?: string;
   codigo_municipio?: string;
   crt?: string;
+  projeto?: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -42,6 +43,7 @@ export interface ListParams {
   limit?: number;
   search?: string;
   tax_regime?: string;
+  projeto?: string;
 }
 
 export interface CompanyPayload {
@@ -59,6 +61,7 @@ export interface CompanyPayload {
   postal_code?: string;
   codigo_municipio?: string;
   crt?: string;
+  projeto?: string | null;
 }
 
 export interface CreatePayload extends CompanyPayload {
@@ -174,3 +177,16 @@ export const CompanyService = {
     await api.delete(`/companies/${id}`);
   },
 };
+
+/** Projetos/carteiras para os seletores da UI. Espelha PROJETOS do backend. */
+export const PROJETOS_UI: Array<{ valor: string; rotulo: string }> = [
+  { valor: 'LIDER_MEI', rotulo: 'Líder MEI' },
+  { valor: 'LIDER_ME', rotulo: 'Líder ME' },
+  { valor: 'CBPJ_MEI', rotulo: 'CBPJ MEI' },
+  { valor: 'CBPJ_ME', rotulo: 'CBPJ ME' },
+  { valor: 'TREINADORAS', rotulo: 'Treinadoras' },
+];
+
+export function rotuloProjeto(v?: string | null): string {
+  return PROJETOS_UI.find((p) => p.valor === v)?.rotulo ?? '';
+}

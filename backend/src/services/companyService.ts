@@ -17,6 +17,7 @@ import {
 } from '../models/dtos/companyDTO';
 import { TenantService } from './tenantService';
 import { semPlaceholder, textoLivre as limparTextoLivre } from '../utils/textoLimpo';
+import { projetoValido } from './projetoAlertaService';
 
 function onlyDigits(value: string): string {
   return String(value || '').replace(/\D/g, '');
@@ -146,6 +147,7 @@ export class CompanyService {
         endereco_bairro: textoLivre(normalized.endereco_bairro, 120),
         codigo_municipio: clip(onlyDigits(normalized.codigo_municipio || ''), 7),
         crt: clip(normalized.crt, 1),
+        projeto: projetoValido(normalized.projeto) ? normalized.projeto : null,
         is_active: true,
         created_at: now,
         updated_at: now,
@@ -239,6 +241,10 @@ export class CompanyService {
 
     if (filters?.tax_regime) {
       query = query.where('companies.tax_regime', filters.tax_regime);
+    }
+
+    if (filters?.projeto) {
+      query = query.where('companies.projeto', filters.projeto);
     }
 
     if (filters?.created_from) {
@@ -371,6 +377,13 @@ export class CompanyService {
     if (data.tax_regime) {
       updateData.tax_regime = String(data.tax_regime).slice(0, 50);
     }
+    if (data.projeto !== undefined) {
+      // '' ou null limpa o projeto; valor inválido é rejeitado.
+      updateData.projeto = data.projeto ? (projetoValido(data.projeto) ? data.projeto : undefined) : null;
+      if (updateData.projeto === undefined) {
+        throw Object.assign(new Error('Projeto inválido'), { status: 400 });
+      }
+    }
     if (data.fiscal_year_start !== undefined) {
       const fiscalMonth = normalizeFiscalYearMonth(data.fiscal_year_start as never);
       if (fiscalMonth) updateData.fiscal_year_start = fiscalMonth;
@@ -400,8 +413,10 @@ export class CompanyService {
       updateData.crt = clip(data.crt, 1);
     }
 
-    // Atualizar no banco
-    await db('companies').where('id', id).update(updateData);
+    // Atualizar no banco (só colunas existentes: ambientes sem a migration
+    // completa não têm 'projeto' e o UPDATE quebraria).
+    const updateRow = await pickExistingCompanyColumns(db, updateData);
+    await db('companies').where('id', id).update(updateRow);
 
     logger.info('Company updated', {
       companyId: id,
@@ -522,6 +537,7 @@ export class CompanyService {
       endereco_bairro: company.endereco_bairro || undefined,
       codigo_municipio: company.codigo_municipio || undefined,
       crt: company.crt || undefined,
+      projeto: company.projeto || null,
       is_active: company.is_active,
       created_at: new Date(company.created_at).toISOString(),
       updated_at: new Date(company.updated_at).toISOString(),

@@ -1405,6 +1405,61 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
         },
       },
       {
+        // Projeto da empresa (carteira MEISHOP: LIDER/CBPJ/TREINADORAS) e a
+        // tabela de alertas fiscais gerados pelo motor de alertas. Fica antes
+        // de 031 para a tabela nova nascer com RLS no mesmo boot.
+        name: '033_projeto_e_alertas',
+        up: async (db) => {
+          const temProjeto = await db.schema.hasColumn('companies', 'projeto');
+          if (!temProjeto) {
+            console.log('[MIGRATIONS] Adicionando companies.projeto...');
+            await db.schema.alterTable('companies', (table) => {
+              // NULL = sem projeto. Valores válidos são checados na aplicação
+              // (PROJETOS em projetoAlertaService), não por CHECK no banco: a
+              // lista muda por regra de negócio e não convém migração a cada
+              // projeto novo.
+              table.string('projeto', 20).nullable();
+            });
+            await db.raw('CREATE INDEX IF NOT EXISTS idx_companies_projeto ON companies (projeto)');
+          }
+
+          if (!(await db.schema.hasTable('company_alertas'))) {
+            console.log('[MIGRATIONS] Creating company_alertas table...');
+            await db.schema.createTable('company_alertas', (table) => {
+              table.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
+              table.uuid('company_id').notNullable();
+              // Tipo do alerta: 'desenquadramento_mei' | 'exclusao_sn'.
+              table.string('tipo', 40).notNullable();
+              // 'aberto' enquanto a condição persiste; 'resolvido' quando some
+              // (ex.: virou ME, ou voltou a ser optante). Nunca apagamos: o
+              // histórico importa para a equipe.
+              table.string('status', 20).notNullable().defaultTo('aberto');
+              // 'info' | 'atencao' | 'critico', para ordenar o sino.
+              table.string('severidade', 20).notNullable().defaultTo('atencao');
+              table.text('mensagem').notNullable();
+              // Fotografia do que disparou (faturamento, teto, % consumido,
+              // situação no Simples), para auditar sem recalcular.
+              table.jsonb('contexto').nullable();
+              // Marca que o e-mail diário já saiu, para não repetir o mesmo
+              // alerta todo dia. NULL = ainda não notificado por e-mail.
+              table.timestamp('email_enviado_em', { useTz: true }).nullable();
+              table.timestamp('resolvido_em', { useTz: true }).nullable();
+              table.timestamp('created_at', { useTz: true }).notNullable().defaultTo(db.fn.now());
+              table.timestamp('updated_at', { useTz: true }).notNullable().defaultTo(db.fn.now());
+              // Um alerta aberto por (empresa, tipo): o motor faz upsert nessa
+              // chave, então reprocessar todo dia atualiza em vez de duplicar.
+              table.unique(['company_id', 'tipo', 'status'], {
+                indexName: 'uq_company_alertas_aberto',
+                predicate: db.whereRaw("status = 'aberto'"),
+              });
+              table.index(['company_id', 'status']);
+            });
+          }
+
+          console.log('✓ 033_projeto_e_alertas completed');
+        },
+      },
+      {
         // Toda tabela criada pelo Knex nasce SEM RLS, e o Supabase publica o
         // schema public via PostgREST para a chave anon (que é pública, vai no
         // frontend). Sem esta varredura, cada migration nova reabre o buraco que

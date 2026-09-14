@@ -17,7 +17,7 @@ import {
 import { clsx } from 'clsx';
 import { format } from 'date-fns';
 import { useAuthStore } from '../../store/authStore';
-import { CompanyService, type APICompany, type TaxRegime } from '../../services/companyService';
+import { CompanyService, type APICompany, type TaxRegime, PROJETOS_UI, rotuloProjeto } from '../../services/companyService';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -92,6 +92,7 @@ const baseSchema = z.object({
     .optional()
     .refine((v) => !v || /^\d{0,7}$/.test(v.replace(/\D/g, '')), 'Informe até 7 dígitos do IBGE'),
   crt:                z.string().optional(),
+  projeto:            z.string().optional(),
 });
 
 const createSchema = baseSchema.extend({
@@ -310,6 +311,19 @@ function CompanyForm({
             </select>
           </div>
         </div>
+        <div>
+          <label className="input-label" htmlFor="projeto">Projeto</label>
+          <select id="projeto" className="input-field" {...register('projeto')}>
+            <option value="">— Sem projeto —</option>
+            {PROJETOS_UI.map((p) => (
+              <option key={p.valor} value={p.valor}>{p.rotulo}</option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-gray-500">
+            Define os alertas fiscais: projetos MEI avisam desenquadramento por faturamento ou saída
+            do Simples; projetos ME avisam exclusão do Simples.
+          </p>
+        </div>
         <Input
           label="Logradouro"
           error={errors.address?.message}
@@ -363,6 +377,7 @@ export default function EmpresasPage() {
   const { setCurrentCompany, currentCompanyId } = useAuthStore();
 
   const [search,         setSearch]         = useState('');
+  const [projetoFiltro,  setProjetoFiltro]  = useState('');
   const [debouncedSearch,setDebouncedSearch] = useState('');
   const [page,           setPage]           = useState(1);
   const [modalState,     setModalState]     = useState<ModalMode>({ open: false });
@@ -377,8 +392,8 @@ export default function EmpresasPage() {
 
   // ── Query ─────────────────────────────────────────────────────────────────
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['companies', page, debouncedSearch],
-    queryFn:  () => CompanyService.list({ page, limit: 10, search: debouncedSearch || undefined }),
+    queryKey: ['companies', page, debouncedSearch, projetoFiltro],
+    queryFn:  () => CompanyService.list({ page, limit: 10, search: debouncedSearch || undefined, projeto: projetoFiltro || undefined }),
     staleTime: 30_000,
   });
 
@@ -473,6 +488,17 @@ export default function EmpresasPage() {
             Limpar busca
           </button>
         )}
+        <select
+          className="input-field w-auto"
+          value={projetoFiltro}
+          onChange={(e) => { setProjetoFiltro(e.target.value); setPage(1); }}
+          aria-label="Filtrar por projeto"
+        >
+          <option value="">Todos os projetos</option>
+          {PROJETOS_UI.map((p) => (
+            <option key={p.valor} value={p.valor}>{p.rotulo}</option>
+          ))}
+        </select>
         <p className="text-xs text-ink-500">Dica: selecione a empresa ativa no icone de check.</p>
       </div>
 
@@ -505,6 +531,7 @@ export default function EmpresasPage() {
                   <th className="px-4 py-3 font-medium">CNPJ</th>
                   <th className="px-4 py-3 font-medium">Razão Social</th>
                   <th className="px-4 py-3 font-medium">Regime</th>
+                  <th className="px-4 py-3 font-medium">Projeto</th>
                   <th className="px-4 py-3 font-medium">Exercício</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium">Criado em</th>
@@ -530,6 +557,11 @@ export default function EmpresasPage() {
                       <span className={REGIME_BADGE[c.tax_regime]}>
                         {REGIME_OPTIONS.find((r) => r.value === c.tax_regime)?.label}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {c.projeto
+                        ? <span className="badge badge-blue">{rotuloProjeto(c.projeto)}</span>
+                        : <span className="text-gray-300 text-xs">—</span>}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {c.fiscal_year_start ? MONTHS[c.fiscal_year_start - 1] : 'Janeiro'}
@@ -656,6 +688,7 @@ export default function EmpresasPage() {
                   postal_code:       modalState.company.postal_code ?? '',
                   codigo_municipio:  modalState.company.codigo_municipio ?? '',
                   crt:               modalState.company.crt ?? '',
+                  projeto:           modalState.company.projeto ?? '',
                 }
               : undefined
           }
