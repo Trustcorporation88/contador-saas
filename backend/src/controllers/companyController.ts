@@ -33,9 +33,14 @@ export class CompanyController {
         return;
       }
 
-      // Validar role (apenas admin pode criar)
-      if (req.user.role !== 'admin') {
-        logger.warn('Non-admin attempted to create company', {
+      // Papéis que criam empresa: admin e contador. O contador cria as
+      // empresas dos clientes dele e é vinculado automaticamente à empresa
+      // criada (CompanyService.create insere em company_users), então segue
+      // vendo só a carteira dele. Os demais papéis (manager, auditor, viewer)
+      // continuam barrados.
+      const PODE_CRIAR = ['admin', 'accountant'];
+      if (!PODE_CRIAR.includes(req.user.role)) {
+        logger.warn('Papel sem permissão tentou criar empresa', {
           userId: req.user.id,
           role: req.user.role,
         });
@@ -43,7 +48,7 @@ export class CompanyController {
         res.status(HTTP_STATUS.FORBIDDEN).json({
           error: 'Forbidden',
           code: ERROR_CODES.FORBIDDEN,
-          message: 'Only administrators can create companies',
+          message: 'Apenas administradores e contadores podem criar empresas',
         });
         return;
       }
@@ -330,6 +335,19 @@ export class CompanyController {
       }
 
       const { id } = req.params;
+
+      // Admin edita qualquer empresa; os demais papéis, só as empresas a que
+      // estão vinculados. Sem esta checagem, qualquer usuário autenticado
+      // editava qualquer empresa da base informando o id.
+      if (req.user.role !== 'admin' && !(await CompanyService.usuarioTemVinculo(req.user.id, id))) {
+        res.status(HTTP_STATUS.FORBIDDEN).json({
+          error: 'Forbidden',
+          code: ERROR_CODES.FORBIDDEN,
+          message: 'Você não tem acesso a esta empresa',
+        });
+        return;
+      }
+
       const { name, address, phone, email, tax_regime, fiscal_year_start,
         inscricao_estadual, city, state, postal_code, endereco_numero,
         endereco_bairro, codigo_municipio, crt, projeto } = req.body;
