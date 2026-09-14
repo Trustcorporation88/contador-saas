@@ -88,6 +88,19 @@ async function pickExistingCompanyColumns(
  */
 export class CompanyService {
   /**
+   * Usuário tem vínculo ativo com a empresa? Usado pelo controller para
+   * autorizar edição por não-admins: admin edita qualquer uma, os demais só
+   * as empresas em que estão vinculados via company_users.
+   */
+  static async usuarioTemVinculo(userId: string, companyId: string): Promise<boolean> {
+    const db = await getDatabase();
+    const vinculo = await db('company_users')
+      .where({ user_id: userId, company_id: companyId, is_active: true })
+      .first();
+    return Boolean(vinculo);
+  }
+
+  /**
    * Criar nova empresa
    * Adiciona empresa ao banco de dados e cria associação em company_users
    * Auto-associa o admin ao criar (se passado userId)
