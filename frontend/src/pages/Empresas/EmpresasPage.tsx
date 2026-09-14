@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
@@ -5,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
   Plus,
+  Upload,
   Pencil,
   Trash2,
   CheckCircle2,
@@ -398,6 +400,7 @@ export default function EmpresasPage() {
   const { setCurrentCompany, currentCompanyId } = useAuthStore();
 
   const [search,         setSearch]         = useState('');
+  const navigate = useNavigate();
   const [projetoFiltro,  setProjetoFiltro]  = useState('');
   const [atividadeFiltro, setAtividadeFiltro] = useState('');
   const [debouncedSearch,setDebouncedSearch] = useState('');
@@ -483,6 +486,13 @@ export default function EmpresasPage() {
         <div className="flex flex-wrap items-center gap-2">
           <span className="badge badge-blue">{pagination?.total ?? companies.length} registradas</span>
           {currentCompanyId && <span className="badge badge-green">1 selecionada</span>}
+          <Button
+            variant="secondary"
+            icon={<Upload className="h-4 w-4" />}
+            onClick={() => navigate('/empresas/importar')}
+          >
+            Importar planilha
+          </Button>
           <Button icon={<Plus className="h-4 w-4" />} onClick={openCreate}>
             Nova Empresa
           </Button>
