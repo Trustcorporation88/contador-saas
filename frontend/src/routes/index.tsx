@@ -30,6 +30,7 @@ const ServicesDashboard = lazy(() =>
 );
 const DashboardPage = lazy(() => import("../pages/Dashboard/DashboardPage"));
 const EmpresasPage = lazy(() => import("../pages/Empresas/EmpresasPage"));
+const ImportarEmpresasPage = lazy(() => import("../pages/Empresas/ImportarEmpresasPage"));
 const ContasPage = lazy(() => import("../pages/Contas/ContasPage"));
 const LancamentosPage = lazy(
   () => import("../pages/Lancamentos/LancamentosPage"),
@@ -220,6 +221,16 @@ const router = createBrowserRouter([
               <RoleRoute allowedPath="/empresas">
                 <Suspense fallback={<LoadingScreen />}>
                   <EmpresasPage />
+                </Suspense>
+              </RoleRoute>
+            ),
+          },
+          {
+            path: "empresas/importar",
+            element: (
+              <RoleRoute allowedPath="/empresas">
+                <Suspense fallback={<LoadingScreen />}>
+                  <ImportarEmpresasPage />
                 </Suspense>
               </RoleRoute>
             ),

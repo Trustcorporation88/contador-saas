@@ -8,6 +8,7 @@ import taxesRoutes from './taxes';
 import nfeRoutes from './nfe';
 import produtosRoutes from './produtos';
 import alertasRoutes from './alertas';
+import importacaoRoutes from './importacaoEmpresas';
 import dasRoutes from './das';
 import reconciliationRoutes from './reconciliation';
 import nfeOcrRoutes from './nfeOcr';
@@ -46,6 +47,7 @@ router.use(authenticateToken);
  * Response 201: Company object
  * Errors: 400 (validation), 409 (cnpj exists), 403 (forbidden)
  */
+router.use('/importar', importacaoRoutes);
 router.post('/', CompanyController.createCompany);
 
 /**
