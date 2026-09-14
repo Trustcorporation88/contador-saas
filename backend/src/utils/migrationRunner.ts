@@ -1460,6 +1460,24 @@ export async function runMigrationsIfNeeded(db: Knex): Promise<void> {
         },
       },
       {
+        // Atividade da empresa (COMERCIO, COMERCIO_SERVICO, SERVICOS),
+        // sugerida pelos CNAEs na importação do cartão do CNPJ e editável
+        // depois. Como o projeto, a lista de valores é validada na aplicação
+        // (atividadeService), não por CHECK no banco.
+        name: '034_atividade_empresa',
+        up: async (db) => {
+          const temAtividade = await db.schema.hasColumn('companies', 'atividade');
+          if (!temAtividade) {
+            console.log('[MIGRATIONS] Adicionando companies.atividade...');
+            await db.schema.alterTable('companies', (table) => {
+              table.string('atividade', 20).nullable();
+            });
+            await db.raw('CREATE INDEX IF NOT EXISTS idx_companies_atividade ON companies (atividade)');
+          }
+          console.log('✓ 034_atividade_empresa completed');
+        },
+      },
+      {
         // Toda tabela criada pelo Knex nasce SEM RLS, e o Supabase publica o
         // schema public via PostgREST para a chave anon (que é pública, vai no
         // frontend). Sem esta varredura, cada migration nova reabre o buraco que

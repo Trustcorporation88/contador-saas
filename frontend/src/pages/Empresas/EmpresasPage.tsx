@@ -17,7 +17,7 @@ import {
 import { clsx } from 'clsx';
 import { format } from 'date-fns';
 import { useAuthStore } from '../../store/authStore';
-import { CompanyService, type APICompany, type TaxRegime, PROJETOS_UI, rotuloProjeto } from '../../services/companyService';
+import { CompanyService, type APICompany, type TaxRegime, PROJETOS_UI, rotuloProjeto, ATIVIDADES_UI, rotuloAtividade, deduzirAtividade } from '../../services/companyService';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -93,6 +93,7 @@ const baseSchema = z.object({
     .refine((v) => !v || /^\d{0,7}$/.test(v.replace(/\D/g, '')), 'Informe até 7 dígitos do IBGE'),
   crt:                z.string().optional(),
   projeto:            z.string().optional(),
+  atividade:          z.string().optional(),
 });
 
 const createSchema = baseSchema.extend({
@@ -187,6 +188,14 @@ function CompanyForm({
           if (ibge.length === 7) setValue('codigo_municipio', ibge);
         }
         setValue('crt', result.simples_nacional ? '1' : '3');
+
+        // Atividade sugerida pelos CNAEs do cartão. Só sugestão: o campo fica
+        // editável e a pessoa ajusta se o CNAE não refletir o que a empresa faz.
+        const atividadeSugerida = deduzirAtividade(
+          result.cnae_principal?.codigo,
+          result.cnaes_secundarios,
+        );
+        if (atividadeSugerida) setValue('atividade', atividadeSugerida);
         
         setCnpjSuccess(true);
         setTimeout(() => setCnpjSuccess(false), 3000);
@@ -324,6 +333,18 @@ function CompanyForm({
             do Simples; projetos ME avisam exclusão do Simples.
           </p>
         </div>
+        <div>
+          <label className="input-label" htmlFor="atividade">Atividade</label>
+          <select id="atividade" className="input-field" {...register('atividade')}>
+            <option value="">— Não definida —</option>
+            {ATIVIDADES_UI.map((a) => (
+              <option key={a.valor} value={a.valor}>{a.rotulo}</option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-gray-500">
+            Sugerida pelos CNAEs ao consultar o CNPJ. Ajuste se não refletir o que a empresa faz.
+          </p>
+        </div>
         <Input
           label="Logradouro"
           error={errors.address?.message}
@@ -378,6 +399,7 @@ export default function EmpresasPage() {
 
   const [search,         setSearch]         = useState('');
   const [projetoFiltro,  setProjetoFiltro]  = useState('');
+  const [atividadeFiltro, setAtividadeFiltro] = useState('');
   const [debouncedSearch,setDebouncedSearch] = useState('');
   const [page,           setPage]           = useState(1);
   const [modalState,     setModalState]     = useState<ModalMode>({ open: false });
@@ -392,8 +414,8 @@ export default function EmpresasPage() {
 
   // ── Query ─────────────────────────────────────────────────────────────────
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['companies', page, debouncedSearch, projetoFiltro],
-    queryFn:  () => CompanyService.list({ page, limit: 10, search: debouncedSearch || undefined, projeto: projetoFiltro || undefined }),
+    queryKey: ['companies', page, debouncedSearch, projetoFiltro, atividadeFiltro],
+    queryFn:  () => CompanyService.list({ page, limit: 10, search: debouncedSearch || undefined, projeto: projetoFiltro || undefined, atividade: atividadeFiltro || undefined }),
     staleTime: 30_000,
   });
 
@@ -499,6 +521,17 @@ export default function EmpresasPage() {
             <option key={p.valor} value={p.valor}>{p.rotulo}</option>
           ))}
         </select>
+        <select
+          className="input-field w-auto"
+          value={atividadeFiltro}
+          onChange={(e) => { setAtividadeFiltro(e.target.value); setPage(1); }}
+          aria-label="Filtrar por atividade"
+        >
+          <option value="">Todas as atividades</option>
+          {ATIVIDADES_UI.map((a) => (
+            <option key={a.valor} value={a.valor}>{a.rotulo}</option>
+          ))}
+        </select>
         <p className="text-xs text-ink-500">Dica: selecione a empresa ativa no icone de check.</p>
       </div>
 
@@ -532,6 +565,7 @@ export default function EmpresasPage() {
                   <th className="px-4 py-3 font-medium">Razão Social</th>
                   <th className="px-4 py-3 font-medium">Regime</th>
                   <th className="px-4 py-3 font-medium">Projeto</th>
+                  <th className="px-4 py-3 font-medium">Atividade</th>
                   <th className="px-4 py-3 font-medium">Exercício</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium">Criado em</th>
@@ -561,6 +595,11 @@ export default function EmpresasPage() {
                     <td className="px-4 py-3">
                       {c.projeto
                         ? <span className="badge badge-blue">{rotuloProjeto(c.projeto)}</span>
+                        : <span className="text-gray-300 text-xs">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {c.atividade
+                        ? <span className="text-gray-600 text-xs">{rotuloAtividade(c.atividade)}</span>
                         : <span className="text-gray-300 text-xs">—</span>}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
@@ -689,6 +728,7 @@ export default function EmpresasPage() {
                   codigo_municipio:  modalState.company.codigo_municipio ?? '',
                   crt:               modalState.company.crt ?? '',
                   projeto:           modalState.company.projeto ?? '',
+                  atividade:         modalState.company.atividade ?? '',
                 }
               : undefined
           }

@@ -22,6 +22,7 @@ export interface APICompany {
   codigo_municipio?: string;
   crt?: string;
   projeto?: string | null;
+  atividade?: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -44,6 +45,7 @@ export interface ListParams {
   search?: string;
   tax_regime?: string;
   projeto?: string;
+  atividade?: string;
 }
 
 export interface CompanyPayload {
@@ -62,6 +64,7 @@ export interface CompanyPayload {
   codigo_municipio?: string;
   crt?: string;
   projeto?: string | null;
+  atividade?: string | null;
 }
 
 export interface CreatePayload extends CompanyPayload {
@@ -189,4 +192,49 @@ export const PROJETOS_UI: Array<{ valor: string; rotulo: string }> = [
 
 export function rotuloProjeto(v?: string | null): string {
   return PROJETOS_UI.find((p) => p.valor === v)?.rotulo ?? '';
+}
+
+/** Atividades para os seletores da UI. Espelha ATIVIDADES do backend. */
+export const ATIVIDADES_UI: Array<{ valor: string; rotulo: string }> = [
+  { valor: 'COMERCIO', rotulo: 'Comércio' },
+  { valor: 'COMERCIO_SERVICO', rotulo: 'Comércio e Serviço' },
+  { valor: 'SERVICOS', rotulo: 'Serviços' },
+];
+
+export function rotuloAtividade(v?: string | null): string {
+  return ATIVIDADES_UI.find((a) => a.valor === v)?.rotulo ?? '';
+}
+
+/**
+ * Sugere a atividade pelos CNAEs do cartão do CNPJ, com a mesma régua do
+ * backend (atividadeService): divisões 01 a 33 e 45 a 47 emitem nota de
+ * produto e contam como comércio; as demais, serviço. Os dois grupos juntos
+ * viram COMERCIO_SERVICO. Sem CNAE utilizável, retorna null e o campo fica em
+ * branco para preenchimento manual.
+ */
+export function deduzirAtividade(
+  cnaePrincipal?: number | string | null,
+  cnaesSecundarios?: Array<{ codigo?: number | string | null }> | null,
+): string | null {
+  const divisaoDe = (codigo?: number | string | null): number | null => {
+    if (codigo === null || codigo === undefined || codigo === '') return null;
+    const digitos = String(codigo).replace(/\D/g, '');
+    if (!digitos || Number(digitos) === 0) return null;
+    const divisao = Number(digitos.padStart(7, '0').slice(0, 2));
+    return Number.isFinite(divisao) ? divisao : null;
+  };
+  const ehProduto = (d: number) => (d >= 1 && d <= 33) || (d >= 45 && d <= 47);
+
+  let temProduto = false;
+  let temServico = false;
+  for (const codigo of [cnaePrincipal, ...((cnaesSecundarios ?? []).map((c) => c?.codigo))]) {
+    const d = divisaoDe(codigo);
+    if (d === null) continue;
+    if (ehProduto(d)) temProduto = true;
+    else temServico = true;
+  }
+  if (temProduto && temServico) return 'COMERCIO_SERVICO';
+  if (temProduto) return 'COMERCIO';
+  if (temServico) return 'SERVICOS';
+  return null;
 }

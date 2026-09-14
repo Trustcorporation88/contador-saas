@@ -18,6 +18,7 @@ import {
 import { TenantService } from './tenantService';
 import { semPlaceholder, textoLivre as limparTextoLivre } from '../utils/textoLimpo';
 import { projetoValido } from './projetoAlertaService';
+import { atividadeValida } from './atividadeService';
 
 function onlyDigits(value: string): string {
   return String(value || '').replace(/\D/g, '');
@@ -161,6 +162,7 @@ export class CompanyService {
         codigo_municipio: clip(onlyDigits(normalized.codigo_municipio || ''), 7),
         crt: clip(normalized.crt, 1),
         projeto: projetoValido(normalized.projeto) ? normalized.projeto : null,
+        atividade: atividadeValida(normalized.atividade) ? normalized.atividade : null,
         is_active: true,
         created_at: now,
         updated_at: now,
@@ -258,6 +260,10 @@ export class CompanyService {
 
     if (filters?.projeto) {
       query = query.where('companies.projeto', filters.projeto);
+    }
+
+    if (filters?.atividade) {
+      query = query.where('companies.atividade', filters.atividade);
     }
 
     if (filters?.created_from) {
@@ -389,6 +395,12 @@ export class CompanyService {
     }
     if (data.tax_regime) {
       updateData.tax_regime = String(data.tax_regime).slice(0, 50);
+    }
+    if (data.atividade !== undefined) {
+      updateData.atividade = data.atividade ? (atividadeValida(data.atividade) ? data.atividade : undefined) : null;
+      if (updateData.atividade === undefined) {
+        throw Object.assign(new Error('Atividade inválida'), { status: 400 });
+      }
     }
     if (data.projeto !== undefined) {
       // '' ou null limpa o projeto; valor inválido é rejeitado.
@@ -551,6 +563,7 @@ export class CompanyService {
       codigo_municipio: company.codigo_municipio || undefined,
       crt: company.crt || undefined,
       projeto: company.projeto || null,
+      atividade: company.atividade || null,
       is_active: company.is_active,
       created_at: new Date(company.created_at).toISOString(),
       updated_at: new Date(company.updated_at).toISOString(),
