@@ -98,6 +98,13 @@ export const UserManagementService = {
     return data.data;
   },
 
+  async atribuirPorProjeto(id: string, projeto: string): Promise<{ atribuidas: number; jaTinha: number }> {
+    const { data } = await api.post<{ data: { atribuidas: number; jaTinha: number } }>(
+      `/users/${id}/empresas/por-projeto`, { projeto }, { timeout: 180000 },
+    );
+    return data.data;
+  },
+
   async atribuirEmpresa(id: string, companyId: string): Promise<void> {
     await api.post(`/users/${id}/empresas`, { company_id: companyId });
   },

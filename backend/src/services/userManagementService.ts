@@ -263,6 +263,42 @@ export class UserManagementService {
    * É o segundo caminho de acesso: o primeiro é o usuário criar a empresa, e aí
    * o vínculo nasce sozinho em companyService.create.
    */
+  /**
+   * Atribui de uma vez todas as empresas de um projeto ao usuário. Existe
+   * porque carteira de projeto tem centenas de empresas (as Líderes são 447):
+   * atribuir uma a uma na tela é inviável, e sem isso a segunda contadora
+   * ficaria sem enxergar a carteira que a colega importou.
+   *
+   * Idempotente: empresa já vinculada é ignorada, então rodar de novo depois
+   * de importar mais empresas do mesmo projeto só acrescenta as novas.
+   */
+  static async atribuirPorProjeto(
+    userId: string, projeto: string, executadoPor: string,
+  ): Promise<{ atribuidas: number; jaTinha: number }> {
+    const db = await getDatabase();
+    await buscarPorId(db, userId);
+
+    const empresas = await db('companies')
+      .where({ projeto, is_active: true })
+      .select('id');
+    if (empresas.length === 0) return { atribuidas: 0, jaTinha: 0 };
+
+    let atribuidas = 0;
+    let jaTinha = 0;
+    for (const empresa of empresas) {
+      const vinculo = await db('company_users')
+        .where({ user_id: userId, company_id: empresa.id })
+        .first();
+      if (vinculo?.is_active) {
+        jaTinha += 1;
+        continue;
+      }
+      await UserManagementService.atribuirEmpresa(userId, empresa.id, executadoPor);
+      atribuidas += 1;
+    }
+    return { atribuidas, jaTinha };
+  }
+
   static async atribuirEmpresa(
     userId: string, companyId: string, executadoPor: string,
   ): Promise<void> {
