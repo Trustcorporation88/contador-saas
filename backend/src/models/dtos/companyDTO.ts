@@ -38,6 +38,8 @@ export interface CreateCompanyDTO {
   crt?: string;
   /** Projeto/carteira: LIDER_MEI, LIDER_ME, CBPJ_MEI, CBPJ_ME, TREINADORAS. */
   projeto?: string | null;
+  /** Atividade: COMERCIO, COMERCIO_SERVICO, SERVICOS. */
+  atividade?: string | null;
 }
 
 /**
@@ -66,6 +68,8 @@ export interface UpdateCompanyDTO {
   crt?: string;
   /** Projeto/carteira: LIDER_MEI, LIDER_ME, CBPJ_MEI, CBPJ_ME, TREINADORAS. */
   projeto?: string | null;
+  /** Atividade: COMERCIO, COMERCIO_SERVICO, SERVICOS. */
+  atividade?: string | null;
 }
 
 /**
@@ -94,6 +98,8 @@ export interface CompanyResponse {
   crt?: string;
   /** Projeto/carteira: LIDER_MEI, LIDER_ME, CBPJ_MEI, CBPJ_ME, TREINADORAS. */
   projeto?: string | null;
+  /** Atividade: COMERCIO, COMERCIO_SERVICO, SERVICOS. */
+  atividade?: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -115,6 +121,7 @@ export interface PaginatedCompanyResponse {
  */
 export interface CompanyFilters {
   projeto?: string;
+  atividade?: string;
   search?: string;
   tax_regime?: string;
   created_from?: string;

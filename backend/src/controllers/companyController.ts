@@ -55,7 +55,7 @@ export class CompanyController {
 
       const { cnpj, name, address, phone, email, tax_regime, fiscal_year_start,
         inscricao_estadual, city, state, postal_code, endereco_numero,
-        endereco_bairro, codigo_municipio, crt, projeto } = req.body;
+        endereco_bairro, codigo_municipio, crt, projeto, atividade } = req.body;
 
       // Validar dados obrigatórios
       if (!cnpj || !name || !tax_regime) {
@@ -86,6 +86,7 @@ export class CompanyController {
           codigo_municipio,
           crt,
           projeto,
+          atividade,
         },
         req.user.id, // Auto-associar criador como admin
       );
@@ -165,6 +166,7 @@ export class CompanyController {
       const search = req.query.search as string | undefined;
       const tax_regime = req.query.tax_regime as string | undefined;
       const projeto = req.query.projeto as string | undefined;
+      const atividade = req.query.atividade as string | undefined;
       const created_from = req.query.created_from as string | undefined;
       const created_to = req.query.created_to as string | undefined;
 
@@ -196,6 +198,7 @@ export class CompanyController {
         search,
         tax_regime,
         projeto,
+        atividade,
         created_from,
         created_to,
       });
@@ -350,7 +353,7 @@ export class CompanyController {
 
       const { name, address, phone, email, tax_regime, fiscal_year_start,
         inscricao_estadual, city, state, postal_code, endereco_numero,
-        endereco_bairro, codigo_municipio, crt, projeto } = req.body;
+        endereco_bairro, codigo_municipio, crt, projeto, atividade } = req.body;
 
       // Verificar se tentou alterar CNPJ
       if (req.body.cnpj) {
@@ -393,6 +396,8 @@ export class CompanyController {
           endereco_bairro,
           codigo_municipio,
           crt,
+          projeto,
+          atividade,
         },
         req.user.id,
         req.user.companyId,
