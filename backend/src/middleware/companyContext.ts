@@ -23,8 +23,28 @@ export async function applyCompanyContext(
     const raw = req.headers['x-company-id'];
     const headerCompanyId = Array.isArray(raw) ? raw[0] : raw;
 
-    // Sem header: mantém companyId do JWT
+    // Sem header: mantém companyId do JWT. Mas usuários criados pela tela de
+    // gestão nascem SEM users.company_id (o acesso deles é via company_users),
+    // então o token vem com companyId vazio. Sem este fallback, os módulos que
+    // escopam pelo token (contas a pagar/receber, documentos) respondiam 401
+    // para um usuário autenticado, o frontend tratava como sessão vencida e
+    // derrubava a pessoa para o login no primeiro clique.
     if (!headerCompanyId || typeof headerCompanyId !== 'string') {
+      if (!req.user.companyId) {
+        const db = await getDatabase();
+        const vinculo = await db('company_users as cu')
+          .join('companies as c', 'c.id', 'cu.company_id')
+          .where({ 'cu.user_id': req.user.id, 'cu.is_active': true, 'c.is_active': true })
+          .orderBy('cu.created_at', 'asc')
+          .first('cu.company_id');
+        if (vinculo) {
+          req.user.companyId = vinculo.company_id;
+          logger.debug('companyId ausente no token; usando primeira empresa vinculada', {
+            userId: req.user.id,
+            companyId: vinculo.company_id,
+          });
+        }
+      }
       next();
       return;
     }

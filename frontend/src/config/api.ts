@@ -54,6 +54,37 @@ export const api = axios.create({
   },
 });
 
+/**
+ * Renovação de token em voo único. O backend rotaciona o refresh token a cada
+ * renovação; se duas chamadas paralelas recebem 401 (comum ao abrir uma tela
+ * com várias queries), cada uma tentava renovar por conta própria, a primeira
+ * invalidava o refresh token da segunda, a segunda falhava e o interceptor
+ * deslogava o usuário no meio do uso. Aqui todas as chamadas aguardam a MESMA
+ * renovação.
+ */
+let renovacaoEmVoo: Promise<string> | null = null;
+
+async function renovarTokenUnaVez(refreshToken: string): Promise<string> {
+  if (!renovacaoEmVoo) {
+    renovacaoEmVoo = (async () => {
+      try {
+        const { data } = await axios.post(
+          `${BASE_URL}/api/v1/auth/refresh-token`,
+          { refreshToken },
+        );
+        const accessToken = data.data.accessToken;
+        const newRefreshToken = data.data.refreshToken;
+        useAuthStore.getState().setAccessToken(accessToken);
+        useAuthStore.getState().setRefreshToken(newRefreshToken);
+        return accessToken as string;
+      } finally {
+        renovacaoEmVoo = null;
+      }
+    })();
+  }
+  return renovacaoEmVoo;
+}
+
 api.interceptors.request.use((config: any) => {
   const { accessToken, currentCompanyId } = useAuthStore.getState();
   if (accessToken && config.headers) {
@@ -99,16 +130,7 @@ api.interceptors.response.use(
       }
 
       try {
-        const { data } = await axios.post(
-          `${BASE_URL}/api/v1/auth/refresh-token`,
-          { refreshToken },
-        );
-        const accessToken = data.data.accessToken;
-        const newRefreshToken = data.data.refreshToken;
-
-        useAuthStore.getState().setAccessToken(accessToken);
-        useAuthStore.getState().setRefreshToken(newRefreshToken);
-
+        const accessToken = await renovarTokenUnaVez(refreshToken);
         if (originalRequest.headers) {
           originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         }

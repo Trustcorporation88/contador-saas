@@ -8,7 +8,7 @@ export class ContasReceberController {
       const companyId = req.user?.companyId;
       const userId = req.user?.id;
       if (!companyId || !userId) {
-        res.status(401).json({ success: false, error: 'Usuário não autenticado', code: 'UNAUTHORIZED' });
+        res.status(403).json({ success: false, error: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.', code: 'SEM_EMPRESA_ATIVA' });
         return;
       }
 
@@ -34,7 +34,7 @@ export class ContasReceberController {
     try {
       const companyId = req.user?.companyId;
       if (!companyId) {
-        res.status(401).json({ success: false, error: 'Usuário não autenticado', code: 'UNAUTHORIZED' });
+        res.status(403).json({ success: false, error: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.', code: 'SEM_EMPRESA_ATIVA' });
         return;
       }
 
@@ -65,7 +65,7 @@ export class ContasReceberController {
     try {
       const companyId = req.user?.companyId;
       if (!companyId) {
-        res.status(401).json({ success: false, error: 'Usuário não autenticado', code: 'UNAUTHORIZED' });
+        res.status(403).json({ success: false, error: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.', code: 'SEM_EMPRESA_ATIVA' });
         return;
       }
 
@@ -86,7 +86,7 @@ export class ContasReceberController {
       const companyId = req.user?.companyId;
       const userId = req.user?.id;
       if (!companyId || !userId) {
-        res.status(401).json({ success: false, error: 'Usuário não autenticado', code: 'UNAUTHORIZED' });
+        res.status(403).json({ success: false, error: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.', code: 'SEM_EMPRESA_ATIVA' });
         return;
       }
 
@@ -107,7 +107,7 @@ export class ContasReceberController {
       const companyId = req.user?.companyId;
       const userId = req.user?.id;
       if (!companyId || !userId) {
-        res.status(401).json({ success: false, error: 'Usuário não autenticado', code: 'UNAUTHORIZED' });
+        res.status(403).json({ success: false, error: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.', code: 'SEM_EMPRESA_ATIVA' });
         return;
       }
 
@@ -134,7 +134,7 @@ export class ContasReceberController {
       const companyId = req.user?.companyId;
       const userId = req.user?.id;
       if (!companyId || !userId) {
-        res.status(401).json({ success: false, error: 'Usuário não autenticado', code: 'UNAUTHORIZED' });
+        res.status(403).json({ success: false, error: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.', code: 'SEM_EMPRESA_ATIVA' });
         return;
       }
 
@@ -154,7 +154,7 @@ export class ContasReceberController {
     try {
       const companyId = req.user?.companyId;
       if (!companyId) {
-        res.status(401).json({ success: false, error: 'Usuário não autenticado', code: 'UNAUTHORIZED' });
+        res.status(403).json({ success: false, error: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.', code: 'SEM_EMPRESA_ATIVA' });
         return;
       }
 
