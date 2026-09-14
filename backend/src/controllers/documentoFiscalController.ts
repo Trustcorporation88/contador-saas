@@ -22,10 +22,10 @@ export class DocumentoFiscalController {
       const userId = req.user?.id;
 
       if (!companyId || !userId) {
-        res.status(401).json({
+        res.status(403).json({
           success: false,
-          error: 'Usuário não autenticado',
-          code: 'UNAUTHORIZED',
+          code: 'SEM_EMPRESA_ATIVA',
+          error: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.',
         });
         return;
       }
@@ -78,10 +78,10 @@ export class DocumentoFiscalController {
       const companyId = req.user?.companyId;
 
       if (!companyId) {
-        res.status(401).json({
+        res.status(403).json({
           success: false,
-          error: 'Usuário não autenticado',
-          code: 'UNAUTHORIZED',
+          code: 'SEM_EMPRESA_ATIVA',
+          error: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.',
         });
         return;
       }
@@ -124,10 +124,10 @@ export class DocumentoFiscalController {
       const { id } = req.params;
 
       if (!companyId) {
-        res.status(401).json({
+        res.status(403).json({
           success: false,
-          error: 'Usuário não autenticado',
-          code: 'UNAUTHORIZED',
+          code: 'SEM_EMPRESA_ATIVA',
+          error: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.',
         });
         return;
       }
@@ -165,10 +165,10 @@ export class DocumentoFiscalController {
       const { id } = req.params;
 
       if (!companyId || !userId) {
-        res.status(401).json({
+        res.status(403).json({
           success: false,
-          error: 'Usuário não autenticado',
-          code: 'UNAUTHORIZED',
+          code: 'SEM_EMPRESA_ATIVA',
+          error: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.',
         });
         return;
       }
@@ -201,10 +201,10 @@ export class DocumentoFiscalController {
       const { id } = req.params;
 
       if (!companyId) {
-        res.status(401).json({
+        res.status(403).json({
           success: false,
-          error: 'Usuário não autenticado',
-          code: 'UNAUTHORIZED',
+          code: 'SEM_EMPRESA_ATIVA',
+          error: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.',
         });
         return;
       }
@@ -237,10 +237,10 @@ export class DocumentoFiscalController {
       const { id } = req.params;
 
       if (!companyId) {
-        res.status(401).json({
+        res.status(403).json({
           success: false,
-          error: 'Usuário não autenticado',
-          code: 'UNAUTHORIZED',
+          code: 'SEM_EMPRESA_ATIVA',
+          error: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.',
         });
         return;
       }
@@ -272,10 +272,10 @@ export class DocumentoFiscalController {
       const companyId = req.user?.companyId;
 
       if (!companyId) {
-        res.status(401).json({
+        res.status(403).json({
           success: false,
-          error: 'Usuário não autenticado',
-          code: 'UNAUTHORIZED',
+          code: 'SEM_EMPRESA_ATIVA',
+          error: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.',
         });
         return;
       }

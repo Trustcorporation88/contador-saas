@@ -10,7 +10,7 @@ export class ContasPagarController {
       const payload = req.body as CreateContaPagarDTO;
 
       if (!companyId || !userId) {
-        return res.status(401).json({ success: false, message: 'Usuário não autenticado' });
+        return res.status(403).json({ success: false, code: 'SEM_EMPRESA_ATIVA', message: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.' });
       }
 
       const result = await ContasPagarService.create(companyId, userId, payload);
@@ -24,7 +24,7 @@ export class ContasPagarController {
     try {
       const companyId = req.user?.companyId;
       if (!companyId) {
-        return res.status(401).json({ success: false, message: 'Usuário não autenticado' });
+        return res.status(403).json({ success: false, code: 'SEM_EMPRESA_ATIVA', message: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.' });
       }
 
       const result = await ContasPagarService.list(companyId, {
@@ -53,7 +53,7 @@ export class ContasPagarController {
     try {
       const companyId = req.user?.companyId;
       if (!companyId) {
-        return res.status(401).json({ success: false, message: 'Usuário não autenticado' });
+        return res.status(403).json({ success: false, code: 'SEM_EMPRESA_ATIVA', message: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.' });
       }
 
       const conta = await ContasPagarService.getById(companyId, req.params.id);
@@ -74,7 +74,7 @@ export class ContasPagarController {
       const payload = req.body as UpdateContaPagarDTO;
 
       if (!companyId || !userId) {
-        return res.status(401).json({ success: false, message: 'Usuário não autenticado' });
+        return res.status(403).json({ success: false, code: 'SEM_EMPRESA_ATIVA', message: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.' });
       }
 
       const result = await ContasPagarService.update(companyId, req.params.id, userId, payload);
@@ -91,7 +91,7 @@ export class ContasPagarController {
       const payload = req.body as RegistrarPagamentoDTO;
 
       if (!companyId || !userId) {
-        return res.status(401).json({ success: false, message: 'Usuário não autenticado' });
+        return res.status(403).json({ success: false, code: 'SEM_EMPRESA_ATIVA', message: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.' });
       }
 
       const result = await ContasPagarService.registrarPagamento(companyId, req.params.id, userId, payload);
@@ -107,7 +107,7 @@ export class ContasPagarController {
       const userId = req.user?.id;
 
       if (!companyId || !userId) {
-        return res.status(401).json({ success: false, message: 'Usuário não autenticado' });
+        return res.status(403).json({ success: false, code: 'SEM_EMPRESA_ATIVA', message: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.' });
       }
 
       const result = await ContasPagarService.cancelar(companyId, req.params.id, userId);
@@ -121,7 +121,7 @@ export class ContasPagarController {
     try {
       const companyId = req.user?.companyId;
       if (!companyId) {
-        return res.status(401).json({ success: false, message: 'Usuário não autenticado' });
+        return res.status(403).json({ success: false, code: 'SEM_EMPRESA_ATIVA', message: 'Nenhuma empresa ativa para este usuário. Selecione uma empresa ou peça a atribuição ao administrador.' });
       }
 
       const data = await ContasPagarService.getEstatisticas(companyId);
