@@ -36,6 +36,8 @@ export interface CreateCompanyDTO {
   endereco_bairro?: string;
   codigo_municipio?: string;
   crt?: string;
+  /** Projeto/carteira: LIDER_MEI, LIDER_ME, CBPJ_MEI, CBPJ_ME, TREINADORAS. */
+  projeto?: string | null;
 }
 
 /**
@@ -62,6 +64,8 @@ export interface UpdateCompanyDTO {
   endereco_bairro?: string;
   codigo_municipio?: string;
   crt?: string;
+  /** Projeto/carteira: LIDER_MEI, LIDER_ME, CBPJ_MEI, CBPJ_ME, TREINADORAS. */
+  projeto?: string | null;
 }
 
 /**
@@ -88,6 +92,8 @@ export interface CompanyResponse {
   endereco_bairro?: string;
   codigo_municipio?: string;
   crt?: string;
+  /** Projeto/carteira: LIDER_MEI, LIDER_ME, CBPJ_MEI, CBPJ_ME, TREINADORAS. */
+  projeto?: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -108,6 +114,7 @@ export interface PaginatedCompanyResponse {
  * Filtros para listagem de empresas
  */
 export interface CompanyFilters {
+  projeto?: string;
   search?: string;
   tax_regime?: string;
   created_from?: string;

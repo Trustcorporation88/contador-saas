@@ -6,6 +6,7 @@ import { AuthService } from "../../services/authService";
 import { PUBLIC_ACCESS_ENABLED } from "../../config/publicAccess";
 import { getOperationalStatusMeta, getServiceDefinition } from "../../config/serviceCatalog";
 import CompanySelector from "./CompanySelector";
+import AlertasSino from "./AlertasSino";
 
 const PAGE_TITLES: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -111,6 +112,8 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
 
         <div className="flex items-center gap-2 sm:gap-3">
           <CompanySelector />
+
+          <AlertasSino />
 
           <div className="hidden rounded-2xl border border-primary-100 bg-primary-50 px-3 py-2 text-right xl:block">
             <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-primary-700/70">

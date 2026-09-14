@@ -82,6 +82,26 @@ function startBackgroundJobs(): void {
 
   console.log('[DAS] DAS Scheduler initialized with 4 cron jobs (including recurring transactions)');
 
+  // Alertas fiscais por projeto (desenquadramento MEI, exclusão do Simples).
+  // Reavalia todas as empresas com projeto e envia o resumo diário por e-mail.
+  // 6h UTC = 3h no horário de Brasília, fora do pico e depois dos outros jobs.
+  cron.schedule('0 6 * * *', async () => {
+    console.log('[CRON] Verificando alertas fiscais por projeto...');
+    try {
+      const { AlertaScheduler } = await import('./services/alertaScheduler');
+      const r = await AlertaScheduler.processarDiario();
+      console.log(
+        `[CRON] Alertas: ${r.verificadas} empresa(s) verificada(s), ` +
+        `${r.notificados} no resumo, e-mail ${r.enviouEmail ? 'enviado' : 'não enviado'}`,
+      );
+    } catch (error) {
+      const e = error as { message?: string; code?: string; table?: string };
+      const detalhe = [e?.message ?? String(error), e?.code && `code=${e.code}`, e?.table && `table=${e.table}`]
+        .filter(Boolean).join(' | ');
+      logger.error(`Alerta Scheduler: processarDiario failed: ${detalhe}`);
+    }
+  });
+
   // Classificação Tributária (cClassTrib) da Reforma Tributária.
   //
   // A tabela publicada pelo SVRS muda por ato normativo até 2032 — códigos
