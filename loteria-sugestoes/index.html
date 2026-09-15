@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sugestão de Apostas — Lotofácil &amp; Mega-Sena</title>
+<meta name="description" content="Gerador de sugestões de jogos para Lotofácil e Mega-Sena (Caixa Econômica Federal) com estatísticas de dezenas quentes e frias baseadas no histórico oficial." />
+<link rel="stylesheet" href="assets/style.css" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍀</text></svg>" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <h1>🍀 Sugestão de Apostas</h1>
+      <p class="subtitle">Lotofácil &amp; Mega-Sena — Caixa Econômica Federal</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="lottery-tabs" role="tablist" aria-label="Escolha a loteria">
+      <button class="tab active" data-lottery="megasena" role="tab" aria-selected="true">Mega-Sena</button>
+      <button class="tab" data-lottery="lotofacil" role="tab" aria-selected="false">Lotofácil</button>
+    </section>
+
+    <section class="card latest-result" id="latest-result">
+      <div class="loading">Carregando último resultado…</div>
+    </section>
+
+    <section class="card generator">
+      <h2>Gerar sugestões</h2>
+      <form id="generator-form">
+        <div class="field-row">
+          <label for="qty-games">Quantidade de jogos</label>
+          <input type="number" id="qty-games" min="1" max="20" value="5" />
+        </div>
+        <div class="field-row">
+          <label for="strategy">Estratégia</label>
+          <select id="strategy">
+            <option value="balanced">Equilibrado (recomendado)</option>
+            <option value="hot">Priorizar dezenas quentes</option>
+            <option value="cold">Priorizar dezenas frias</option>
+            <option value="random">Totalmente aleatório</option>
+          </select>
+        </div>
+        <button type="submit" id="generate-btn">Gerar jogos</button>
+      </form>
+      <div id="generated-games" class="generated-games"></div>
+    </section>
+
+    <section class="card stats">
+      <h2>Estatísticas do histórico</h2>
+      <p class="stats-meta" id="stats-meta">Carregando histórico de concursos…</p>
+      <div class="stats-columns">
+        <div>
+          <h3>🔥 Dezenas mais sorteadas</h3>
+          <ol id="hot-numbers" class="number-list"></ol>
+        </div>
+        <div>
+          <h3>🧊 Dezenas menos sorteadas</h3>
+          <ol id="cold-numbers" class="number-list"></ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="card disclaimer">
+      <h2>Aviso importante</h2>
+      <p>
+        Este site tem finalidade exclusivamente <strong>educacional e estatística</strong>.
+        Loterias são jogos de azar com resultados sorteados de forma aleatória e independente —
+        nenhuma análise de frequência histórica altera as probabilidades reais de cada dezena
+        ser sorteada novamente. Não há garantia de ganho. Jogue com responsabilidade.
+        Se precisar de ajuda com jogos de azar, procure a
+        <a href="https://www.gov.br/saude" target="_blank" rel="noopener noreferrer">rede de apoio do Ministério da Saúde</a>.
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>
+        Dados de resultados fornecidos pela API pública
+        <a href="https://github.com/guto-alves/loterias-api" target="_blank" rel="noopener noreferrer">loteriascaixa-api</a>,
+        que consolida informações oficiais da Caixa Econômica Federal.
+        Este projeto não é afiliado à Caixa.
+      </p>
+    </div>
+  </footer>
+
+  <script src="assets/app.js"></script>
+</body>
+</html>

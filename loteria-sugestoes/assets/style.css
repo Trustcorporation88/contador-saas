@@ -1,0 +1,270 @@
+:root {
+  --green-700: #0a6b3f;
+  --green-600: #0f8a52;
+  --green-500: #16a866;
+  --yellow-500: #ffcc29;
+  --blue-600: #1560bd;
+  --bg: #f4f7f6;
+  --card-bg: #ffffff;
+  --text: #1c1f1e;
+  --text-muted: #5a6a63;
+  --border: #e2e8e4;
+  --radius: 14px;
+  --shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.topbar {
+  background: linear-gradient(120deg, var(--green-700), var(--green-500));
+  color: white;
+  padding: 32px 0 24px;
+}
+
+.topbar-inner h1 {
+  margin: 0;
+  font-size: 1.9rem;
+}
+
+.subtitle {
+  margin: 6px 0 0;
+  opacity: 0.9;
+}
+
+.lottery-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 24px 0;
+}
+
+.tab {
+  flex: 1;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all 0.15s ease;
+}
+
+.tab.active {
+  background: var(--green-600);
+  color: white;
+  border-color: var(--green-600);
+}
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px 24px;
+  margin-bottom: 20px;
+}
+
+.card h2 {
+  margin-top: 0;
+}
+
+.loading {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.result-header h2 {
+  margin: 0;
+}
+
+.contest-date {
+  color: var(--text-muted);
+}
+
+.balls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.ball {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--green-600);
+  color: white;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.ball.cold {
+  background: var(--blue-600);
+}
+
+.ball.hot {
+  background: #d9480f;
+}
+
+.result-info {
+  margin-top: 12px;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.field-row label {
+  min-width: 160px;
+  font-weight: 600;
+}
+
+.field-row input,
+.field-row select {
+  flex: 1;
+  min-width: 180px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+#generate-btn {
+  background: var(--green-600);
+  color: white;
+  border: none;
+  padding: 12px 22px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+#generate-btn:hover {
+  background: var(--green-700);
+}
+
+#generate-btn:disabled {
+  background: #9db8ac;
+  cursor: not-allowed;
+}
+
+.generated-games {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.game-card {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.game-index {
+  font-weight: 700;
+  color: var(--text-muted);
+  min-width: 70px;
+}
+
+.stats-meta {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.stats-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 640px) {
+  .stats-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.number-list {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+.number-list li {
+  margin-bottom: 4px;
+}
+
+.freq-bar-wrap {
+  display: inline-block;
+  width: 120px;
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  margin-left: 8px;
+  vertical-align: middle;
+  overflow: hidden;
+}
+
+.freq-bar {
+  height: 100%;
+  background: var(--green-500);
+}
+
+.disclaimer {
+  background: #fff7e6;
+  border-color: #ffe4a3;
+}
+
+.disclaimer h2 {
+  color: #8a5a00;
+}
+
+.site-footer {
+  padding: 24px 0 40px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.error {
+  color: #b91c1c;
+  font-weight: 600;
+}
