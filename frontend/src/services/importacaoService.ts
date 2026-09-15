@@ -36,7 +36,8 @@ export const ImportacaoService = {
     const { data } = await api.post<{ data: AnaliseImportacao }>(
       '/companies/importar/analisar',
       form,
-      { headers: { 'Content-Type': 'multipart/form-data' } },
+      // Planilha grande leva mais que o timeout padrão para ser lida.
+      { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 180000 },
     );
     return data.data;
   },

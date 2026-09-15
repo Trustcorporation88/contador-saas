@@ -164,7 +164,17 @@ export class ImportacaoEmpresasService {
     const linhas: LinhaImportacao[] = [];
     const vistos = new Set<string>();
 
+    // Os CNPJs já cadastrados vêm em UMA consulta. Perguntar ao banco linha a
+    // linha custava 447 idas e voltas e estourava o timeout da requisição.
+    const existentes = new Set<string>(
+      (await db('companies').select('cnpj')).map((r: { cnpj: string }) => String(r.cnpj)),
+    );
+
+    // A planilha vinha com milhares de linhas vazias no fim; parar depois de
+    // uma sequência de vazias evita percorrer tudo à toa.
+    let vaziasSeguidas = 0;
     for (let n = 2; n <= ws.rowCount; n++) {
+      if (vaziasSeguidas >= 50) break;
       const row = ws.getRow(n);
       const dados: Record<string, unknown> = {};
       colunas.forEach((campo, col) => {
@@ -178,7 +188,11 @@ export class ImportacaoEmpresasService {
       });
 
       const bruto = dados.cnpj;
-      if (bruto === null || bruto === undefined || String(bruto).trim() === '') continue;
+      if (bruto === null || bruto === undefined || String(bruto).trim() === '') {
+        vaziasSeguidas += 1;
+        continue;
+      }
+      vaziasSeguidas = 0;
 
       const cnpj = normalizarCnpj(bruto);
       const razao = String(dados.razao_social ?? '').trim();
@@ -215,8 +229,7 @@ export class ImportacaoEmpresasService {
       }
       vistos.add(cnpj);
 
-      const existe = await db('companies').where({ cnpj }).first('id');
-      if (existe) {
+      if (existentes.has(cnpj)) {
         linhas.push({ ...base, situacao: 'existente', motivo: 'Já cadastrada no sistema' });
         continue;
       }
