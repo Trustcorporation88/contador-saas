@@ -123,4 +123,84 @@ test.describe('Lançamentos Contábeis', () => {
     await expect(page).toHaveURL(/\/lancamentos$/i);
   });
 
+  test('arrasta documento e pré-preenche identificação via OCR', async ({ page }) => {
+    await page.route('**/api/v1/companies/*/accounts**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: [
+            { id: 'acc-merc', code: '1.1.3.04', name: 'Mercadorias', is_analytical: true, is_active: true },
+            { id: 'acc-forn', code: '2.1.1.01', name: 'Fornecedores', is_analytical: true, is_active: true },
+          ],
+          total: 2,
+          page: 1,
+          limit: 500,
+          totalPages: 1,
+        }),
+      });
+    });
+
+    await page.route('**/api/v1/companies/*/nfe/ocr/upload', async (route) => {
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'upload-1',
+          company_id: 'company-1',
+          file_name: 'nfe-teste.pdf',
+          file_size: 1024,
+          file_type: 'pdf',
+          ocr_data: {
+            nf_number: '000123456',
+            issuer_name: 'Fornecedor Demo Ltda',
+            issuer_cnpj: '12345678000199',
+            total_value: 1500.5,
+            emission_date: '2026-07-15',
+          },
+          status: 'extracted',
+          extraction_confidence: 0.9,
+          created_at: new Date().toISOString(),
+        }),
+      });
+    });
+
+    await page.route('**/api/v1/companies/*/nfe/ocr/*/preview', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          nf_number: '000123456',
+          nf_series: '001',
+          issuer_cnpj: '12345678000199',
+          issuer_name: 'Fornecedor Demo Ltda',
+          total_value: 1500.5,
+          emission_date: '2026-07-15',
+          type: 'entrada',
+          suggested_entries: [
+            { account_code: '1.1.2.1', account_name: 'Estoques de Mercadorias', debit: 1500.5 },
+            { account_code: '2.1.1.1', account_name: 'Fornecedores', credit: 1500.5 },
+          ],
+        }),
+      });
+    });
+
+    await page.goto('/lancamentos/novo');
+
+    await expect(page.getByTestId('document-drop-zone')).toBeVisible({ timeout: 8000 });
+
+    await page.getByTestId('document-drop-input').setInputFiles({
+      name: 'nfe-teste.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.4 fake nfe'),
+    });
+
+    await expect(page.getByTestId('document-extract-success')).toBeVisible({ timeout: 8000 });
+    await expect(page.getByLabel(/número do documento/i)).toHaveValue('000123456');
+    await expect(page.getByLabel(/emissor/i)).toHaveValue(/Fornecedor Demo/i);
+    await expect(page.getByLabel(/data/i)).toHaveValue('2026-07-15');
+    await expect(page.getByText('1.1.3.04 — Mercadorias')).toBeVisible();
+    await expect(page.getByText('2.1.1.01 — Fornecedores')).toBeVisible();
+  });
+
 });
